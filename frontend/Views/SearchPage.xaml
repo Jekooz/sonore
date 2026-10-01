@@ -1,0 +1,17 @@
+<Page x:Class="YtMusicClient.Views.SearchPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{ThemeResource AppBackgroundBrush}"
+      NavigationCacheMode="Enabled">
+
+    <StackPanel Padding="32,24" Spacing="16" MaxWidth="900" HorizontalAlignment="Stretch">
+        <TextBox x:Name="SearchBox"
+                 PlaceholderText="Search songs, albums, artists…"
+                 CornerRadius="10"
+                 MinHeight="40"
+                 KeyDown="SearchBox_KeyDown" />
+        <TextBlock x:Name="ResultsPlaceholder"
+                   Style="{StaticResource SecondaryText}"
+                   Text="Type to search YouTube Music." />
+    </StackPanel>
+</Page>

@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    WinUI 3 (Windows App SDK) single-project app, unpackaged.
+
+    Platform is forced to x64: WinUI does not support AnyCPU
+    (microsoft/WindowsAppSDK#893) and plain `dotnet build` defaults
+    Platform to AnyCPU. Solution builds pass x64 explicitly.
+
+    The XAML compiler generates the entry point (Main) from App.xaml;
+    only define DISABLE_XAML_GENERATED_MAIN if a custom Main is ever needed.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>YtMusicClient</RootNamespace>
+    <AssemblyName>YtMusicClient</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <UseWinUI>true</UseWinUI>
+
+    <!-- Unpackaged: no MSIX, no Package.appmanifest; run the exe directly.
+         Package.appmanifest can be added later if MSIX packaging is needed. -->
+    <WindowsPackageType>None</WindowsPackageType>
+
+    <!-- Bundle the Windows App SDK runtime so first launch does not require
+         a separate Windows App Runtime install. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+
+    <Platforms>x64</Platforms>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1" />
+  </ItemGroup>
+
+</Project>

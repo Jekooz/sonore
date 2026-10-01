@@ -1,0 +1,36 @@
+<Page x:Class="YtMusicClient.Views.HomePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{ThemeResource AppBackgroundBrush}"
+      NavigationCacheMode="Enabled">
+
+    <ScrollViewer Padding="32,24">
+        <StackPanel Spacing="24" MaxWidth="1100" HorizontalAlignment="Stretch">
+            <TextBlock Text="{x:Bind ViewModel.Greeting, Mode=OneWay}"
+                       Style="{StaticResource PageHeadlineText}" />
+
+            <Grid ColumnSpacing="24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="250" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Main column -->
+                <StackPanel Grid.Column="0" Spacing="16">
+                    <TextBlock Text="Recommended for you" Style="{StaticResource SectionHeaderText}" />
+                    <TextBlock Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap"
+                               Text="Sign in to load recommendations from YouTube Music." />
+                </StackPanel>
+
+                <!-- Fixed-width Popular rail -->
+                <StackPanel Grid.Column="1" Spacing="16">
+                    <TextBlock Text="Popular" Style="{StaticResource SectionHeaderText}" />
+                    <TextBlock Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap"
+                               Text="Sign in to load the popular tracks rail." />
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

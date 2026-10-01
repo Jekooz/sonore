@@ -1,0 +1,76 @@
+<Window x:Class="YtMusicClient.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Background="{ThemeResource AppBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Glass chrome: title bar + tab pill, per DESIGN_TOKENS (glass only on floating chrome). -->
+        <Grid x:Name="AppTitleBar"
+              Grid.Row="0"
+              Height="48"
+              Background="{ThemeResource GlassBrush}"
+              BorderBrush="{ThemeResource TokenBorderBrush}"
+              BorderThickness="0,0,0,1"
+              Padding="16,0,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    Width="22" Height="22"
+                    CornerRadius="6"
+                    Background="{ThemeResource AccentBrush}"
+                    VerticalAlignment="Center"
+                    Margin="0,0,10,0" />
+            <TextBlock Grid.Column="0"
+                       Text="YT"
+                       FontSize="11"
+                       FontWeight="Bold"
+                       Foreground="Black"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0" />
+
+            <!-- Pill segmented control: active tab = white bg + black text,
+                 inactive = transparent + secondary text. -->
+            <Border Grid.Column="1"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource GlassStrongBrush}"
+                    BorderBrush="{ThemeResource TokenBorderStrongBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{ThemeResource PillCornerRadius}"
+                    Padding="4">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <RadioButton x:Name="HomeTab" GroupName="NavTabs"
+                                 Style="{StaticResource NavPillRadioButton}"
+                                 Tag="home" Content="Home" IsChecked="True" />
+                    <RadioButton x:Name="SearchTab" GroupName="NavTabs"
+                                 Style="{StaticResource NavPillRadioButton}"
+                                 Tag="search" Content="Search" />
+                    <RadioButton x:Name="LibraryTab" GroupName="NavTabs"
+                                 Style="{StaticResource NavPillRadioButton}"
+                                 Tag="library" Content="Library" />
+                    <RadioButton x:Name="NowPlayingTab" GroupName="NavTabs"
+                                 Style="{StaticResource NavPillRadioButton}"
+                                 Tag="nowplaying" Content="Now Playing" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Grid.Column="2"
+                       x:Name="AppTitleText"
+                       Text="YouTube Music"
+                       VerticalAlignment="Center"
+                       Margin="0,0,140,0"
+                       Style="{StaticResource MutedText}" />
+        </Grid>
+
+        <Frame x:Name="ContentFrame" Grid.Row="1" />
+    </Grid>
+</Window>

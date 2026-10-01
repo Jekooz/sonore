@@ -33,6 +33,7 @@ namespace YtMusicClient.Views
         public async Task InitializeAsync(int port)
         {
             _apiClient = new ApiClient($"http://127.0.0.1:{port}");
+            App.ApiClient = _apiClient;
 
             // ContentDialog needs a XamlRoot, which the window content only gets once loaded.
             for (int i = 0; Content is FrameworkElement root && root.XamlRoot == null && i < 100; i++)
@@ -52,12 +53,83 @@ namespace YtMusicClient.Views
             if (!isLoggedIn.Value)
             {
                 App.ShellViewModel.AuthStatusText = "Not signed in";
-                await ShowLoginDialogAsync();
+                await RunSignInFlowAsync();
             }
             else
             {
+                await LoadSignedInStateAsync();
+            }
+        }
+
+        /// <summary>
+        /// Full in-app sign-in: opens the embedded Google sign-in window, captures
+        /// cookies, hands them to the backend, and shows the result. The user never
+        /// leaves the app and never copies a code.
+        /// </summary>
+        private async Task RunSignInFlowAsync()
+        {
+            var signInWindow = new SignInWindow();
+            signInWindow.CookiesCaptured += async (sender, cookies) =>
+            {
+                if (cookies == null || cookies.Count == 0)
+                    return;
+
+                try
+                {
+                    var account = await _apiClient.SendCookiesAsync(cookies);
+                    App.ShellViewModel.IsLoggedIn = true;
+                    App.ShellViewModel.AuthStatusText = "Signed in";
+                    App.ShellViewModel.AccountName = account.AccountName;
+                    App.ShellViewModel.AccountPhotoUrl = account.AccountPhotoUrl;
+                    App.ShellViewModel.RaiseDataReady();
+                }
+                catch (Exception ex)
+                {
+                    App.ShellViewModel.AuthStatusText = "Sign-in failed";
+                    await ShowMessageDialogAsync(
+                        "Google sign-in could not be completed: " + ex.Message +
+                        "\n\nYou can try again from the Home tab.");
+                }
+            };
+
+            bool signedIn = await signInWindow.ShowAndWaitAsync();
+            if (!signedIn && !App.ShellViewModel.IsLoggedIn)
+            {
+                App.ShellViewModel.AuthStatusText = "Not signed in";
+            }
+        }
+
+        /// <summary>Re-runs sign-in (Home tab button / sign-out flow).</summary>
+        public async Task StartSignInAsync()
+        {
+            if (_apiClient == null)
+                return;
+            await RunSignInFlowAsync();
+        }
+
+        private async Task LoadSignedInStateAsync()
+        {
+            try
+            {
+                var account = await _apiClient.GetAccountAsync();
+                App.ShellViewModel.AccountName = account.AccountName;
+                App.ShellViewModel.AccountPhotoUrl = account.AccountPhotoUrl;
                 App.ShellViewModel.AuthStatusText = "Signed in";
             }
+            catch (ApiRequestException ex) when (ex.StatusCode == 401)
+            {
+                // Stored session expired — offer sign-in again.
+                App.ShellViewModel.AuthStatusText = "Session expired";
+                await RunSignInFlowAsync();
+                return;
+            }
+            catch (Exception)
+            {
+                App.ShellViewModel.AuthStatusText = "Signed in (offline details)";
+            }
+
+            App.ShellViewModel.IsLoggedIn = true;
+            App.ShellViewModel.RaiseDataReady();
         }
 
         private void NavTab_Checked(object sender, RoutedEventArgs e)
@@ -84,7 +156,8 @@ namespace YtMusicClient.Views
             {
                 try
                 {
-                    return await _apiClient.GetAuthStatusAsync();
+                    var status = await _apiClient.GetAuthStatusAsync();
+                    return status.LoggedIn;
                 }
                 catch (Exception)
                 {
@@ -94,46 +167,7 @@ namespace YtMusicClient.Views
             return null;
         }
 
-        private async Task ShowLoginDialogAsync()
-        {
-            ContentDialog dialog = null;
-
-            var signInButton = new Button { Content = "Sign In" };
-            signInButton.Click += async (sender, args) =>
-            {
-                try
-                {
-                    var (url, code) = await _apiClient.LoginAsync();
-                    Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-                    await dialog.HideAsync();
-                    await ShowMessageDialogAsync(
-                        $"If the browser did not open, go to {url} and enter code: {code}");
-                }
-                catch (Exception ex)
-                {
-                    try { await dialog.HideAsync(); } catch (Exception) { }
-                    await ShowMessageDialogAsync("Login failed: " + ex.Message);
-                }
-            };
-
-            dialog = new ContentDialog
-            {
-                Title = "Sign in with Google",
-                Content = new StackPanel
-                {
-                    Children =
-                    {
-                        new TextBlock { Text = "Please sign in to continue.", Margin = new Thickness(0, 0, 0, 10) },
-                        signInButton
-                    }
-                },
-                CloseButtonText = "Cancel",
-                XamlRoot = Content.XamlRoot
-            };
-            await dialog.ShowAsync();
-        }
-
-        private async Task ShowMessageDialogAsync(string message)
+        public async Task ShowMessageDialogAsync(string message)
         {
             var dialog = new ContentDialog
             {

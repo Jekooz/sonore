@@ -41,6 +41,12 @@
         <Setter Property="Foreground" Value="{ThemeResource TextPrimaryBrush}" />
     </Style>
 
+    <Style x:Key="CardTitleText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Foreground" Value="{ThemeResource TextPrimaryBrush}" />
+    </Style>
+
     <Style x:Key="SecondaryText" TargetType="TextBlock">
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{ThemeResource TextSecondaryBrush}" />
@@ -49,6 +55,15 @@
     <Style x:Key="MutedText" TargetType="TextBlock">
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{ThemeResource TextMutedBrush}" />
+    </Style>
+
+    <!-- Accent CTA (Sign in with Google etc.): accent fill, white text, pill shape. -->
+    <Style x:Key="AccentButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource AccentBrush}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="20,8" />
     </Style>
 
 </ResourceDictionary>

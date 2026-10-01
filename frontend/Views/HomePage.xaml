@@ -1,36 +1,103 @@
 <Page x:Class="YtMusicClient.Views.HomePage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:services="using:YtMusicClient.Services"
       Background="{ThemeResource AppBackgroundBrush}"
       NavigationCacheMode="Enabled">
 
-    <ScrollViewer Padding="32,24">
-        <StackPanel Spacing="24" MaxWidth="1100" HorizontalAlignment="Stretch">
+    <Grid Padding="32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Greeting + account line -->
+        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,20">
             <TextBlock Text="{x:Bind ViewModel.Greeting, Mode=OneWay}"
                        Style="{StaticResource PageHeadlineText}" />
-
-            <Grid ColumnSpacing="24">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="250" />
-                </Grid.ColumnDefinitions>
-
-                <!-- Main column -->
-                <StackPanel Grid.Column="0" Spacing="16">
-                    <TextBlock Text="Recommended for you" Style="{StaticResource SectionHeaderText}" />
-                    <TextBlock Style="{StaticResource SecondaryText}"
-                               TextWrapping="Wrap"
-                               Text="Sign in to load recommendations from YouTube Music." />
-                </StackPanel>
-
-                <!-- Fixed-width Popular rail -->
-                <StackPanel Grid.Column="1" Spacing="16">
-                    <TextBlock Text="Popular" Style="{StaticResource SectionHeaderText}" />
-                    <TextBlock Style="{StaticResource SecondaryText}"
-                               TextWrapping="Wrap"
-                               Text="Sign in to load the popular tracks rail." />
-                </StackPanel>
-            </Grid>
+            <TextBlock Text="{x:Bind ViewModel.AuthStatusText, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}" />
         </StackPanel>
-    </ScrollViewer>
+
+        <!-- Signed-out prompt: one click opens the embedded Google sign-in window -->
+        <StackPanel x:Name="SignedOutPanel"
+                    Grid.Row="1"
+                    Spacing="12"
+                    MaxWidth="460"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+            <TextBlock Text="Sign in to see your music"
+                       Style="{StaticResource SectionHeaderText}"
+                       HorizontalAlignment="Center" />
+            <TextBlock Style="{StaticResource SecondaryText}"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"
+                       Text="Connect your YouTube Music account to load your recommendations, playlists, liked songs, subscriptions and favorite artists — all inside this app." />
+            <Button x:Name="SignInButton"
+                    Content="Sign in with Google"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource AccentButtonStyle}"
+                    CornerRadius="18"
+                    Padding="20,8"
+                    Click="SignInButton_Click" />
+        </StackPanel>
+
+        <!-- Signed-in content -->
+        <ScrollViewer x:Name="ContentScroll"
+                      Grid.Row="1"
+                      Visibility="Collapsed">
+            <StackPanel Spacing="28" MaxWidth="1100" HorizontalAlignment="Stretch">
+                <ProgressRing x:Name="LoadingRing" Width="36" Height="36" IsActive="False" />
+                <TextBlock x:Name="ErrorText"
+                           Style="{StaticResource SecondaryText}"
+                           TextWrapping="Wrap"
+                           Visibility="Collapsed" />
+
+                <ItemsControl x:Name="HomeRows">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="services:HomeRowView">
+                            <StackPanel Spacing="12" Margin="0,0,0,8">
+                                <TextBlock Text="{x:Bind Title}"
+                                           Style="{StaticResource SectionHeaderText}" />
+                                <ItemsControl ItemsSource="{x:Bind Contents}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <ItemsStackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="services:HomeItemView">
+                                            <Button Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Padding="0"
+                                                    Margin="0,0,12,12"
+                                                    CornerRadius="{StaticResource CardCornerRadius}">
+                                                <StackPanel Width="160" Spacing="6">
+                                                    <Border CornerRadius="{StaticResource CardCornerRadius}"
+                                                            Height="160"
+                                                            Width="160"
+                                                            Background="{ThemeResource GlassBrush}">
+                                                        <Image Stretch="UniformToFill"
+                                                               Source="{x:Bind ThumbnailUrl, Mode=OneWay}" />
+                                                    </Border>
+                                                    <TextBlock Text="{x:Bind Title}"
+                                                               Style="{StaticResource CardTitleText}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxLines="1" />
+                                                    <TextBlock Text="{x:Bind Subtitle}"
+                                                               Style="{StaticResource MutedText}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxLines="1" />
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </Page>

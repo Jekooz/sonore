@@ -11,5 +11,8 @@
         <TextBlock Style="{StaticResource SecondaryText}" HorizontalAlignment="Center"
                    TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
                    Text="Start a track from Home or Search and the queue fan carousel will appear here." />
+        <TextBlock Text="{x:Bind ViewModel.AuthStatusText, Mode=OneWay}"
+                   Style="{StaticResource MutedText}"
+                   HorizontalAlignment="Center" />
     </StackPanel>
 </Page>

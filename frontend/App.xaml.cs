@@ -11,6 +11,12 @@ namespace YtMusicClient
         // Shared shell state (auth status, greeting) bound by the pages.
         public static ViewModels.MainShellViewModel ShellViewModel { get; } = new ViewModels.MainShellViewModel();
 
+        // Shared API client for the running sidecar; set by MainWindow.InitializeAsync.
+        public static ApiClient ApiClient { get; set; }
+
+        // The main window, so pages can open dialogs / the sign-in window from it.
+        public static Window Window { get; set; }
+
         private readonly SidecarLauncher _launcher;
 
         public App()
@@ -23,6 +29,7 @@ namespace YtMusicClient
         {
             // Show the window first; backend startup must never block or crash activation.
             var window = new MainWindow();
+            Window = window;
             window.Activate();
             window.Closed += (sender, e) => _launcher.Shutdown();
 

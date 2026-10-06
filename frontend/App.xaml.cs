@@ -14,7 +14,14 @@ namespace YtMusicClient
         // Shared API client for the running sidecar; set by MainWindow.InitializeAsync.
         public static ApiClient ApiClient { get; set; }
 
-        // One playback pipeline for the whole app (resolve → NAudio output),
+        /// <summary>The one bindable playback state; bar and Now Playing bind only to this.
+        /// Declared before Playback: the service's constructor reads it.</summary>
+        public static PlayerState PlayerState { get; } = new PlayerState();
+
+        /// <summary>The observable queue (Current + Upcoming) for the queue panel and transport.</summary>
+        public static QueueManager Queue { get; } = new QueueManager();
+
+        // One playback pipeline for the whole app (resolve → engine → WASAPI),
         // observed by NowPlayingPage and driven by the list pages.
         public static PlaybackService Playback { get; } = new PlaybackService();
 

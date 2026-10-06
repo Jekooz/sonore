@@ -12,6 +12,7 @@
         <!-- Empty state: nothing has been started yet -->
         <StackPanel x:Name="EmptyState"
                     Spacing="16"
+                    Visibility="{x:Bind Player.EmptyStateVisibility, Mode=OneWay}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
             <TextBlock Text="Nothing playing"
@@ -29,9 +30,9 @@
         <StackPanel x:Name="NowPlayingPanel"
                     Spacing="14"
                     MaxWidth="560"
+                    Visibility="{x:Bind Player.PanelVisibility, Mode=OneWay}"
                     HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Visibility="Collapsed">
+                    VerticalAlignment="Center">
 
             <!-- Fixed square + UniformToFill + centered alignment: never clipped
                  off-center, never circle-cropped (artwork is an album, not an artist). -->
@@ -46,6 +47,7 @@
             </Border>
 
             <TextBlock x:Name="TitleText"
+                       Text="{x:Bind Player.TrackTitle, Mode=OneWay}"
                        Style="{StaticResource PageHeadlineText}"
                        HorizontalAlignment="Center"
                        TextAlignment="Center"
@@ -53,21 +55,23 @@
                        MaxLines="1" />
 
             <TextBlock x:Name="ArtistText"
+                       Text="{x:Bind Player.TrackArtist, Mode=OneWay}"
+                       Visibility="{x:Bind Player.ArtistVisibility, Mode=OneWay}"
                        Style="{StaticResource SecondaryText}"
                        HorizontalAlignment="Center"
                        TextAlignment="Center"
                        TextTrimming="CharacterEllipsis"
-                       MaxLines="1"
-                       Visibility="Collapsed" />
+                       MaxLines="1" />
 
             <!-- Quiet status line for resolve/parse errors only — never byte counts. -->
             <TextBlock x:Name="StatusText"
+                       Text="{x:Bind Player.StatusText, Mode=OneWay}"
+                       Visibility="{x:Bind Player.StatusVisibility, Mode=OneWay}"
                        Style="{StaticResource MutedText}"
                        HorizontalAlignment="Center"
                        TextAlignment="Center"
                        TextWrapping="Wrap"
-                       MaxWidth="460"
-                       Visibility="Collapsed" />
+                       MaxWidth="460" />
 
             <!-- The ONE seek bar (buffered segment included). Times only. -->
             <Grid ColumnSpacing="12" VerticalAlignment="Center">
@@ -107,6 +111,7 @@
                 <Button x:Name="PrevButton"
                         Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Previous track"
+                        IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
                         Click="PrevButton_Click">
                     <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                FontSize="18" Text="&#xE892;" />
@@ -117,16 +122,18 @@
                         CornerRadius="32"
                         Style="{StaticResource AccentButtonStyle}"
                         AutomationProperties.Name="Play or pause"
+                        IsEnabled="{x:Bind Player.CanToggle, Mode=OneWay}"
                         Click="PlayPause_Click">
                     <TextBlock x:Name="PlayPauseGlyph"
                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                FontSize="22"
-                               Text="&#xE768;" />
+                               Text="{x:Bind Player.PlayGlyph, Mode=OneWay}" />
                 </Button>
 
                 <Button x:Name="NextButton"
                         Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Next track"
+                        IsEnabled="{x:Bind Queue.HasUpcoming, Mode=OneWay}"
                         Click="NextButton_Click">
                     <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                FontSize="18" Text="&#xE893;" />

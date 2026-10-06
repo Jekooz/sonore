@@ -33,9 +33,6 @@ namespace YtMusicClient.Services
         private bool _finished;      // track played to the end
         private string _statusText = "";
 
-        // Volume 0..1 (the engine applies the perceptual v³ curve); persisted via the shell VM.
-        private float _volume = 0.8f;
-
         // Rapid Next/Previous clicks: a click within this window of the previous
         // one on the SAME track is ignored — stale resolves are already dropped
         // by _generation, this just stops five identical requests from launching.
@@ -44,6 +41,10 @@ namespace YtMusicClient.Services
 
         // History for Previous-button semantics (restart vs go back).
         private readonly List<(string VideoId, string Title, string Artist, string Artwork)> _history = new();
+
+        // Shuffle markers (this session): tracks already played in the current
+        // shuffle pass, so repeats only come back on repeat-all wrap.
+        private readonly HashSet<string> _playedShuffle = new();
 
         // The playback queue, in order, with the position of the track now playing.
         // Filled by the list overload of PlayAsync; a standalone play leaves it empty
@@ -91,18 +92,6 @@ namespace YtMusicClient.Services
         /// <summary>Cached fraction 0..1 for seek-bar segments (no byte counts in UI).</summary>
         public double BufferedFraction => _engine.CachedFraction;
 
-        /// <summary>Volume 0..1. The engine applies the perceptual v³ curve.</summary>
-        public float Volume
-        {
-            get => _volume;
-            set
-            {
-                _volume = Math.Clamp(value, 0f, 1f);
-                _engine.SetVolume(_volume);
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Volume)));
-            }
-        }
-
         /// <summary>Seconds into the current track, or 0.</summary>
         public double PositionSeconds => Position.TotalSeconds;
 
@@ -113,7 +102,19 @@ namespace YtMusicClient.Services
         {
             _engine.Ended += Player_PlaybackEnded;
             _engine.Failed += Player_PlaybackFailed;
+            _engine.PlaybackTick += Engine_PlaybackTick;
+
+            // Volume lives in PlayerState (bindable + persisted); the engine applies the curve.
+            App.PlayerState.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(PlayerState.Volume))
+                    _engine.SetVolume((float)App.PlayerState.Volume);
+            };
+            _engine.SetVolume((float)App.PlayerState.Volume);
         }
+
+        /// <summary>Volume entry point for PlayerState (0..1, perceptual curve applied in the engine).</summary>
+        public void SetVolume(double volume01) => _engine.SetVolume((float)Math.Clamp(volume01, 0, 1));
 
         // ---------------- commands (always called on the UI thread) ----------------
 
@@ -217,7 +218,7 @@ namespace YtMusicClient.Services
                 _statusText = "";
                 Log("playing");
 
-                if (HasNext)
+                if (HasNext && !App.PlayerState.Shuffle) // shuffle picks randomly — a pre-warmed next would miss
                     _ = PrefetchNextAsync();
 
                 // History for Previous: record only committed, non-duplicate plays.
@@ -279,16 +280,59 @@ namespace YtMusicClient.Services
             NotifyState();
         }
 
-        /// <summary>Play the next track in the queue; no-op at the end of it.</summary>
-        public void PlayNext()
+        /// <summary>
+        /// Play the next track: repeat-one reloads, shuffle picks a random
+        /// unplayed track, repeat-all wraps, otherwise walk forward. Returns
+        /// false when the queue is exhausted and repeat is off.
+        /// ponytail: shuffle is a random pick; a proper shuffle bag lands
+        /// with the queue panel (Phase 4).
+        /// </summary>
+        public bool PlayNext()
         {
-            if (!HasNext)
-                return;
+            var state = App.PlayerState;
 
-            _queueIndex++;
+            if (state.Repeat == RepeatMode.One && HasTrack)
+            {
+                Log("repeat one: reloading current track");
+                _ = PlayAsync(VideoId, Title, Artist, ArtworkUrl);
+                return true;
+            }
+
+            int next = -1;
+            if (state.Shuffle && _queue.Count > 1)
+            {
+                var candidates = new List<int>();
+                for (int i = 0; i < _queue.Count; i++)
+                    if (i != _queueIndex && !_playedShuffle.Contains(_queue[i].VideoId))
+                        candidates.Add(i);
+                if (candidates.Count == 0 && state.Repeat == RepeatMode.All)
+                {
+                    _playedShuffle.Clear();
+                    for (int i = 0; i < _queue.Count; i++)
+                        if (i != _queueIndex)
+                            candidates.Add(i);
+                }
+                if (candidates.Count > 0)
+                    next = candidates[Random.Shared.Next(candidates.Count)];
+            }
+            else if (_queueIndex + 1 < _queue.Count)
+            {
+                next = _queueIndex + 1;
+            }
+            else if (state.Repeat == RepeatMode.All && _queue.Count > 0)
+            {
+                next = 0;
+            }
+
+            if (next < 0)
+                return false;
+
+            _queueIndex = next;
             var track = _queue[_queueIndex];
+            _playedShuffle.Add(track.VideoId);
             Log($"next: queue[{_queueIndex}] {track.VideoId}");
             _ = PlayAsync(track.VideoId, track.Title, track.Artist, track.ArtworkUrl);
+            return true;
         }
 
         /// <summary>
@@ -355,11 +399,12 @@ namespace YtMusicClient.Services
             {
                 Log("ended (end of track)");
 
-                // Auto-advance walks the queue; a standalone track just rests at Finished.
-                if (HasNext)
+                // Auto-advance honors repeat/shuffle; PlayNext answers whether
+                // anything actually started — otherwise the track rests at Finished.
+                if (HasNext || App.PlayerState.Repeat != RepeatMode.Off || App.PlayerState.Shuffle)
                 {
-                    PlayNext();
-                    return;
+                    if (PlayNext())
+                        return;
                 }
 
                 _finished = true;
@@ -381,22 +426,37 @@ namespace YtMusicClient.Services
 
         // ---------------- helpers ----------------
 
+        /// <summary>
+        /// Push the full state snapshot into PlayerState + QueueManager (the
+        /// single bindable source both screens bind to), then raise StateChanged
+        /// for non-binding listeners (SMTC).
+        /// </summary>
         private void NotifyState()
         {
             RunOnUi(() =>
             {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VideoId)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Title)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Artist)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ArtworkUrl)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasTrack)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPlaying)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsBusy)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasNext)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusText)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Position)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Duration)));
+                var state = App.PlayerState;
+                state.Track = HasTrack ? new QueueTrack(VideoId, Title, Artist, ArtworkUrl) : null;
+                state.IsPlaying = _engine.IsPlaying;
+                state.IsBusy = IsBusy;
+                state.Position = Position;
+                state.Duration = Duration;
+                state.BufferedFraction = BufferedFraction;
+                state.StatusText = _statusText;
+                App.Queue.Sync(_queue, _queueIndex);
                 StateChanged?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        /// <summary>Engine 4 Hz heartbeat: position/duration/cached → PlayerState.</summary>
+        private void Engine_PlaybackTick(object sender, EventArgs e)
+        {
+            RunOnUi(() =>
+            {
+                var state = App.PlayerState;
+                state.Position = _engine.Position;
+                state.Duration = _engine.Duration;
+                state.BufferedFraction = _engine.CachedFraction;
             });
         }
 

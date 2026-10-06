@@ -22,11 +22,14 @@ namespace YtMusicClient.Views
         }
 
         // 400 ms poll for position/duration — they change without state transitions.
-        private readonly DispatcherTimer _barTimer;
-        private bool _restoringVolume = true;
+
 
         /// <summary>Shared shell state, source for the title-bar account chip.</summary>
         public MainShellViewModel ViewModel => App.ShellViewModel;
+
+        /// <summary>Bind targets for the player bar: one shared state, no polling timers.</summary>
+        public Services.PlayerState Player => App.PlayerState;
+        public Services.QueueManager Queue => App.Queue;
 
         public MainWindow()
         {
@@ -47,18 +50,15 @@ namespace YtMusicClient.Views
             ViewModel.PropertyChanged += ShellViewModel_PropertyChanged;
             UpdateAccountChrome();
 
-            // Player bar events + polling timer.
-            App.Playback.StateChanged += Playback_StateChanged;
-            _barTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
-            _barTimer.Tick += BarTimer_Tick;
-            _barTimer.Start();
-            BarVolumeSlider.Value = ViewModel.VolumeSliderPercent;
-            _restoringVolume = false;
-            App.Playback.Volume = (float)(Math.Clamp(ViewModel.VolumeSliderPercent, 0, 100) / 100.0);
+            // Player bar: x:Bind to Player/Queue for text and glyphs; one
+            // PropertyChanged subscription drives the imperative bits
+            // (seek bar, times, artwork, mute glyph). No polling timer.
+            App.PlayerState.PropertyChanged += Player_PropertyChanged;
+            UpdateBarArtwork();
 
             // Shell hooks the SMTC controller uses.
             App.Playback.PreviousByHistory = () => App.Playback.Previous(PlayTrackAsync);
-            App.Playback.Next = App.Playback.PlayNext;
+            App.Playback.Next = () => App.Playback.PlayNext();
 
             // System Media Transport Controls: media keys, lock screen, volume flyout.
             _smtc = new SmtcController(App.Playback, this);
@@ -71,56 +71,61 @@ namespace YtMusicClient.Views
         private async Task PlayTrackAsync(string videoId, string title, string artist, string artworkUrl)
             => await App.Playback.PlayAsync(videoId, title, artist, artworkUrl);
 
-        private void Playback_StateChanged(object sender, EventArgs e)
-            => _ = DispatcherQueue.TryEnqueue(RefreshPlayerBar);
-
-        private void BarTimer_Tick(object sender, object e)
+        /// <summary>
+        /// Imperative bar updates that x:Bind cannot express: the seek bar,
+        /// time labels, artwork fill, and the mute glyph — all driven by
+        /// PlayerState changes (position arrives at the engine's 4 Hz tick).
+        /// </summary>
+        private void Player_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (!App.Playback.HasTrack) return;
-
-            var playback = App.Playback;
-            double duration = playback.DurationSeconds;
-            double position = playback.PositionSeconds;
-
-            if (!BarSeekBar.IsDragging)
+            _ = DispatcherQueue.TryEnqueue(() =>
             {
-                BarSeekBar.Update(duration, position, playback.BufferedFraction);
-                BarPositionText.Text = FormatTime(playback.Position);
-            }
-            BarDurationText.Text = duration > 0 ? FormatTime(TimeSpan.FromSeconds(duration)) : "–:––";
+                switch (e.PropertyName)
+                {
+                    case nameof(Services.PlayerState.Position):
+                    case nameof(Services.PlayerState.Duration):
+                    case nameof(Services.PlayerState.BufferedFraction):
+                        var state = App.PlayerState;
+                        if (!BarSeekBar.IsDragging)
+                        {
+                            BarSeekBar.Update(state.Duration.TotalSeconds, state.Position.TotalSeconds, state.BufferedFraction);
+                            BarPositionText.Text = FormatTime(state.Position);
+                        }
+                        BarDurationText.Text = state.Duration > TimeSpan.Zero ? FormatTime(state.Duration) : "–:––";
+                        break;
+
+                    case nameof(Services.PlayerState.Track):
+                        UpdateBarArtwork();
+                        break;
+
+                    case nameof(Services.PlayerState.Volume):
+                        BarMuteGlyph.Text = App.PlayerState.VolumePercent <= 0 ? "\uE74F" : "\uE767"; // muted : speaker
+                        break;
+                }
+            });
         }
 
-        private void RefreshPlayerBar()
+        private void UpdateBarArtwork()
         {
-            var playback = App.Playback;
-            bool has = playback.HasTrack;
+            var state = App.PlayerState;
+            bool has = state.HasTrack;
+            string url = state.Track?.ArtworkUrl;
 
-            BarTitle.Text = has ? playback.Title : "Nothing playing";
-            BarArtist.Text = has ? playback.Artist : "";
-            BarPlayGlyph.Text = playback.IsPlaying ? "\uE769" : "\uE768"; // pause : play
-            BarPlayButton.IsEnabled = has && !playback.IsBusy;
-            BarPrevButton.IsEnabled = has;
-            BarNextButton.IsEnabled = playback.HasNext;
-            BarSeekBar.IsEnabled = has && playback.DurationSeconds > 0;
-
-            if (has)
+            if (has && !string.Equals(_barArtworkUrl, url, StringComparison.Ordinal))
             {
-                if (!string.Equals(_barArtworkUrl, playback.ArtworkUrl, StringComparison.Ordinal))
+                _barArtworkUrl = url;
+                try
                 {
-                    _barArtworkUrl = playback.ArtworkUrl;
-                    try
-                    {
-                        BarArt.Background = string.IsNullOrEmpty(playback.ArtworkUrl)
-                            ? (Brush)Application.Current.Resources["RaisedBrush"]
-                            : new ImageBrush { ImageSource = new BitmapImage(new Uri(playback.ArtworkUrl)), Stretch = Stretch.UniformToFill };
-                    }
-                    catch (UriFormatException)
-                    {
-                        BarArt.Background = (Brush)Application.Current.Resources["RaisedBrush"];
-                    }
+                    BarArt.Background = string.IsNullOrEmpty(url)
+                        ? (Brush)Application.Current.Resources["RaisedBrush"]
+                        : new ImageBrush { ImageSource = new BitmapImage(new Uri(url)), Stretch = Stretch.UniformToFill };
+                }
+                catch (UriFormatException)
+                {
+                    BarArt.Background = (Brush)Application.Current.Resources["RaisedBrush"];
                 }
             }
-            else
+            else if (!has)
             {
                 _barArtworkUrl = null;
                 BarArt.Background = (Brush)Application.Current.Resources["RaisedBrush"];
@@ -155,22 +160,18 @@ namespace YtMusicClient.Views
 
         private void BarMuteButton_Click(object sender, RoutedEventArgs e)
         {
-            bool muted = ViewModel.VolumeSliderPercent > 0;
-            ViewModel.VolumeSliderPercent = muted ? 0 : _volumeBeforeMute;
+            bool muted = App.PlayerState.VolumePercent > 0;
+            App.PlayerState.VolumePercent = muted ? 0 : _volumeBeforeMute;
         }
 
         private double _volumeBeforeMute = 80;
 
         private void BarVolumeSlider_ValueChanged(object sender, object e)
         {
-            double percent = BarVolumeSlider.Value;
-            if (!_restoringVolume)
-            {
-                if (percent > 0) _volumeBeforeMute = percent;
-                ViewModel.VolumeSliderPercent = percent; // persists via ApplicationData
-            }
-            BarMuteGlyph.Text = percent <= 0 ? "\uE74F" : "\uE767"; // muted : speaker
-            App.Playback.Volume = (float)(percent / 100.0); // engine applies the perceptual v³ curve
+            // The slider binds TwoWay to Player.VolumePercent; this handler only
+            // remembers the last non-zero level for the mute button.
+            if (BarVolumeSlider.Value > 0)
+                _volumeBeforeMute = BarVolumeSlider.Value;
         }
 
         /// <summary>

@@ -148,11 +148,11 @@
                             Background="{ThemeResource RaisedBrush}" />
                     <StackPanel VerticalAlignment="Center" Spacing="1" MaxWidth="220">
                         <TextBlock x:Name="BarTitle"
-                                   Text="Nothing playing"
+                                   Text="{x:Bind Player.TrackTitle, Mode=OneWay}"
                                    Style="{StaticResource CardTitleText}"
                                    TextTrimming="CharacterEllipsis" MaxLines="1" />
                         <TextBlock x:Name="BarArtist"
-                                   Text=""
+                                   Text="{x:Bind Player.TrackArtist, Mode=OneWay}"
                                    Style="{StaticResource MutedText}"
                                    TextTrimming="CharacterEllipsis" MaxLines="1" />
                     </StackPanel>
@@ -182,6 +182,7 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <Button x:Name="BarPrevButton" Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Previous"
+                        IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
                         Click="BarPrevButton_Click">
                     <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Text="\uE892" />
                 </Button>
@@ -189,14 +190,15 @@
                         Width="44" Height="44" CornerRadius="22"
                         Style="{StaticResource AccentButtonStyle}"
                         AutomationProperties.Name="Play or pause"
+                        IsEnabled="{x:Bind Player.CanToggle, Mode=OneWay}"
                         Click="BarPlayButton_Click">
                     <TextBlock x:Name="BarPlayGlyph"
                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                               FontSize="16" Text="\uE768" />
+                               FontSize="16" Text="{x:Bind Player.PlayGlyph, Mode=OneWay}" />
                 </Button>
                 <Button x:Name="BarNextButton" Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Next"
-                        IsEnabled="False"
+                        IsEnabled="{x:Bind Queue.HasUpcoming, Mode=OneWay}"
                         Click="BarNextButton_Click">
                     <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Text="\uE893" />
                 </Button>
@@ -213,7 +215,7 @@
                 </Button>
                 <Slider x:Name="BarVolumeSlider"
                         Width="90" Minimum="0" Maximum="100" StepFrequency="1"
-                        Value="80"
+                        Value="{x:Bind Player.VolumePercent, Mode=TwoWay}"
                         VerticalAlignment="Center"
                         AutomationProperties.Name="Volume"
                         ValueChanged="BarVolumeSlider_ValueChanged" />

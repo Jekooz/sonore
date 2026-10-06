@@ -1,78 +1,103 @@
 using System;
+using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.UI.Dispatching;
 using YtMusicClient.Services;
 
 namespace YtMusicClient.Views
 {
     /// <summary>
-    /// Now Playing: centered artwork, metadata and transport for the track held by
-    /// <see cref="App.Playback"/>. The persistent player bar (MainWindow) mirrors
-    /// the same state; this page adds the full-size artwork and bigger transport.
-    /// A 400 ms timer polls position/duration (they change without a state
-    /// transition); the seek bar suspends its updates while the user drags.
+    /// Now Playing: centered artwork, metadata and transport. Binds only to
+    /// <see cref="PlayerState"/> (the shared state) via x:Bind for text and
+    /// glyphs; one PropertyChanged subscription drives the imperative bits
+    /// (artwork, seek bar, times). No polling timer — position arrives at the
+    /// engine's 4 Hz tick through the shared state, exactly like the player bar.
     /// </summary>
     public sealed partial class NowPlayingPage : Page
     {
         public ViewModels.MainShellViewModel ViewModel { get; } = App.ShellViewModel;
 
-        private readonly DispatcherTimer _timer;
+        public PlayerState Player => App.PlayerState;
+        public QueueManager Queue => App.Queue;
+
         private string _boundArtworkUrl;
 
         public NowPlayingPage()
         {
             InitializeComponent();
-
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
-            _timer.Tick += Timer_Tick;
-
+            App.PlayerState.PropertyChanged += Player_PropertyChanged;
             Loaded += NowPlayingPage_Loaded;
             Unloaded += NowPlayingPage_Unloaded;
         }
 
         private void NowPlayingPage_Loaded(object sender, RoutedEventArgs e)
         {
-            App.Playback.StateChanged += Playback_StateChanged;
-            RefreshUi();
-            _timer.Start();
+            RefreshFromState(); // pages are cached (NavigationCacheMode=Enabled): catch up on load
         }
 
         private void NowPlayingPage_Unloaded(object sender, RoutedEventArgs e)
         {
-            App.Playback.StateChanged -= Playback_StateChanged;
-            _timer.Stop();
+            // PropertyChanged stays subscribed: the page is cached and re-shown,
+            // and the handler is cheap when nothing is playing.
         }
 
-        private void Playback_StateChanged(object sender, EventArgs e)
+        /// <summary>
+        /// Imperative updates x:Bind cannot express: artwork fill, the seek
+        /// bar, and the time labels. Same dispatch pattern as the player bar.
+        /// </summary>
+        private void Player_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            RefreshUi();
+            var queue = App.Window?.DispatcherQueue;
+            if (queue == null || queue.HasThreadAccess)
+                ApplyChange(e.PropertyName);
+            else
+                _ = queue.TryEnqueue(() => ApplyChange(e.PropertyName));
         }
 
-        private void RefreshUi()
+        private void ApplyChange(string propertyName)
         {
-            var playback = App.Playback;
+            var state = App.PlayerState;
 
-            EmptyState.Visibility = playback.HasTrack ? Visibility.Collapsed : Visibility.Visible;
-            NowPlayingPanel.Visibility = playback.HasTrack ? Visibility.Visible : Visibility.Collapsed;
-            if (!playback.HasTrack)
-                return;
-
-            TitleText.Text = playback.Title;
-            ArtistText.Text = playback.Artist;
-            ArtistText.Visibility = string.IsNullOrWhiteSpace(playback.Artist)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-
-            if (!string.Equals(_boundArtworkUrl, playback.ArtworkUrl, StringComparison.Ordinal))
+            switch (propertyName)
             {
-                _boundArtworkUrl = playback.ArtworkUrl;
+                case nameof(PlayerState.Track):
+                    RefreshFromState();
+                    break;
+
+                case nameof(PlayerState.Position):
+                case nameof(PlayerState.Duration):
+                case nameof(PlayerState.BufferedFraction):
+                    if (!SeekBar.IsDragging)
+                    {
+                        SeekBar.Update(state.Duration.TotalSeconds, state.Position.TotalSeconds, state.BufferedFraction);
+                        PositionText.Text = FormatTime(state.Position);
+                    }
+                    DurationText.Text = state.Duration > TimeSpan.Zero ? FormatTime(state.Duration) : "–:––";
+                    break;
+            }
+        }
+
+        private void RefreshFromState()
+        {
+            var state = App.PlayerState;
+
+            if (!state.HasTrack)
+            {
+                ArtworkImage.Source = null;
+                _boundArtworkUrl = null;
+                return;
+            }
+
+            string url = state.Track?.ArtworkUrl;
+            if (!string.Equals(_boundArtworkUrl, url, StringComparison.Ordinal))
+            {
+                _boundArtworkUrl = url;
                 try
                 {
-                    ArtworkImage.Source = string.IsNullOrEmpty(playback.ArtworkUrl)
+                    ArtworkImage.Source = string.IsNullOrEmpty(url)
                         ? null
-                        : new BitmapImage(new Uri(playback.ArtworkUrl));
+                        : new BitmapImage(new Uri(url));
                 }
                 catch (UriFormatException)
                 {
@@ -80,37 +105,10 @@ namespace YtMusicClient.Views
                 }
             }
 
-            PlayPauseButton.IsEnabled = !playback.IsBusy;
-            NextButton.IsEnabled = playback.HasNext;
-
-            UpdateTimeDisplay();
-            PlayPauseGlyph.Text = playback.IsPlaying ? "\uE769" : "\uE768"; // pause : play
-        }
-
-        private void Timer_Tick(object sender, object e)
-        {
-            if (App.Playback.HasTrack)
-                UpdateTimeDisplay();
-        }
-
-        private void UpdateTimeDisplay()
-        {
-            var playback = App.Playback;
-            var duration = playback.Duration;
-            var position = playback.Position;
-
-            // Quiet status line only for user-readable failures ("Playback failed: …").
-            StatusText.Text = playback.StatusText;
-            StatusText.Visibility = string.IsNullOrEmpty(playback.StatusText)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-
+            var duration = state.Duration;
+            SeekBar.Update(duration.TotalSeconds, state.Position.TotalSeconds, state.BufferedFraction);
             DurationText.Text = duration > TimeSpan.Zero ? FormatTime(duration) : "–:––";
-            if (!SeekBar.IsDragging)
-            {
-                SeekBar.Update(duration.TotalSeconds, position.TotalSeconds, playback.BufferedFraction);
-                PositionText.Text = FormatTime(position);
-            }
+            PositionText.Text = FormatTime(state.Position);
         }
 
         private void SeekBar_PreviewChanged(object sender, double seconds)

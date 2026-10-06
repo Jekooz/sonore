@@ -77,10 +77,11 @@
                             <DataTemplate x:DataType="services:PlaylistItemView">
                                 <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
                                     <Border CornerRadius="{StaticResource CardCornerRadius}"
-                                            Width="160" Height="160"
-                                            Background="{ThemeResource GlassBrush}">
-                                        <Image Stretch="UniformToFill"
-                                               Source="{x:Bind ThumbnailUrl, Mode=OneWay}" />
+                                            Width="160" Height="160">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                        Stretch="UniformToFill" />
+                                        </Border.Background>
                                     </Border>
                                     <TextBlock Text="{x:Bind Title}"
                                                Style="{StaticResource CardTitleText}"
@@ -109,10 +110,11 @@
                                 <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
                                     <Border CornerRadius="60"
                                             Width="120" Height="120"
-                                            Background="{ThemeResource GlassBrush}"
                                             HorizontalAlignment="Left">
-                                        <Image Stretch="UniformToFill"
-                                               Source="{x:Bind ThumbnailUrl, Mode=OneWay}" />
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                        Stretch="UniformToFill" />
+                                        </Border.Background>
                                     </Border>
                                     <TextBlock Text="{x:Bind Artist}"
                                                Style="{StaticResource CardTitleText}"
@@ -139,10 +141,11 @@
                             <DataTemplate x:DataType="services:AlbumItemView">
                                 <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
                                     <Border CornerRadius="{StaticResource CardCornerRadius}"
-                                            Width="160" Height="160"
-                                            Background="{ThemeResource GlassBrush}">
-                                        <Image Stretch="UniformToFill"
-                                               Source="{x:Bind ThumbnailUrl, Mode=OneWay}" />
+                                            Width="160" Height="160">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                        Stretch="UniformToFill" />
+                                        </Border.Background>
                                     </Border>
                                     <TextBlock Text="{x:Bind Title}"
                                                Style="{StaticResource CardTitleText}"
@@ -161,29 +164,38 @@
                     <ItemsControl x:Name="LikedList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:TrackItemView">
-                                <Grid ColumnSpacing="12" Margin="0,4" Height="52">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="52" />
-                                        <ColumnDefinition Width="2.2*" />
-                                        <ColumnDefinition Width="2*" />
-                                        <ColumnDefinition Width="0.8*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" CornerRadius="6" Background="{ThemeResource GlassBrush}">
-                                        <Image Stretch="UniformToFill"
-                                               Source="{x:Bind ThumbnailUrl, Mode=OneWay}" />
-                                    </Border>
-                                    <TextBlock Grid.Column="1" Text="{x:Bind Title}"
-                                               Style="{StaticResource CardTitleText}"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
-                                    <TextBlock Grid.Column="2" Text="{x:Bind ArtistText}"
-                                               Style="{StaticResource SecondaryText}"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
-                                    <TextBlock Grid.Column="3" Text="{x:Bind Duration}"
-                                               Style="{StaticResource MutedText}"
-                                               VerticalAlignment="Center" />
-                                </Grid>
+                                <!-- Transparent button so the whole row is clickable and starts playback. -->
+                                <Button Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="0"
+                                        HorizontalContentAlignment="Stretch"
+                                        Click="LikedTrack_Click">
+                                    <Grid ColumnSpacing="12" Margin="0,4" Height="52">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="52" />
+                                            <ColumnDefinition Width="2.2*" />
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="0.8*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" CornerRadius="6">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                            Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Title}"
+                                                   Style="{StaticResource CardTitleText}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                        <TextBlock Grid.Column="2" Text="{x:Bind ArtistText}"
+                                                   Style="{StaticResource SecondaryText}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                        <TextBlock Grid.Column="3" Text="{x:Bind Duration}"
+                                                   Style="{StaticResource MutedText}"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -202,10 +214,11 @@
                                 <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
                                     <Border CornerRadius="60"
                                             Width="120" Height="120"
-                                            Background="{ThemeResource GlassBrush}"
                                             HorizontalAlignment="Left">
-                                        <Image Stretch="UniformToFill"
-                                               Source="{x:Bind ThumbnailUrl, Mode=OneWay}" />
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                        Stretch="UniformToFill" />
+                                        </Border.Background>
                                     </Border>
                                     <TextBlock Text="{x:Bind Artist}"
                                                Style="{StaticResource CardTitleText}"

@@ -26,14 +26,14 @@ namespace YtMusicClient.Views
             Unloaded += LibraryPage_Unloaded;
         }
 
-        private void LibraryPage_Loaded(object sender, RoutedEventArgs e)
+        private async void LibraryPage_Loaded(object sender, RoutedEventArgs e)
         {
             if (!_subscribed)
             {
                 ViewModel.DataReady += ViewModel_DataReady;
                 _subscribed = true;
             }
-            _ = LoadAsync(force: false);
+            await LoadAsync(force: false);
         }
 
         private void LibraryPage_Unloaded(object sender, RoutedEventArgs e)
@@ -47,7 +47,7 @@ namespace YtMusicClient.Views
 
         private void ViewModel_DataReady(object sender, EventArgs e)
         {
-            _ = DispatcherQueue.TryEnqueue(() => LoadAsync(force: true));
+            _ = DispatcherQueue.TryEnqueue(async () => await LoadAsync(force: true));
         }
 
         private async Task LoadAsync(bool force)
@@ -118,6 +118,19 @@ namespace YtMusicClient.Views
         {
             if (App.Window is MainWindow mainWindow)
                 await mainWindow.StartSignInAsync();
+        }
+
+        /// <summary>Liked-row click: start playback and jump to the Now Playing tab.</summary>
+        private async void LikedTrack_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not TrackItemView item)
+                return;
+            if (string.IsNullOrEmpty(item.VideoId))
+                return;
+
+            await App.Playback.PlayAsync(item.VideoId, item.Title, item.ArtistText, item.ThumbnailUrl);
+            if (App.Window is MainWindow mainWindow)
+                mainWindow.ShowNowPlaying();
         }
 
         private void ShowOnly(string section)

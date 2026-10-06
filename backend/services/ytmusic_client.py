@@ -9,8 +9,10 @@ Authentication model — "Sign in with Google" inside the app:
      which document.cookie cannot see) and POSTs them to /auth/cookies.
   3. The backend builds the ytmusicapi "browser auth" header set (cookie + a
      SAPISIDHASH authorization header that ytmusicapi recomputes on every request,
-     exactly like music.youtube.com does in a normal browser) and stores it in the
-     Windows Credential Locker via keyring. Cookies are never written to disk.
+     exactly like music.youtube.com does in a normal browser) and stores it encrypted
+     via Windows DPAPI (CryptProtectData) in a file under %LOCALAPPDATA%. Cookies are
+     never written to disk in plaintext; the DPAPI blob is encrypted with the user's
+     Windows logon credentials and is only readable by the same user account.
 
 This is the same auth mechanism as `ytmusicapi`'s browser setup, automated.
 Verified against ytmusicapi 1.12.3 source:
@@ -22,8 +24,11 @@ Verified against ytmusicapi 1.12.3 source:
     (SAPISIDHASH) is treated as BROWSER auth; no OAuthCredentials needed.
 """
 
+import ctypes
+import ctypes.wintypes as wintypes
 import json
 import logging
+import os
 import threading
 
 import keyring
@@ -72,7 +77,82 @@ class AuthError(Exception):
 
 
 class StorageError(AuthError):
-    """Raised when the OS keyring itself is unavailable or refuses writes."""
+    """Raised when credential storage (keyring or DPAPI) is unavailable or refuses writes."""
+
+
+# ---- DPAPI-based encrypted file storage (overcomes Credential Manager 512-byte limit) ----
+#
+# Windows Credential Manager (used by the ``keyring`` library's WinVaultKeyring) caps the
+# credential blob at 512 bytes.  Our auth headers JSON — which includes the full Cookie
+# header with ~15 Google cookies — easily exceeds that, causing CredWrite error 1783
+# (ERROR_INVALID_DATA).  Instead we use CryptProtectData / CryptUnprotectData from dpapi
+# via ctypes: the data is encrypted with the user's logon credentials (DPAPI) and written
+# to a file under %LOCALAPPDATA%.  This is secure, has no size limit, and needs no extra
+# packages (ctypes is in the standard library).
+
+# True only on Windows where dpapi.dll / crypt32.dll are available.
+_DPAPI_AVAILABLE = hasattr(ctypes, "windll")
+
+# File path for the encrypted auth headers blob.
+_APP_DATA_DIR = os.path.join(
+    os.environ.get("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local")),
+    "ytmusic_client",
+)
+_AUTH_FILE = os.path.join(_APP_DATA_DIR, "auth_headers.dat")
+
+
+class _DATA_BLOB(ctypes.Structure):
+    _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(wintypes.BYTE))]
+
+
+def _dpapi_encrypt(data: bytes) -> bytes:
+    """Encrypt *data* with Windows DPAPI (CryptProtectData).
+
+    The returned bytes are opaque and can be written verbatim to a file.
+    Raises ``StorageError`` on failure.
+    """
+    blob_in = _DATA_BLOB()
+    blob_out = _DATA_BLOB()
+
+    # create_string_buffer allocates a writable buffer initialised with *data*
+    # (no need for LocalAlloc/memmove which caused access violations).
+    buf = ctypes.create_string_buffer(data)
+    blob_in.cbData = len(data)
+    blob_in.pbData = ctypes.cast(buf, ctypes.POINTER(wintypes.BYTE))
+
+    success = ctypes.windll.crypt32.CryptProtectData(
+        ctypes.byref(blob_in),
+        "ytmusic_client auth headers",
+        None, None, None, 0,
+        ctypes.byref(blob_out),
+    )
+    result = ctypes.string_at(blob_out.pbData, blob_out.cbData) if blob_out.cbData else b""
+    ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+
+    if not success:
+        raise StorageError(f"DPAPI encryption failed (error {ctypes.GetLastError()})")
+    return result
+
+
+def _dpapi_decrypt(data: bytes) -> bytes:
+    """Decrypt *data* previously produced by :func:`_dpapi_encrypt`."""
+    blob_in = _DATA_BLOB()
+    blob_out = _DATA_BLOB()
+
+    buf = ctypes.create_string_buffer(data)
+    blob_in.cbData = len(data)
+    blob_in.pbData = ctypes.cast(buf, ctypes.POINTER(wintypes.BYTE))
+
+    success = ctypes.windll.crypt32.CryptUnprotectData(
+        ctypes.byref(blob_in), None, None, None, None, 0,
+        ctypes.byref(blob_out),
+    )
+    result = ctypes.string_at(blob_out.pbData, blob_out.cbData) if blob_out.cbData else b""
+    ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+
+    if not success:
+        raise StorageError(f"DPAPI decryption failed (error {ctypes.GetLastError()})")
+    return result
 
 
 def _build_cookie_header(cookie_map: dict) -> str:
@@ -122,7 +202,8 @@ def build_auth_headers(cookie_map: dict) -> dict:
 
 class YtmusicService:
     """
-    Holds the sign-in session (headers in keyring) and provides YTMusic clients.
+    Holds the sign-in session (headers encrypted via DPAPI, with keyring fallback)
+    and provides YTMusic clients.
 
     A new YTMusic instance is built from stored headers when needed and cached
     until the session changes (sign-out / re-login). YTMusic is not guaranteed
@@ -161,16 +242,81 @@ class YtmusicService:
         except keyring.errors.KeyringError as e:
             logger.warning("OS keyring unavailable during sign-out (%s).", e)
 
+    # ---------- DPAPI file storage ----------
+
+    @staticmethod
+    def _dpapi_get() -> str | None:
+        """Read and decrypt auth headers from the DPAPI-protected file."""
+        if not _DPAPI_AVAILABLE:
+            return None
+        if not os.path.exists(_AUTH_FILE):
+            return None
+        try:
+            with open(_AUTH_FILE, "rb") as f:
+                encrypted = f.read()
+            decrypted = _dpapi_decrypt(encrypted)
+            return decrypted.decode("utf-8")
+        except StorageError as e:
+            # Could not decrypt — corrupt or wrong user.  Wipe it so we don't
+            # keep erroring on every read.
+            logger.warning("DPAPI decryption failed: %s — removing stale file.", e)
+            try:
+                os.remove(_AUTH_FILE)
+            except OSError:
+                pass
+            return None
+        except OSError as e:
+            logger.warning("Could not read auth file: %s.", e)
+            return None
+
+    @staticmethod
+    def _dpapi_set(value: str) -> None:
+        """Encrypt *value* with DPAPI and write it to the auth file."""
+        if not _DPAPI_AVAILABLE:
+            raise StorageError("DPAPI not available on this platform")
+        os.makedirs(_APP_DATA_DIR, exist_ok=True)
+        encrypted = _dpapi_encrypt(value.encode("utf-8"))
+        # Write atomically: write to temp file then rename.
+        tmp_path = _AUTH_FILE + ".tmp"
+        with open(tmp_path, "wb") as f:
+            f.write(encrypted)
+        os.replace(tmp_path, _AUTH_FILE)
+
+    @staticmethod
+    def _dpapi_delete() -> None:
+        """Delete the encrypted auth file if it exists."""
+        try:
+            if os.path.exists(_AUTH_FILE):
+                os.remove(_AUTH_FILE)
+        except OSError as e:
+            logger.warning("Could not remove auth file: %s.", e)
+
+    # ---------- session methods ----------
+
     def store_session(self, cookie_map: dict) -> dict:
-        """Validate cookies, store headers in the OS keyring, reset the client."""
+        """Validate cookies, store headers securely, reset the client.
+
+        On Windows, uses DPAPI (CryptProtectData) to encrypt the headers and
+        writes them to a file under %LOCALAPPDATA%.  This avoids the 512-byte
+        Credential Manager limit that caused CredWrite error 1783.
+        Falls back to keyring for backwards compatibility or non-Windows.
+        """
         headers = build_auth_headers(cookie_map)
-        self._keyring_set(json.dumps(headers))
+        value = json.dumps(headers)
+        if _DPAPI_AVAILABLE:
+            self._dpapi_set(value)
+        else:
+            self._keyring_set(value)
         with self._lock:
             self._client = None  # force rebuild on next use
         return {"signed_in": True}
 
     def get_headers(self) -> dict | None:
-        stored = self._keyring_get()
+        # Prefer DPAPI file (primary storage on Windows).  Fall back to keyring
+        # for sessions stored by an older version of this app.
+        stored = self._dpapi_get()
+        if stored is None:
+            stored = self._keyring_get()
         if not stored:
             return None
         try:
@@ -183,6 +329,9 @@ class YtmusicService:
         return headers
 
     def clear_session(self) -> None:
+        # Clear both storage backends (in case a session was stored by either).
+        if _DPAPI_AVAILABLE:
+            self._dpapi_delete()
         self._keyring_delete()
         with self._lock:
             self._client = None

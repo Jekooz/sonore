@@ -12,6 +12,12 @@
                  MinHeight="40"
                  KeyDown="SearchBox_KeyDown" />
 
+        <!-- Category filter chips, built from the real result
+             categories of the last search ("All" + each group). -->
+        <VariableSizedWrapGrid x:Name="FilterChips"
+                               Orientation="Horizontal"
+                               Visibility="Collapsed" />
+
         <StackPanel Orientation="Horizontal" Spacing="12">
             <ProgressRing x:Name="LoadingRing" Width="24" Height="24" IsActive="False" />
             <TextBlock x:Name="ErrorText"
@@ -27,37 +33,47 @@
         <ItemsControl x:Name="ResultsList">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="services:SearchResultItemView">
-                    <Grid ColumnSpacing="12" Margin="0,4" MinHeight="56">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="56" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                    <!-- Transparent button: the whole row is clickable; results with a
+                         videoId (songs/videos) start playback from the handler. -->
+                    <Button Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            HorizontalContentAlignment="Stretch"
+                            Click="Result_Click">
+                        <Grid ColumnSpacing="12" Margin="0,4" MinHeight="56">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                        <Border Grid.Column="0" CornerRadius="6" Background="{ThemeResource GlassBrush}">
-                            <Image Stretch="UniformToFill"
-                                   Source="{x:Bind ThumbnailUrl, Mode=OneWay}" />
-                        </Border>
+                            <Border Grid.Column="0" CornerRadius="6">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                Stretch="UniformToFill" />
+                                </Border.Background>
+                            </Border>
 
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                            <TextBlock Text="{x:Bind Title}"
-                                       Style="{StaticResource CardTitleText}"
-                                       TextTrimming="CharacterEllipsis" MaxLines="1" />
-                            <TextBlock Text="{x:Bind Artist}"
-                                       Style="{StaticResource MutedText}"
-                                       TextTrimming="CharacterEllipsis" MaxLines="1" />
-                        </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="{x:Bind Title}"
+                                           Style="{StaticResource CardTitleText}"
+                                           TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                <TextBlock Text="{x:Bind Artist}"
+                                           Style="{StaticResource MutedText}"
+                                           TextTrimming="CharacterEllipsis" MaxLines="1" />
+                            </StackPanel>
 
-                        <Border Grid.Column="2"
-                                CornerRadius="9"
-                                Background="{ThemeResource GlassStrongBrush}"
-                                Padding="8,3"
-                                VerticalAlignment="Center">
-                            <TextBlock Text="{x:Bind ResultType}"
-                                       Style="{StaticResource MutedText}"
-                                       FontSize="11" />
-                        </Border>
-                    </Grid>
+                            <Border Grid.Column="2"
+                                    CornerRadius="9"
+                                    Background="{ThemeResource GlassStrongBrush}"
+                                    Padding="8,3"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind ResultType}"
+                                           Style="{StaticResource MutedText}"
+                                           FontSize="11" />
+                            </Border>
+                        </Grid>
+                    </Button>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>

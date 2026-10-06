@@ -20,15 +20,27 @@ Endpoints:
   GET  /search?q=...            search songs / albums / artists / playlists
 """
 
+import http.client
 import logging
 import os
+import re
+import shutil
+import socket
+import subprocess
 import tempfile
+import threading
+import time
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from services.ytmusic_client import AuthError, StorageError, ytmusic_service
+from services.ytmusic_client import (
+    REQUIRED_COOKIES,
+    AuthError,
+    StorageError,
+    ytmusic_service,
+)
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
@@ -62,11 +74,19 @@ async def auth_cookies(payload: dict):
 
     The frontend captures these from its embedded browser (WebView2 CookieManager,
     which can read HttpOnly cookies) after the user signs in at music.youtube.com.
-    Headers are stored in the OS keyring only — never a file.
+    Headers are stored encrypted via Windows DPAPI — never written to disk in
+    plaintext.
     """
     cookies = payload.get("cookies")
     if not isinstance(cookies, dict) or not cookies:
         raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
+
+    # Log names only, never values — this is what tells us whether the capture
+    # side delivered a complete YouTube session when sign-in does not verify.
+    logger.info("Received %d cookies: %s", len(cookies), ", ".join(sorted(cookies)))
+    missing = [n for n in REQUIRED_COOKIES if not cookies.get(n)]
+    if missing:
+        logger.warning("Missing required cookie(s): %s", ", ".join(missing))
 
     try:
         result = ytmusic_service.store_session(cookies)
@@ -86,6 +106,8 @@ async def auth_cookies(payload: dict):
         account = ytmusic_service.call("get_account_info")
         result["account"] = account
     except Exception as e:
+        logger.error(
+            "Session stored but YouTube did not treat it as authenticated: %r", e)
         ytmusic_service.clear_session()
         raise HTTPException(
             status_code=401,
@@ -164,13 +186,161 @@ def search(q: str = Query(..., min_length=1)):
     return JSONResponse(content=results)
 
 
-if __name__ == "__main__":
-    # Fixed by default (frontend falls back to 8000 if the sidecar fails to start);
-    # YTM_PORT overrides it when 8000 is taken by something else on the machine.
-    port = int(os.environ.get("YTM_PORT", "8000"))
+# ---------------- playback ----------------
+
+# googlevideo URLs are signed and expire in about 6 hours; keep them a little
+# less than that so a listening session never starts playing a dead link.
+_STREAM_CACHE: dict[str, tuple[str, float]] = {}
+_STREAM_TTL_SECONDS = 4 * 60 * 60
+
+# yt-dlp ships as a WinGet exe on this machine; resolve it at import time so a
+# missing binary produces one clear 503 instead of an unhandled crash.
+_YT_DLP = shutil.which("yt-dlp") or "yt-dlp"
+
+# itag 140 (m4a/AAC) plays through Windows Media Foundation. Prefer it, but
+# fall back to whatever audio YouTube serves rather than failing outright.
+_AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio"
+
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
+
+
+def _resolve_stream(video_id: str) -> str:
+    """Resolve a playable audio URL for a video id using yt-dlp.
+
+    Invoked as a subprocess (no shell) with the id passed as a single argv
+    element, so the id is never interpreted by a shell.
+    """
+    now = time.time()
+    cached = _STREAM_CACHE.get(video_id)
+    if cached and cached[1] > now:
+        return cached[0]
+
+    try:
+        proc = subprocess.run(
+            [
+                _YT_DLP,
+                "-f",
+                _AUDIO_FORMAT,
+                "--get-url",
+                "--no-warnings",
+                "--no-playlist",
+                f"https://www.youtube.com/watch?v={video_id}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=503,
+            detail="yt-dlp was not found on PATH. Install it and restart the app.",
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(
+            status_code=504,
+            detail="Timed out resolving a stream URL for this track.",
+        )
+
+    lines = [ln.strip() for ln in (proc.stdout or "").splitlines() if ln.strip()]
+    if proc.returncode != 0 or not lines:
+        err = [ln for ln in (proc.stderr or "").splitlines() if ln.strip()]
+        reason = err[-1] if err else f"yt-dlp exited {proc.returncode}"
+        logger.error("yt-dlp failed for %s: %s", video_id, reason)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not resolve a stream for this track: {reason}",
+        )
+
+    url = lines[-1]
+    _STREAM_CACHE[video_id] = (url, now + _STREAM_TTL_SECONDS)
+    return url
+
+
+@app.get("/stream/{video_id}")
+def stream(video_id: str):
+    """Return a short-lived audio URL for the player to fetch directly."""
+    if not _VIDEO_ID_RE.fullmatch(video_id):
+        raise HTTPException(status_code=400, detail="Invalid video id.")
+    return JSONResponse(content={"videoId": video_id, "url": _resolve_stream(video_id)})
+
+
+def _port_is_free(port: int) -> bool:
+    """True if 127.0.0.1:port can be bound right now.
+
+    Deliberately does NOT set SO_REUSEADDR: on Windows that flag permits
+    binding over a live listener, which would make every port look free.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def _answers_health(port: int) -> bool:
+    """True only if OUR app answers /health on that port.
+
+    A squatter holding the same port accepts the TCP connection but will not
+    speak the app's HTTP, so a bare connect() would be a false positive.
+    """
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=1.0)
+    try:
+        conn.request("GET", "/health")
+        resp = conn.getresponse()
+        body = resp.read(256)
+        return resp.status == 200 and b'"ok"' in body
+    except OSError:
+        return False
+    finally:
+        conn.close()
+
+
+def _choose_port() -> int:
+    """YTM_PORT when set, otherwise the first free port starting at 8000.
+
+    A backend orphaned by a previous launch keeps 8000 bound. Refusing to
+    start there left the frontend reading a port that answered nothing, so
+    move over instead of failing.
+    """
+    explicit = os.environ.get("YTM_PORT")
+    if explicit:
+        return int(explicit)
+
+    for candidate in range(8000, 8100):
+        if _port_is_free(candidate):
+            return candidate
+
+    raise RuntimeError("No free port between 8000 and 8099.")
+
+
+def _publish_when_ready(port: int, timeout: float = 20.0) -> None:
+    """Write the port file only once the port actually accepts connections.
+
+    Writing it before uvicorn binds let a backend that died on "address
+    already in use" advertise a healthy port: the frontend read it, believed
+    the sidecar was up, and every later request failed with "connection
+    refused" — which surfaced to the user as a failed sign-in.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _answers_health(port):
+            break
+        time.sleep(0.1)
+    else:
+        # Never became ready. Leave no port file so the frontend reports a
+        # real startup failure instead of talking to nothing.
+        logger.error(f"Backend never started listening on port {port}.")
+        return
 
     with open(PORT_FILE, "w") as f:
         f.write(str(port))
+    logger.info(f"Published port {port} to {PORT_FILE}")
+
+
+if __name__ == "__main__":
+    port = _choose_port()
 
     logger.info(f"Starting backend on port {port}")
+    threading.Thread(target=_publish_when_ready, args=(port,), daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=port)

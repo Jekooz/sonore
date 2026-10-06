@@ -1,11 +1,13 @@
 <Window x:Class="YtMusicClient.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:YtMusicClient.Views.Controls">
 
     <Grid Background="{ThemeResource AppBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Glass chrome: title bar + tab pill, per DESIGN_TOKENS (glass only on floating chrome). -->
@@ -63,14 +65,159 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock Grid.Column="2"
-                       x:Name="AppTitleText"
+            <!-- Signed out: quiet wordmark, clear of the caption buttons. -->
+            <TextBlock x:Name="AppTitleText"
+                       Grid.Column="2"
                        Text="YouTube Music"
                        VerticalAlignment="Center"
                        Margin="0,0,140,0"
                        Style="{StaticResource MutedText}" />
+
+            <!-- Signed in: account chip — real photo + name from the
+                 backend /account response. Click opens the sign-out menu. -->
+            <Button x:Name="AccountChip"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    Margin="0,0,140,0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="8,4"
+                    Visibility="Collapsed">
+                <Button.Flyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem Text="Sign out" Click="SignOut_Click" />
+                    </MenuFlyout>
+                </Button.Flyout>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <!-- Letter fallback for accounts without a photo URL. -->
+                    <Border x:Name="PhotoFallback"
+                            Width="28" Height="28"
+                            CornerRadius="14"
+                            Background="{ThemeResource TokenBorderStrongBrush}"
+                            Visibility="Collapsed">
+                        <TextBlock x:Name="AccountInitial"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{ThemeResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <!-- Fill is set in code-behind (UpdateAccountChrome): a string→ImageSource
+                         x:Bind here crashes the app on null/empty (E_INVALIDARG). -->
+                    <Ellipse x:Name="AccountPhoto"
+                             Width="28" Height="28"
+                             Visibility="Collapsed" />
+                    <TextBlock Text="{x:Bind ViewModel.AccountName, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               MaxWidth="140"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Button>
         </Grid>
 
         <Frame x:Name="ContentFrame" Grid.Row="1" />
+
+        <!-- Persistent player bar: on every screen, glass chrome per DESIGN_TOKENS.
+             Clicking the artwork/title expands into the full Now Playing view. -->
+        <Grid x:Name="PlayerBar"
+              Grid.Row="2"
+              Height="64"
+              Background="{ThemeResource GlassBrush}"
+              BorderBrush="{ThemeResource TokenBorderBrush}"
+              BorderThickness="0,1,0,0"
+              Padding="16,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Art + title/artist: one click target that opens Now Playing. -->
+            <Button x:Name="PlayerBarExpand"
+                    Grid.Column="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="0"
+                    AutomationProperties.Name="Open Now Playing"
+                    Click="PlayerBarExpand_Click">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Border x:Name="BarArt"
+                            Width="44" Height="44"
+                            CornerRadius="8"
+                            Background="{ThemeResource RaisedBrush}" />
+                    <StackPanel VerticalAlignment="Center" Spacing="1" MaxWidth="220">
+                        <TextBlock x:Name="BarTitle"
+                                   Text="Nothing playing"
+                                   Style="{StaticResource CardTitleText}"
+                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                        <TextBlock x:Name="BarArtist"
+                                   Text=""
+                                   Style="{StaticResource MutedText}"
+                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                    </StackPanel>
+                </StackPanel>
+            </Button>
+
+            <!-- Seek: single bar with buffered segment; times only, never bytes. -->
+            <Grid Grid.Column="1" ColumnSpacing="10" Margin="16,0" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="BarPositionText" Grid.Column="0" Text="–:––"
+                           Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="34" />
+                <controls:BufferedSeekBar x:Name="BarSeekBar" Grid.Column="1"
+                                          VerticalAlignment="Center"
+                                          IsEnabled="False"
+                                          SeekRequested="BarSeekBar_SeekRequested"
+                                          PreviewChanged="BarSeekBar_PreviewChanged" />
+                <TextBlock x:Name="BarDurationText" Grid.Column="2" Text="–:––"
+                           Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="34"
+                           TextAlignment="Right" />
+            </Grid>
+
+            <!-- Transport -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <Button x:Name="BarPrevButton" Style="{StaticResource IconButtonStyle}"
+                        AutomationProperties.Name="Previous"
+                        Click="BarPrevButton_Click">
+                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Text="\uE892" />
+                </Button>
+                <Button x:Name="BarPlayButton"
+                        Width="44" Height="44" CornerRadius="22"
+                        Style="{StaticResource AccentButtonStyle}"
+                        AutomationProperties.Name="Play or pause"
+                        Click="BarPlayButton_Click">
+                    <TextBlock x:Name="BarPlayGlyph"
+                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                               FontSize="16" Text="\uE768" />
+                </Button>
+                <Button x:Name="BarNextButton" Style="{StaticResource IconButtonStyle}"
+                        AutomationProperties.Name="Next"
+                        IsEnabled="False"
+                        Click="BarNextButton_Click">
+                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Text="\uE893" />
+                </Button>
+            </StackPanel>
+
+            <!-- Volume: perceptual curve applied in code-behind. -->
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
+                <Button x:Name="BarMuteButton" Style="{StaticResource IconButtonStyle}"
+                        AutomationProperties.Name="Mute"
+                        Click="BarMuteButton_Click">
+                    <TextBlock x:Name="BarMuteGlyph"
+                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                               FontSize="16" Text="\uE767" />
+                </Button>
+                <Slider x:Name="BarVolumeSlider"
+                        Width="90" Minimum="0" Maximum="100" StepFrequency="1"
+                        Value="80"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Volume"
+                        ValueChanged="BarVolumeSlider_ValueChanged" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

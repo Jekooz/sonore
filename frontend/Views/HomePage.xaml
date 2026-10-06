@@ -37,7 +37,7 @@
                     Content="Sign in with Google"
                     HorizontalAlignment="Center"
                     Style="{StaticResource AccentButtonStyle}"
-                    CornerRadius="18"
+                    CornerRadius="{StaticResource PillCornerRadius}"
                     Padding="20,8"
                     Click="SignInButton_Click" />
         </StackPanel>
@@ -46,57 +46,159 @@
         <ScrollViewer x:Name="ContentScroll"
                       Grid.Row="1"
                       Visibility="Collapsed">
-            <StackPanel Spacing="28" MaxWidth="1100" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="24">
                 <ProgressRing x:Name="LoadingRing" Width="36" Height="36" IsActive="False" />
                 <TextBlock x:Name="ErrorText"
                            Style="{StaticResource SecondaryText}"
                            TextWrapping="Wrap"
                            Visibility="Collapsed" />
 
-                <ItemsControl x:Name="HomeRows">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="services:HomeRowView">
-                            <StackPanel Spacing="12" Margin="0,0,0,8">
-                                <TextBlock Text="{x:Bind Title}"
-                                           Style="{StaticResource SectionHeaderText}" />
-                                <ItemsControl ItemsSource="{x:Bind Contents}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <ItemsStackPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="services:HomeItemView">
-                                            <Button Background="Transparent"
-                                                    BorderThickness="0"
-                                                    Padding="0"
-                                                    Margin="0,0,12,12"
-                                                    CornerRadius="{StaticResource CardCornerRadius}">
-                                                <StackPanel Width="160" Spacing="6">
-                                                    <Border CornerRadius="{StaticResource CardCornerRadius}"
-                                                            Height="160"
-                                                            Width="160"
-                                                            Background="{ThemeResource GlassBrush}">
-                                                        <Image Stretch="UniformToFill"
-                                                               Source="{x:Bind ThumbnailUrl, Mode=OneWay}" />
-                                                    </Border>
-                                                    <TextBlock Text="{x:Bind Title}"
-                                                               Style="{StaticResource CardTitleText}"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               MaxLines="1" />
-                                                    <TextBlock Text="{x:Bind Subtitle}"
-                                                               Style="{StaticResource MutedText}"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               MaxLines="1" />
-                                                </StackPanel>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <!-- Hero banner: glass card around the first playable card of the
+                     first home row. Glass is reserved for chrome like this
+                     floating card per DESIGN_TOKENS. -->
+                <Border x:Name="HeroCard"
+                        Background="{ThemeResource GlassBrush}"
+                        BorderBrush="{ThemeResource TokenBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource CardCornerRadius}"
+                        Padding="20"
+                        Visibility="Collapsed">
+                    <Grid ColumnSpacing="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="176" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Rounded art: the image paints as the border's
+                             background, inside the rounded corners. -->
+                        <Border x:Name="HeroArt"
+                                Grid.Column="0"
+                                Width="176" Height="176"
+                                CornerRadius="{StaticResource CardCornerRadius}" />
+
+                        <StackPanel Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Spacing="8">
+                            <TextBlock x:Name="HeroTitle"
+                                       Style="{StaticResource SectionHeaderText}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock x:Name="HeroSubtitle"
+                                       Style="{StaticResource SecondaryText}"
+                                       TextWrapping="Wrap" />
+                            <Button Content="Play"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    CornerRadius="{StaticResource PillCornerRadius}"
+                                    Padding="20,8"
+                                    HorizontalAlignment="Left"
+                                    Click="HeroPlay_Click" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Two columns: main tile rows + fixed-width rail -->
+                <Grid ColumnSpacing="24">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition x:Name="RailColumn" Width="250" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Main column: one section per home row. Tiles are bare
+                         (no card border) — the art speaks for itself. -->
+                    <ItemsControl x:Name="HomeRows" Grid.Column="0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="services:HomeRowView">
+                                <StackPanel Spacing="12" Margin="0,0,0,12">
+                                    <TextBlock Text="{x:Bind Title}"
+                                               Style="{StaticResource SectionHeaderText}" />
+                                    <ItemsControl ItemsSource="{x:Bind Contents}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <ItemsStackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="services:HomeItemView">
+                                                <!-- Click handler lives on the page; the row's DataContext is
+                                                     the HomeItemView, so cards with a videoId start playback. -->
+                                                <Button Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Padding="0"
+                                                        Margin="0,0,16,16"
+                                                        Click="HomeCard_Click">
+                                                    <StackPanel Width="108" Spacing="6">
+                                                        <Border Width="108" Height="108"
+                                                                CornerRadius="{StaticResource CardCornerRadius}">
+                                                            <Border.Background>
+                                                                <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                                            Stretch="UniformToFill" />
+                                                            </Border.Background>
+                                                        </Border>
+                                                        <TextBlock Text="{x:Bind Title}"
+                                                                   Style="{StaticResource CardTitleText}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxLines="1" />
+                                                        <TextBlock Text="{x:Bind Subtitle}"
+                                                                   Style="{StaticResource MutedText}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxLines="1" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Rail: the last home row as a narrow vertical list.
+                         Header is the row's real title from the backend. -->
+                    <StackPanel x:Name="RailPanel"
+                                Grid.Column="1"
+                                Spacing="12"
+                                Visibility="Collapsed">
+                        <TextBlock x:Name="RailTitle"
+                                   Style="{StaticResource SectionHeaderText}" />
+                        <ItemsControl x:Name="RailItems">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="services:HomeItemView">
+                                    <Button Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="0"
+                                            Margin="0,0,0,4"
+                                            Click="HomeCard_Click">
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="44" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0"
+                                                    Width="44" Height="44"
+                                                    CornerRadius="8">
+                                                <Border.Background>
+                                                    <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                                Stretch="UniformToFill" />
+                                                </Border.Background>
+                                            </Border>
+                                            <StackPanel Grid.Column="1"
+                                                        VerticalAlignment="Center"
+                                                        Spacing="2">
+                                                <TextBlock Text="{x:Bind Title}"
+                                                           Style="{StaticResource CardTitleText}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           MaxLines="1" />
+                                                <TextBlock Text="{x:Bind Subtitle}"
+                                                           Style="{StaticResource MutedText}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           MaxLines="1" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Grid>
             </StackPanel>
         </ScrollViewer>
     </Grid>

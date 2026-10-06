@@ -55,6 +55,6 @@
                   Source="https://music.youtube.com"
                   NavigationStarting="SignInWebView_NavigationStarting"
                   NavigationCompleted="SignInWebView_NavigationCompleted"
-                  DefaultBackground="Black" />
+                  DefaultBackgroundColor="Black" />
     </Grid>
 </Window>

@@ -73,6 +73,11 @@ namespace YtMusicClient.Services
             return await GetOrThrowAsync<List<ArtistSummary>>("library/artists");
         }
 
+        public async Task<List<ArtistSummary>> GetLibrarySubscriptionsAsync()
+        {
+            return await GetOrThrowAsync<List<ArtistSummary>>("library/subscriptions");
+        }
+
         public async Task<List<AlbumSummary>> GetLibraryAlbumsAsync()
         {
             return await GetOrThrowAsync<List<AlbumSummary>>("library/albums");
@@ -91,6 +96,18 @@ namespace YtMusicClient.Services
         public async Task<List<SearchResultGroup>> SearchAsync(string query)
         {
             return await GetOrThrowAsync<List<SearchResultGroup>>($"search?q={Uri.EscapeDataString(query)}");
+        }
+
+        // ---------------- playback ----------------
+
+        /// <summary>
+        /// Resolve a playable signed audio URL for a track. The backend shells out
+        /// to yt-dlp and caches the URL for a few hours; resolving can take a while
+        /// on a cold cache, which is why the client timeout is generous.
+        /// </summary>
+        public async Task<StreamResponse> GetStreamUrlAsync(string videoId)
+        {
+            return await GetOrThrowAsync<StreamResponse>($"stream/{Uri.EscapeDataString(videoId)}");
         }
 
         // ---------------- helpers ----------------
@@ -145,6 +162,16 @@ namespace YtMusicClient.Services
     {
         [JsonPropertyName("detail")]
         public string Detail { get; set; }
+    }
+
+    /// <summary>GET /stream/{videoId} → short-lived signed googlevideo URL.</summary>
+    public class StreamResponse
+    {
+        [JsonPropertyName("videoId")]
+        public string VideoId { get; set; }
+
+        [JsonPropertyName("url")]
+        public string Url { get; set; }
     }
 
     public class CookieLoginResponse
@@ -367,7 +394,9 @@ namespace YtMusicClient.Services
                 if (best == null || (t.Width <= maxWidth && t.Width > best.Width) || (best.Width > maxWidth && t.Width < best.Width))
                     best = t;
             }
-            return best?.Url ?? thumbs[0].Url;
+            var url = best?.Url ?? thumbs[0].Url;
+            // null, never "": an empty string cannot convert to ImageSource in x:Bind and crashes the app.
+            return string.IsNullOrEmpty(url) ? null : url;
         }
     }
 }

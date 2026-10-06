@@ -9,12 +9,17 @@
 
     <Color x:Key="AccentColor">#FA2D48</Color>
     <SolidColorBrush x:Key="AccentBrush" Color="#FA2D48" />
+    <SolidColorBrush x:Key="BufferedBrush" Color="#8C8C8C" Opacity="0.45" />
     <SolidColorBrush x:Key="AppBackgroundBrush" Color="#000000" />
 
-    <SolidColorBrush x:Key="GlassBrush" Color="#0F0F0F" Opacity="0.94" />
-    <SolidColorBrush x:Key="GlassStrongBrush" Color="#1A1A1A" Opacity="0.94" />
-    <SolidColorBrush x:Key="TokenBorderBrush" Color="#1A1A1A" />
-    <SolidColorBrush x:Key="TokenBorderStrongBrush" Color="#292929" />
+    <!-- Layered surfaces (per the upgrade spec): elevation must stay readable,
+         pure black + near-black cards flattened depth. -->
+    <SolidColorBrush x:Key="GlassBrush" Color="#141417" Opacity="0.96" />
+    <SolidColorBrush x:Key="GlassStrongBrush" Color="#1C1C21" Opacity="0.97" />
+    <SolidColorBrush x:Key="CardBrush" Color="#141417" />
+    <SolidColorBrush x:Key="RaisedBrush" Color="#1C1C21" />
+    <SolidColorBrush x:Key="TokenBorderBrush" Color="#26262B" />
+    <SolidColorBrush x:Key="TokenBorderStrongBrush" Color="#33333A" />
 
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="#8C8C8C" />

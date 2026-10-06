@@ -17,6 +17,9 @@
     <RootNamespace>YtMusicClient</RootNamespace>
     <AssemblyName>YtMusicClient</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Taskbar / Explorer / Alt+Tab icon. Unpackaged WinUI reads it from the
+         exe resource, so this is what replaces the default icon. -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <UseWinUI>true</UseWinUI>
 
     <!-- Unpackaged: no MSIX, no Package.appmanifest; run the exe directly.
@@ -36,9 +39,10 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
 
 </Project>

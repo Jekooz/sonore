@@ -14,26 +14,26 @@ namespace YtMusicClient.Services
     /// observed by NowPlayingPage:
     ///
     ///   1. resolve a signed stream URL through the sidecar (yt-dlp),
-    ///   2. stream it progressively (<see cref="ChunkedAudioStream"/>),
-    ///   3. decode with Windows Media Foundation and output via NAudio
-    ///      (<see cref="AudioPlayer"/>).
+    ///   2. stream it through the sparse disk cache (<see cref="RangeCachedStream"/>),
+    ///   3. decode with Windows Media Foundation, 10-band EQ, and output via
+    ///      WASAPI (<see cref="AudioEngine"/>).
     ///
     /// Play requests are issued from the UI thread and every continuation resumes
     /// there, so state changes are serialized; a generation counter drops any
     /// request that was superseded by a newer click before it finished resolving.
-    /// AudioPlayer raises its own events from the WaveOut callback thread, so those
-    /// are marshalled onto the UI dispatcher before they leave this class.
+    /// The engine raises its own events from audio threads, so those are
+    /// marshalled onto the UI dispatcher before they leave this class.
     /// </summary>
     public sealed class PlaybackService : INotifyPropertyChanged, IDisposable
     {
-        private readonly AudioPlayer _player = new AudioPlayer();
+        private readonly AudioEngine _engine = new AudioEngine();
 
         private int _generation;     // stale async flows give up silently
         private string _currentUrl;  // signed URL of the loaded track
         private bool _finished;      // track played to the end
         private string _statusText = "";
 
-        // Perceptual volume 0..1 (UI applies the curve); persisted via the shell VM.
+        // Volume 0..1 (the engine applies the perceptual v³ curve); persisted via the shell VM.
         private float _volume = 0.8f;
 
         // Rapid Next/Previous clicks: a click within this window of the previous
@@ -77,7 +77,7 @@ namespace YtMusicClient.Services
         public string ArtworkUrl { get; private set; } = "";
 
         public bool HasTrack => !string.IsNullOrEmpty(VideoId);
-        public bool IsPlaying => _player.IsPlaying;
+        public bool IsPlaying => _engine.IsPlaying;
 
         /// <summary>True while a stream is being resolved or buffered.</summary>
         public bool IsBusy { get; private set; }
@@ -85,31 +85,20 @@ namespace YtMusicClient.Services
         /// <summary>Empty during normal playback; otherwise a user-readable problem/state.</summary>
         public string StatusText => _statusText;
 
-        public TimeSpan Position => _player.Position;
-        public TimeSpan Duration => _player.Duration;
+        public TimeSpan Position => _engine.Position;
+        public TimeSpan Duration => _engine.Duration;
 
-        /// <summary>Buffering progress for the UI: bytes so far / bytes expected.</summary>
-        public long BufferedBytes => _player.BufferedLength;
-        public long TotalBytes => _player.TotalLength;
+        /// <summary>Cached fraction 0..1 for seek-bar segments (no byte counts in UI).</summary>
+        public double BufferedFraction => _engine.CachedFraction;
 
-        /// <summary>Buffered fraction 0..1 for seek-bar segments (no byte counts in UI).</summary>
-        public double BufferedFraction
-        {
-            get
-            {
-                long total = _player.TotalLength;
-                return total > 0 ? Math.Clamp((double)_player.BufferedLength / total, 0, 1) : 0;
-            }
-        }
-
-        /// <summary>Perceptual volume 0..1. The UI applies the curve, the device gets linear.</summary>
+        /// <summary>Volume 0..1. The engine applies the perceptual v³ curve.</summary>
         public float Volume
         {
             get => _volume;
             set
             {
                 _volume = Math.Clamp(value, 0f, 1f);
-                _player.SetVolume(_volume);
+                _engine.SetVolume(_volume);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Volume)));
             }
         }
@@ -122,8 +111,8 @@ namespace YtMusicClient.Services
 
         public PlaybackService()
         {
-            _player.PlaybackEnded += Player_PlaybackEnded;
-            _player.PlaybackFailed += Player_PlaybackFailed;
+            _engine.Ended += Player_PlaybackEnded;
+            _engine.Failed += Player_PlaybackFailed;
         }
 
         // ---------------- commands (always called on the UI thread) ----------------
@@ -192,7 +181,7 @@ namespace YtMusicClient.Services
             // Silence the old track right away: keeping it alive until the new
             // stream resolves would play audio that contradicts the UI, and the
             // cleared URL makes TogglePlayPause a no-op while resolving.
-            _player.Stop();
+            _engine.Stop();
             _currentUrl = null;
 
             VideoId = videoId;
@@ -221,12 +210,15 @@ namespace YtMusicClient.Services
                 _statusText = "Buffering…";
                 NotifyState();
 
-                await _player.PlayAsync(stream.Url);
+                await _engine.LoadAsync(stream.Url);
                 if (generation != _generation) { Log("superseded during player setup"); return; } // ditto: never stop the newer track
 
                 IsBusy = false;
                 _statusText = "";
                 Log("playing");
+
+                if (HasNext)
+                    _ = PrefetchNextAsync();
 
                 // History for Previous: record only committed, non-duplicate plays.
                 if (_history.Count == 0 || _history[^1].VideoId != videoId)
@@ -241,7 +233,7 @@ namespace YtMusicClient.Services
                 if (generation != _generation) { Log($"superseded failure ignored: {ex.Message}"); return; }
 
                 // Nothing may keep playing behind an error the user is looking at.
-                _player.Stop();
+                _engine.Stop();
                 IsBusy = false;
                 _statusText = "Playback failed: " + FirstLine(ex.Message);
                 Log("FAILED:\n" + ex);
@@ -263,14 +255,14 @@ namespace YtMusicClient.Services
                 return;
             }
 
-            if (_player.IsPlaying)
+            if (_engine.IsPlaying)
             {
-                _player.Pause();
+                _engine.Pause();
                 Log("paused");
             }
             else if (_currentUrl != null)
             {
-                _player.Resume();
+                _engine.Play();
                 Log("resumed");
             }
 
@@ -283,7 +275,7 @@ namespace YtMusicClient.Services
             if (!HasTrack || _finished)
                 return;
             Log($"seek {position.TotalSeconds:F0}s");
-            _player.Seek(position);
+            _engine.Seek(position);
             NotifyState();
         }
 
@@ -328,11 +320,31 @@ namespace YtMusicClient.Services
             Seek(TimeSpan.Zero);
         }
 
+        /// <summary>
+        /// Resolve and warm the next queue track now, so the hand-off at
+        /// end-of-track starts without a resolve round-trip.
+        /// ponytail: fires at track start; Phase 6 moves it to 50% played.
+        /// </summary>
+        private async Task PrefetchNextAsync()
+        {
+            try
+            {
+                var next = _queue[_queueIndex + 1];
+                var stream = await App.ApiClient.GetStreamUrlAsync(next.VideoId);
+                await _engine.PrefetchNextAsync(stream.Url);
+                Log($"prefetched next: {next.VideoId}");
+            }
+            catch (Exception ex)
+            {
+                Log("prefetch failed: " + ex.Message);
+            }
+        }
+
         /// <summary>Release the audio device and stop everything.</summary>
         public void Dispose()
         {
             _generation++;
-            _player.Dispose();
+            _engine.Dispose();
         }
 
         // ---------------- player events (audio thread → UI thread) ----------------

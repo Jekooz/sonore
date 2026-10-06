@@ -15,10 +15,6 @@ namespace YtMusicClient.Views
     {
         private ApiClient _apiClient;
 
-        // Perceptual volume curve: u^2 keeps low end usable (per spec).
-        private static float PerceptualVolume(double sliderPercent)
-            => (float)Math.Pow(Math.Clamp(sliderPercent, 0, 100) / 100.0, 2.0);
-
         private static string FormatTime(TimeSpan time)
         {
             if (time < TimeSpan.Zero) time = TimeSpan.Zero;
@@ -58,7 +54,7 @@ namespace YtMusicClient.Views
             _barTimer.Start();
             BarVolumeSlider.Value = ViewModel.VolumeSliderPercent;
             _restoringVolume = false;
-            App.Playback.Volume = PerceptualVolume(ViewModel.VolumeSliderPercent);
+            App.Playback.Volume = (float)(Math.Clamp(ViewModel.VolumeSliderPercent, 0, 100) / 100.0);
 
             // Shell hooks the SMTC controller uses.
             App.Playback.PreviousByHistory = () => App.Playback.Previous(PlayTrackAsync);
@@ -174,7 +170,7 @@ namespace YtMusicClient.Views
                 ViewModel.VolumeSliderPercent = percent; // persists via ApplicationData
             }
             BarMuteGlyph.Text = percent <= 0 ? "\uE74F" : "\uE767"; // muted : speaker
-            App.Playback.Volume = PerceptualVolume(percent);
+            App.Playback.Volume = (float)(percent / 100.0); // engine applies the perceptual v³ curve
         }
 
         /// <summary>

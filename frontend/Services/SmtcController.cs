@@ -24,6 +24,7 @@ namespace YtMusicClient.Services
 
         private string _boundVideoId;
         private string _boundArtworkUrl;
+        private readonly DispatcherQueueTimer _timelineTimer;
 
         public SmtcController(PlaybackService playback, Window window)
         {
@@ -42,8 +43,40 @@ namespace YtMusicClient.Services
 
             _smtc.ButtonPressed += Smtc_ButtonPressed;
 
+            // Timeline: the system seek bar (volume flyout, lock screen) needs
+            // periodic position updates. 1 Hz is enough for a scrubber.
+            _timelineTimer = _dispatcher.CreateTimer();
+            _timelineTimer.Interval = TimeSpan.FromSeconds(1);
+            _timelineTimer.Tick += (s, e) => UpdateTimeline();
+            _timelineTimer.Start();
+
             playback.StateChanged += Playback_StateChanged;
             UpdateFrom(playback, force: true);
+        }
+
+        private void UpdateTimeline()
+        {
+            try
+            {
+                if (!_playback.HasTrack)
+                    return;
+                var duration = _playback.Duration;
+                if (duration <= TimeSpan.Zero)
+                    return;
+
+                _smtc.UpdateTimelineProperties(new SystemMediaTransportControlsTimelineProperties
+                {
+                    Position = _playback.Position,
+                    StartTime = TimeSpan.Zero,
+                    EndTime = duration,
+                    MinSeekTime = TimeSpan.Zero,
+                    MaxSeekTime = duration,
+                });
+            }
+            catch
+            {
+                // Timeline is cosmetic; never break playback for it.
+            }
         }
 
         private void Playback_StateChanged(object sender, EventArgs e)

@@ -81,9 +81,7 @@ namespace YtMusicClient.Views
             }
 
             PlayPauseButton.IsEnabled = !playback.IsBusy;
-
-            // Next has no target until the queue panel lands.
-            NextButton.IsEnabled = App.Playback.Next != null;
+            NextButton.IsEnabled = playback.HasNext;
 
             UpdateTimeDisplay();
             PlayPauseGlyph.Text = playback.IsPlaying ? "\uE769" : "\uE768"; // pause : play

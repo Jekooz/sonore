@@ -62,7 +62,7 @@ namespace YtMusicClient.Views
 
             // Shell hooks the SMTC controller uses.
             App.Playback.PreviousByHistory = () => App.Playback.Previous(PlayTrackAsync);
-            App.Playback.Next = null; // queue panel arrives in a later increment
+            App.Playback.Next = App.Playback.PlayNext;
 
             // System Media Transport Controls: media keys, lock screen, volume flyout.
             _smtc = new SmtcController(App.Playback, this);
@@ -104,6 +104,7 @@ namespace YtMusicClient.Views
             BarPlayGlyph.Text = playback.IsPlaying ? "\uE769" : "\uE768"; // pause : play
             BarPlayButton.IsEnabled = has && !playback.IsBusy;
             BarPrevButton.IsEnabled = has;
+            BarNextButton.IsEnabled = playback.HasNext;
             BarSeekBar.IsEnabled = has && playback.DurationSeconds > 0;
 
             if (has)

@@ -127,7 +127,6 @@
                 <Button x:Name="NextButton"
                         Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Next track"
-                        IsEnabled="False"
                         Click="NextButton_Click">
                     <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                FontSize="18" Text="&#xE893;" />

@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using YtMusicClient.Services;
@@ -28,6 +29,11 @@ namespace YtMusicClient.Views
 
         private bool _subscribed;
         private bool _loadedOnce;
+
+        // Playback context: every home row becomes a queue (playable tracks only),
+        // keyed by card videoId, so Next walks the row the user clicked inside.
+        private readonly Dictionary<string, List<QueueTrack>> _cardQueues = new();
+        private List<QueueTrack> _heroQueue = new();
 
         public HomePage()
         {
@@ -85,6 +91,25 @@ namespace YtMusicClient.Views
                     .Where(r => r.Contents != null && r.Contents.Count > 0)
                     .ToList();
                 _loadedOnce = true;
+
+                // Build the per-row queues for playback context (hero = first
+                // playable row). DTO rows here — the wrappers are built below.
+                _cardQueues.Clear();
+                _heroQueue = new List<QueueTrack>();
+                foreach (var r in contentRows)
+                {
+                    var queue = r.Contents
+                        .Where(i => !string.IsNullOrEmpty(i.VideoId))
+                        .Select(i => new QueueTrack(i.VideoId, i.Title, i.Subtitle, Thumbnail.PickUrl(i.Thumbnails, 544)))
+                        .ToList();
+                    if (queue.Count == 0)
+                        continue;
+                    if (_heroQueue.Count == 0)
+                        _heroQueue = queue;
+                    foreach (var i in r.Contents)
+                        if (!string.IsNullOrEmpty(i.VideoId))
+                            _cardQueues[i.VideoId] = queue;
+                }
 
                 if (contentRows.Count == 0)
                 {
@@ -161,6 +186,7 @@ namespace YtMusicClient.Views
         /// <summary>
         /// Card click: song/video cards (those carry a videoId) start playback;
         /// album/playlist/artist cards keep doing nothing until detail pages exist.
+        /// The card's row is the queue, so Next walks the row from here.
         /// </summary>
         private async void HomeCard_Click(object sender, RoutedEventArgs e)
         {
@@ -169,7 +195,11 @@ namespace YtMusicClient.Views
             if (string.IsNullOrEmpty(item.VideoId))
                 return;
 
-            await App.Playback.PlayAsync(item.VideoId, item.Title, item.Subtitle, item.ThumbnailUrl);
+            List<QueueTrack> queue = _cardQueues.TryGetValue(item.VideoId, out var rowQueue)
+                ? rowQueue
+                : new List<QueueTrack> { new(item.VideoId, item.Title, item.Subtitle, item.ThumbnailUrl) };
+
+            await App.Playback.PlayAsync(queue, queue.FindIndex(t => t.VideoId == item.VideoId));
             if (App.Window is MainWindow mainWindow)
                 mainWindow.ShowNowPlaying();
         }
@@ -177,10 +207,10 @@ namespace YtMusicClient.Views
         /// <summary>Hero banner Play button — plays the hero card.</summary>
         private async void HeroPlay_Click(object sender, RoutedEventArgs e)
         {
-            if (Hero == null || string.IsNullOrEmpty(Hero.VideoId))
+            if (Hero == null || string.IsNullOrEmpty(Hero.VideoId) || _heroQueue.Count == 0)
                 return;
 
-            await App.Playback.PlayAsync(Hero.VideoId, Hero.Title, Hero.Subtitle, Hero.ThumbnailUrl);
+            await App.Playback.PlayAsync(_heroQueue, _heroQueue.FindIndex(t => t.VideoId == Hero.VideoId));
             if (App.Window is MainWindow mainWindow)
                 mainWindow.ShowNowPlaying();
         }

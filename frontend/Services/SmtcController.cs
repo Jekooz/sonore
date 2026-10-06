@@ -36,8 +36,8 @@ namespace YtMusicClient.Services
             _smtc.IsEnabled = true;
             _smtc.IsPlayEnabled = true;
             _smtc.IsPauseEnabled = true;
-            // Next has no target until the queue panel lands (later increment).
-            _smtc.IsNextEnabled = playback.Next != null;
+            // Next/Previous track the queue state; UpdateFrom keeps them honest.
+            _smtc.IsNextEnabled = playback.HasNext;
             _smtc.IsPreviousEnabled = true;
 
             _smtc.ButtonPressed += Smtc_ButtonPressed;
@@ -92,6 +92,8 @@ namespace YtMusicClient.Services
                     _smtc.PlaybackStatus = playback.IsPlaying
                         ? MediaPlaybackStatus.Playing
                         : (playback.HasTrack && !playback.IsBusy ? MediaPlaybackStatus.Paused : MediaPlaybackStatus.Closed);
+
+                    _smtc.IsNextEnabled = playback.HasNext;
                 }
                 catch
                 {
@@ -116,7 +118,7 @@ namespace YtMusicClient.Services
                         _playback.TogglePlayPause();
                         break;
                     case SystemMediaTransportControlsButton.Next:
-                        if (_playback.Next != null) _playback.Next();
+                        _playback.Next?.Invoke();
                         break;
                     case SystemMediaTransportControlsButton.Previous:
                         _playback.PreviousByHistory?.Invoke();

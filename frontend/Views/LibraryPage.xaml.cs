@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
@@ -120,7 +121,8 @@ namespace YtMusicClient.Views
                 await mainWindow.StartSignInAsync();
         }
 
-        /// <summary>Liked-row click: start playback and jump to the Now Playing tab.</summary>
+        /// <summary>Liked-row click: start playback and jump to the Now Playing tab.
+        /// The liked list is the queue, so Next walks it from the clicked track.</summary>
         private async void LikedTrack_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is not TrackItemView item)
@@ -128,7 +130,15 @@ namespace YtMusicClient.Views
             if (string.IsNullOrEmpty(item.VideoId))
                 return;
 
-            await App.Playback.PlayAsync(item.VideoId, item.Title, item.ArtistText, item.ThumbnailUrl);
+            List<QueueTrack> queue = LikedList.ItemsSource is IEnumerable<TrackItemView> tracks
+                ? tracks.Where(t => !string.IsNullOrEmpty(t.VideoId))
+                    .Select(t => new QueueTrack(t.VideoId, t.Title, t.ArtistText, t.ThumbnailUrl))
+                    .ToList()
+                : new List<QueueTrack>();
+            if (queue.Count == 0)
+                queue.Add(new QueueTrack(item.VideoId, item.Title, item.ArtistText, item.ThumbnailUrl));
+
+            await App.Playback.PlayAsync(queue, queue.FindIndex(t => t.VideoId == item.VideoId));
             if (App.Window is MainWindow mainWindow)
                 mainWindow.ShowNowPlaying();
         }

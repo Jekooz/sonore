@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 
 namespace YtMusicClient.Services
 {
+    /// <summary>A track in the playback queue: what a click hands over as context.</summary>
+    public sealed record QueueTrack(string VideoId, string Title, string Artist, string ArtworkUrl);
+
     /// <summary>
     /// The app's single playback pipeline, owned by <see cref="App.Playback"/> and
     /// observed by NowPlayingPage:
@@ -42,6 +45,12 @@ namespace YtMusicClient.Services
         // History for Previous-button semantics (restart vs go back).
         private readonly List<(string VideoId, string Title, string Artist, string Artwork)> _history = new();
 
+        // The playback queue, in order, with the position of the track now playing.
+        // Filled by the list overload of PlayAsync; a standalone play leaves it empty
+        // (or re-aims _queueIndex when the track happens to be part of the queue).
+        private readonly List<QueueTrack> _queue = new();
+        private int _queueIndex = -1;
+
         // Every state transition lands here so a "it didn't play" report can be
         // diagnosed after the fact (same idea as the sidecar's backend log).
         private static void Log(string message) => PlaybackLog.Write(message);
@@ -51,9 +60,11 @@ namespace YtMusicClient.Services
         /// <summary>Raised on the UI thread after any playback state change.</summary>
         public event EventHandler StateChanged;
 
-        /// <summary>Set by the shell: plays the next track. Null until a queue exists
-        /// (queue panel is a later increment) — SMTC Next stays disabled meanwhile.</summary>
+        /// <summary>Set by the shell: plays the next track in the queue.</summary>
         public Action Next;
+
+        /// <summary>True when a queue exists and a further track follows the current one.</summary>
+        public bool HasNext => _queueIndex + 1 < _queue.Count;
 
         /// <summary>Set by the shell: Previous-button semantics (restart vs history).</summary>
         public Action PreviousByHistory;
@@ -118,6 +129,24 @@ namespace YtMusicClient.Services
         // ---------------- commands (always called on the UI thread) ----------------
 
         /// <summary>
+        /// Start a track with the list it came from as context: that list becomes
+        /// the queue, and Next / auto-advance walk it from the clicked track on.
+        /// A single-track context plays standalone (Next disabled).
+        /// </summary>
+        public async Task PlayAsync(IReadOnlyList<QueueTrack> context, int startIndex)
+        {
+            if (context is not { Count: > 0 })
+                return;
+
+            _queue.Clear();
+            _queue.AddRange(context);
+            _queueIndex = Math.Clamp(startIndex, 0, context.Count - 1);
+
+            var track = _queue[_queueIndex];
+            await PlayAsync(track.VideoId, track.Title, track.Artist, track.ArtworkUrl);
+        }
+
+        /// <summary>
         /// Load and start a track. Replaces whatever is current; any in-flight
         /// resolve for a previously clicked track is abandoned.
         /// </summary>
@@ -128,6 +157,24 @@ namespace YtMusicClient.Services
 
             int generation = ++_generation;
             _finished = false;
+
+            // Keep the queue honest: any direct play (Previous-from-history,
+            // a later "play this one alone") re-aims the queue at this track
+            // when it is part of the current context — searching forward from
+            // the current index first, so a repeated track never hops back.
+            // A track outside the queue is a standalone play: the stale list
+            // must not resurrect itself via auto-advance, so drop it. One
+            // branch here covers every play path — they all route through.
+            int queueIdx = _queue.FindIndex(_queueIndex, t => t.VideoId == videoId);
+            if (queueIdx < 0)
+                queueIdx = _queue.FindIndex(t => t.VideoId == videoId);
+            if (queueIdx >= 0)
+                _queueIndex = queueIdx;
+            else
+            {
+                _queue.Clear();
+                _queueIndex = -1;
+            }
 
             // Debounce: same track requested again within 700 ms of the last
             // request — treat as an accidental double-click and ignore.
@@ -240,6 +287,18 @@ namespace YtMusicClient.Services
             NotifyState();
         }
 
+        /// <summary>Play the next track in the queue; no-op at the end of it.</summary>
+        public void PlayNext()
+        {
+            if (!HasNext)
+                return;
+
+            _queueIndex++;
+            var track = _queue[_queueIndex];
+            Log($"next: queue[{_queueIndex}] {track.VideoId}");
+            _ = PlayAsync(track.VideoId, track.Title, track.Artist, track.ArtworkUrl);
+        }
+
         /// <summary>
         /// Restart the current track when more than ~3 s in, otherwise hop to the
         /// previous entry in history (the caller supplies the queue context).
@@ -282,9 +341,17 @@ namespace YtMusicClient.Services
         {
             RunOnUi(() =>
             {
+                Log("ended (end of track)");
+
+                // Auto-advance walks the queue; a standalone track just rests at Finished.
+                if (HasNext)
+                {
+                    PlayNext();
+                    return;
+                }
+
                 _finished = true;
                 _statusText = "Finished";
-                Log("ended (end of track)");
                 NotifyState();
             });
         }
@@ -313,6 +380,7 @@ namespace YtMusicClient.Services
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasTrack)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPlaying)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsBusy)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasNext)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusText)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Position)));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Duration)));

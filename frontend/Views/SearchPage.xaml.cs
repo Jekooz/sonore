@@ -37,6 +37,7 @@ namespace YtMusicClient.Views
         /// <summary>
         /// Result click: song/video results carry a videoId and start playback;
         /// album/playlist/artist results need detail pages (later milestone).
+        /// The visible (filtered) results are the queue, so Next walks them.
         /// </summary>
         private async void Result_Click(object sender, RoutedEventArgs e)
         {
@@ -45,7 +46,15 @@ namespace YtMusicClient.Views
             if (string.IsNullOrEmpty(item.VideoId))
                 return;
 
-            await App.Playback.PlayAsync(item.VideoId, item.Title, item.Artist, item.ThumbnailUrl);
+            List<QueueTrack> queue = ResultsList.ItemsSource is IEnumerable<SearchResultItemView> visible
+                ? visible.Where(r => !string.IsNullOrEmpty(r.VideoId))
+                    .Select(r => new QueueTrack(r.VideoId, r.Title, r.Artist, r.ThumbnailUrl))
+                    .ToList()
+                : new List<QueueTrack>();
+            if (queue.Count == 0)
+                queue.Add(new QueueTrack(item.VideoId, item.Title, item.Artist, item.ThumbnailUrl));
+
+            await App.Playback.PlayAsync(queue, queue.FindIndex(t => t.VideoId == item.VideoId));
             if (App.Window is MainWindow mainWindow)
                 mainWindow.ShowNowPlaying();
         }

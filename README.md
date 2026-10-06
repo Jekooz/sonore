@@ -60,7 +60,7 @@ detects it and offers the same one-click sign-in again.
 │  WinUI 3 frontend (C#)     │────────────▶│  Python sidecar (FastAPI)   │
 │  - glass shell, 4 tabs     │  HTTP on    │  - ytmusicapi (YT Music)    │
 │  - WebView2 sign-in window │  127.0.0.1  │  - keyring (Credential      │
-│  - NAudio (playback, soon) │             │    Locker storage)          │
+│  - NAudio (playback)       │             │    Locker storage)          │
 └────────────────────────────┘             └─────────────────────────────┘
 ```
 

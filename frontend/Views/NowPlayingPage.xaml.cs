@@ -8,11 +8,12 @@ using YtMusicClient.Services;
 namespace YtMusicClient.Views
 {
     /// <summary>
-    /// Now Playing: centered artwork, metadata and transport. Binds only to
-    /// <see cref="PlayerState"/> (the shared state) via x:Bind for text and
-    /// glyphs; one PropertyChanged subscription drives the imperative bits
-    /// (artwork, seek bar, times). No polling timer — position arrives at the
-    /// engine's 4 Hz tick through the shared state, exactly like the player bar.
+    /// Now Playing: ambient artwork background, 3D-style fan carousel of the
+    /// previous/current/next tracks, big title/artist, action icons (like +
+    /// queue), the Up Next panel, an autoplay toggle, and a floating transport
+    /// pill. Binds to <see cref="PlayerState"/> and <see cref="QueueManager"/>
+    /// via x:Bind for text; one PropertyChanged subscription each drives the
+    /// imperative bits (artwork, carousel, seek bar, times). No polling timers.
     /// </summary>
     public sealed partial class NowPlayingPage : Page
     {
@@ -21,12 +22,12 @@ namespace YtMusicClient.Views
         public PlayerState Player => App.PlayerState;
         public QueueManager Queue => App.Queue;
 
-        private string _boundArtworkUrl;
-
         public NowPlayingPage()
         {
             InitializeComponent();
+
             App.PlayerState.PropertyChanged += Player_PropertyChanged;
+            App.Queue.PropertyChanged += Queue_PropertyChanged;
             Loaded += NowPlayingPage_Loaded;
             Unloaded += NowPlayingPage_Unloaded;
         }
@@ -39,26 +40,37 @@ namespace YtMusicClient.Views
         private void NowPlayingPage_Unloaded(object sender, RoutedEventArgs e)
         {
             // PropertyChanged stays subscribed: the page is cached and re-shown,
-            // and the handler is cheap when nothing is playing.
+            // and the handlers are cheap when nothing is playing.
         }
 
-        /// <summary>
-        /// Imperative updates x:Bind cannot express: artwork fill, the seek
-        /// bar, and the time labels. Same dispatch pattern as the player bar.
-        /// </summary>
+        /// <summary>PlayerState changes: track/artwork, seek bar, times.</summary>
         private void Player_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             var queue = App.Window?.DispatcherQueue;
             if (queue == null || queue.HasThreadAccess)
-                ApplyChange(e.PropertyName);
+                ApplyPlayerChange(e.PropertyName);
             else
-                _ = queue.TryEnqueue(() => ApplyChange(e.PropertyName));
+                _ = queue.TryEnqueue(() => ApplyPlayerChange(e.PropertyName));
         }
 
-        private void ApplyChange(string propertyName)
+        /// <summary>QueueManager changes: carousel (prev/current/next) redraw.</summary>
+        private void Queue_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            var state = App.PlayerState;
+            if (e.PropertyName is nameof(QueueManager.Current)
+                or nameof(QueueManager.Previous)
+                or nameof(QueueManager.Upcoming)
+                or nameof(QueueManager.HasUpcoming))
+            {
+                var queue = App.Window?.DispatcherQueue;
+                if (queue == null || queue.HasThreadAccess)
+                    RefreshCarousel();
+                else
+                    _ = queue.TryEnqueue(RefreshCarousel);
+            }
+        }
 
+        private void ApplyPlayerChange(string propertyName)
+        {
             switch (propertyName)
             {
                 case nameof(PlayerState.Track):
@@ -70,45 +82,71 @@ namespace YtMusicClient.Views
                 case nameof(PlayerState.BufferedFraction):
                     if (!SeekBar.IsDragging)
                     {
-                        SeekBar.Update(state.Duration.TotalSeconds, state.Position.TotalSeconds, state.BufferedFraction);
-                        PositionText.Text = FormatTime(state.Position);
+                        SeekBar.Update(Player.Duration.TotalSeconds, Player.Position.TotalSeconds, Player.BufferedFraction);
+                        PositionText.Text = FormatTime(Player.Position);
                     }
-                    DurationText.Text = state.Duration > TimeSpan.Zero ? FormatTime(state.Duration) : "–:––";
+                    DurationText.Text = Player.Duration > TimeSpan.Zero ? FormatTime(Player.Duration) : "–:––";
                     break;
             }
         }
 
+        /// <summary>
+        /// Update the ambient background + the carousel artwork from the current
+        /// track (and its prev/next neighbours). Called on Track change and on
+        /// queue changes.
+        /// </summary>
         private void RefreshFromState()
         {
             var state = App.PlayerState;
+            string url = state.Track?.ArtworkUrl;
 
+            // Ambient background: the current track's own art, dimmed.
+            SetImageSource(AmbientArt, url);
+            AmbientArt.Visibility = !string.IsNullOrEmpty(url) ? Visibility.Visible : Visibility.Collapsed;
+            AmbientOverlay.Visibility = AmbientArt.Visibility;
+
+            // Carousel: current artwork is the big center card.
+            SetImageSource(CarouselCurrentImage, url);
+            CarouselCurrentImage.Visibility = state.HasTrack ? Visibility.Visible : Visibility.Collapsed;
+
+            // Carousel neighbours refresh on the next queue tick (Queue_PropertyChanged
+            // → RefreshCarousel) so they always reflect the live queue.
             if (!state.HasTrack)
             {
-                ArtworkImage.Source = null;
-                _boundArtworkUrl = null;
+                CarouselPrev.Visibility = Visibility.Collapsed;
+                CarouselNext.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void RefreshCarousel()
+        {
+            // Previous card: the track before current in the queue.
+            var prev = Queue.Previous;
+            SetImageSource(CarouselPrevImage, prev?.ArtworkUrl);
+            CarouselPrev.Visibility = prev != null ? Visibility.Visible : Visibility.Collapsed;
+
+            // Next card: the first upcoming track.
+            var next = Queue.Upcoming.Count > 0 ? Queue.Upcoming[0] : null;
+            SetImageSource(CarouselNextImage, next?.ArtworkUrl);
+            CarouselNext.Visibility = next != null ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static void SetImageSource(Image image, string url)
+        {
+            if (string.IsNullOrEmpty(url))
+            {
+                image.Source = null;
                 return;
             }
 
-            string url = state.Track?.ArtworkUrl;
-            if (!string.Equals(_boundArtworkUrl, url, StringComparison.Ordinal))
+            try
             {
-                _boundArtworkUrl = url;
-                try
-                {
-                    ArtworkImage.Source = string.IsNullOrEmpty(url)
-                        ? null
-                        : new BitmapImage(new Uri(url));
-                }
-                catch (UriFormatException)
-                {
-                    ArtworkImage.Source = null; // bad URL: show the quiet placeholder, don't crash
-                }
+                image.Source = new BitmapImage(new Uri(url));
             }
-
-            var duration = state.Duration;
-            SeekBar.Update(duration.TotalSeconds, state.Position.TotalSeconds, state.BufferedFraction);
-            DurationText.Text = duration > TimeSpan.Zero ? FormatTime(duration) : "–:––";
-            PositionText.Text = FormatTime(state.Position);
+            catch (UriFormatException)
+            {
+                image.Source = null; // bad URL: quiet placeholder, don't crash
+            }
         }
 
         private void SeekBar_PreviewChanged(object sender, double seconds)
@@ -122,18 +160,56 @@ namespace YtMusicClient.Views
         }
 
         private void PlayPause_Click(object sender, RoutedEventArgs e)
-        {
-            App.Playback.TogglePlayPause();
-        }
+            => App.Playback.TogglePlayPause();
 
         private void PrevButton_Click(object sender, RoutedEventArgs e)
-        {
-            App.Playback.PreviousByHistory?.Invoke();
-        }
+            => App.Playback.PreviousByHistory?.Invoke();
 
         private void NextButton_Click(object sender, RoutedEventArgs e)
+            => App.Playback.Next?.Invoke();
+
+        /// <summary>Like toggle: flips the local PlayerState.Liked only.</summary>
+        /// <remarks>The backend like endpoint is not wired yet (flagged to the user);
+        /// the heart icon reflects local state so the UI is honest about what it knows.</remarks>
+        private void LikeButton_Click(object sender, RoutedEventArgs e)
         {
-            App.Playback.Next?.Invoke();
+            Player.Liked = !Player.Liked;
+            LikeGlyph.Foreground = Player.Liked
+                ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentBrush"]
+                : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextSecondaryBrush"];
+            LikeGlyph.Glyph = Player.Liked ? "\uE736" : "\uE735"; // filled heart : outline heart
+        }
+
+        /// <summary>Queue button: scroll the Up Next panel into view.</summary>
+        private void QueueButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (UpNextPanel.Visibility == Visibility.Visible)
+            {
+                UpNextPanel.StartBringIntoView();
+            }
+        }
+
+        /// <summary>Up Next item click: start playback from that track in the current queue.</summary>
+        private async void UpNext_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not QueueTrack track)
+                return;
+            if (string.IsNullOrEmpty(track.VideoId))
+                return;
+
+            // The visible Up Next list is the queue context; play from this track.
+            var queue = new System.Collections.Generic.List<QueueTrack>(Queue.Upcoming.Count + 1);
+            queue.Add(Player.Track ?? track);
+            foreach (var t in Queue.Upcoming)
+                queue.Add(t);
+
+            int idx = queue.FindIndex(t => t.VideoId == track.VideoId);
+            if (idx < 0)
+                idx = 0;
+
+            await App.Playback.PlayAsync(queue, idx);
+            if (App.Window is MainWindow mainWindow)
+                mainWindow.ShowNowPlaying();
         }
 
         private static string FormatTime(TimeSpan time)

@@ -29,6 +29,32 @@ namespace YtMusicClient.Services
         private bool _autoplayOn = true;
         private double _volume = 0.8;
 
+        // Lazy-init settings — ApplicationData.Current.LocalSettings must be
+        // accessed from the UI thread in WinUI3, but this type is constructed
+        // during App type init / OnLaunched before the dispatcher is pumping.
+        // Defer reads until first use (lazy), and swallow any failure so the
+        // app can still run with defaults.
+        private static ApplicationDataContainer _settings;
+        private static ApplicationDataContainer Settings
+        {
+            get
+            {
+                if (_settings != null) return _settings;
+                try
+                {
+                    _settings = ApplicationData.Current.LocalSettings;
+                }
+                catch
+                {
+                    // If ApplicationData isn't ready yet (e.g. during early
+                    // initialization), just leave it null — reads will fall
+                    // back to defaults and the app keeps running.
+                    _settings = null;
+                }
+                return _settings;
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         public QueueTrack Track
@@ -106,18 +132,37 @@ namespace YtMusicClient.Services
 
         public PlayerState()
         {
-            var settings = ApplicationData.Current.LocalSettings;
-            _volume = ReadDouble(settings, "VolumeSliderPercent", 0.8);
-            _shuffle = ReadDouble(settings, "Shuffle", 0) != 0;
-            _autoplayOn = ReadDouble(settings, "AutoplayOn", 1) != 0;
-            _repeat = (RepeatMode)Math.Clamp((int)ReadDouble(settings, "RepeatMode", 0), 0, 2);
+            // Defer settings reads — they happen lazily on first access to
+            // ApplicationData.Current.LocalSettings, which avoids the crash
+            // that occurred when this constructor ran before the UI thread
+            // dispatcher was ready.
+            try
+            {
+                var settings = Settings;
+                if (settings != null)
+                {
+                    _volume = ReadDouble(settings, "VolumeSliderPercent", 0.8);
+                    _shuffle = ReadDouble(settings, "Shuffle", 0) != 0;
+                    _autoplayOn = ReadDouble(settings, "AutoplayOn", 1) != 0;
+                    _repeat = (RepeatMode)Math.Clamp((int)ReadDouble(settings, "RepeatMode", 0), 0, 2);
+                }
+            }
+            catch
+            {
+                // If settings access fails for any reason, keep defaults.
+            }
         }
 
         // ---------------- plumbing ----------------
 
         private static void Persist(string key, object value)
         {
-            try { ApplicationData.Current.LocalSettings.Values[key] = value; }
+            try
+            {
+                var settings = Settings;
+                if (settings != null)
+                    settings.Values[key] = value;
+            }
             catch { /* persisting must never break playback */ }
         }
 

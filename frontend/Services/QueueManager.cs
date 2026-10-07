@@ -9,14 +9,16 @@ namespace YtMusicClient.Services
     /// The observable playback queue: the track now playing plus everything
     /// coming after it. PlaybackService keeps it in sync; the (future) queue
     /// panel and the transport buttons bind to Current/Upcoming/HasUpcoming.
-    /// </summary>
+    /// Previous is exposed for the Now Playing fan carousel.</summary>
     public sealed class QueueManager : INotifyPropertyChanged
     {
         private QueueTrack _current;
+        private QueueTrack _previous;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         public QueueTrack Current { get => _current; set => Set(ref _current, value); }
+        public QueueTrack Previous { get => _previous; set => Set(ref _previous, value); }
 
         public ObservableCollection<QueueTrack> Upcoming { get; } = new ObservableCollection<QueueTrack>();
 
@@ -26,6 +28,7 @@ namespace YtMusicClient.Services
         /// <summary>Rebuild the observable view from the service's queue state.</summary>
         public void Sync(IReadOnlyList<QueueTrack> queue, int index)
         {
+            Previous = index > 0 && index < queue.Count ? queue[index - 1] : null;
             Current = index >= 0 && index < queue.Count ? queue[index] : null;
 
             Upcoming.Clear();

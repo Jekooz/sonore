@@ -2,142 +2,345 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:controls="using:YtMusicClient.Views.Controls"
+      xmlns:services="using:YtMusicClient.Services"
       Background="Transparent"
       NavigationCacheMode="Enabled">
 
-    <!-- Transparent background: the window's black shows through, and the player
-         bar stays visible below this page (it lives in the shell, not the page). -->
-    <Grid Padding="32,24,32,16">
+    <!-- Ambient background: the current track's own artwork, dimmed and
+         oversized, with a dark overlay for legibility. Generated from the
+         track's own colors only — never a decorative palette. -->
+    <Grid>
+        <Image x:Name="AmbientArt"
+               Stretch="UniformToFill"
+               Opacity="0.55"
+               Visibility="Collapsed" />
+        <Rectangle x:Name="AmbientOverlay"
+                   Fill="#CC000000"
+                   Visibility="Collapsed" />
 
-        <!-- Empty state: nothing has been started yet -->
-        <StackPanel x:Name="EmptyState"
-                    Spacing="16"
-                    Visibility="{x:Bind Player.EmptyStateVisibility, Mode=OneWay}"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-            <TextBlock Text="Nothing playing"
-                       Style="{StaticResource PageHeadlineText}"
-                       HorizontalAlignment="Center" />
-            <TextBlock Style="{StaticResource SecondaryText}" HorizontalAlignment="Center"
-                       TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
-                       Text="Start a track from Home, Search or your Liked songs — the player bar at the bottom controls playback from any screen." />
-            <TextBlock Text="{x:Bind ViewModel.AuthStatusText, Mode=OneWay}"
-                       Style="{StaticResource MutedText}"
-                       HorizontalAlignment="Center" />
-        </StackPanel>
+        <!-- Page content: carousel + metadata + actions + up next + transport -->
+        <Grid Padding="32,24,32,16">
 
-        <!-- Now playing: centered artwork, metadata, one seek bar, full transport -->
-        <StackPanel x:Name="NowPlayingPanel"
-                    Spacing="14"
-                    MaxWidth="560"
-                    Visibility="{x:Bind Player.PanelVisibility, Mode=OneWay}"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-
-            <!-- Fixed square + UniformToFill + centered alignment: never clipped
-                 off-center, never circle-cropped (artwork is an album, not an artist). -->
-            <Border CornerRadius="{StaticResource CardCornerRadius}"
-                    Width="300" Height="300"
-                    Background="{ThemeResource CardBrush}"
-                    HorizontalAlignment="Center">
-                <Image x:Name="ArtworkImage"
-                       Stretch="UniformToFill"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center" />
-            </Border>
-
-            <TextBlock x:Name="TitleText"
-                       Text="{x:Bind Player.TrackTitle, Mode=OneWay}"
-                       Style="{StaticResource PageHeadlineText}"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       TextTrimming="CharacterEllipsis"
-                       MaxLines="1" />
-
-            <TextBlock x:Name="ArtistText"
-                       Text="{x:Bind Player.TrackArtist, Mode=OneWay}"
-                       Visibility="{x:Bind Player.ArtistVisibility, Mode=OneWay}"
-                       Style="{StaticResource SecondaryText}"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       TextTrimming="CharacterEllipsis"
-                       MaxLines="1" />
-
-            <!-- Quiet status line for resolve/parse errors only — never byte counts. -->
-            <TextBlock x:Name="StatusText"
-                       Text="{x:Bind Player.StatusText, Mode=OneWay}"
-                       Visibility="{x:Bind Player.StatusVisibility, Mode=OneWay}"
-                       Style="{StaticResource MutedText}"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       TextWrapping="Wrap"
-                       MaxWidth="460" />
-
-            <!-- The ONE seek bar (buffered segment included). Times only. -->
-            <Grid ColumnSpacing="12" VerticalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <TextBlock x:Name="PositionText"
-                           Grid.Column="0"
-                           Text="0:00"
+            <!-- Empty state: nothing has been started yet -->
+            <StackPanel x:Name="EmptyState"
+                        Spacing="16"
+                        Visibility="{x:Bind Player.EmptyStateVisibility, Mode=OneWay}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                <TextBlock Text="Nothing playing"
+                           Style="{StaticResource PageHeadlineText}"
+                           HorizontalAlignment="Center" />
+                <TextBlock Style="{StaticResource SecondaryText}" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
+                           Text="Start a track from Home, Search or your Liked songs — the player bar at the bottom controls playback from any screen." />
+                <TextBlock Text="{x:Bind ViewModel.AuthStatusText, Mode=OneWay}"
                            Style="{StaticResource MutedText}"
-                           VerticalAlignment="Center"
-                           MinWidth="34" />
-
-                <controls:BufferedSeekBar x:Name="SeekBar"
-                                          Grid.Column="1"
-                                          VerticalAlignment="Center"
-                                          SeekRequested="SeekBar_SeekRequested"
-                                          PreviewChanged="SeekBar_PreviewChanged"
-                                          AutomationProperties.Name="Seek bar" />
-
-                <TextBlock x:Name="DurationText"
-                           Grid.Column="2"
-                           Text="0:00"
-                           Style="{StaticResource MutedText}"
-                           VerticalAlignment="Center"
-                           MinWidth="34"
-                           TextAlignment="Right" />
-            </Grid>
-
-            <!-- Full transport: prev / play / next; shuffle and like arrive with
-                 the queue + like endpoints (backend work, flagged to the user). -->
-            <StackPanel Orientation="Horizontal"
-                        Spacing="20"
-                        HorizontalAlignment="Center">
-                <Button x:Name="PrevButton"
-                        Style="{StaticResource IconButtonStyle}"
-                        AutomationProperties.Name="Previous track"
-                        IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
-                        Click="PrevButton_Click">
-                    <FontIcon Glyph="&#xE892;" FontSize="18" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
-                </Button>
-
-                <Button x:Name="PlayPauseButton"
-                        Width="64" Height="64"
-                        CornerRadius="32"
-                        Style="{StaticResource AccentButtonStyle}"
-                        AutomationProperties.Name="Play or pause"
-                        IsEnabled="{x:Bind Player.CanToggle, Mode=OneWay}"
-                        Click="PlayPause_Click">
-                    <TextBlock x:Name="PlayPauseGlyph"
-                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                               FontSize="22"
-                               Text="{x:Bind Player.PlayGlyph, Mode=OneWay}" />
-                </Button>
-
-                <Button x:Name="NextButton"
-                        Style="{StaticResource IconButtonStyle}"
-                        AutomationProperties.Name="Next track"
-                        IsEnabled="{x:Bind Queue.HasUpcoming, Mode=OneWay}"
-                        Click="NextButton_Click">
-                    <FontIcon Glyph="&#xE893;" FontSize="18" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
-                </Button>
+                           HorizontalAlignment="Center" />
             </StackPanel>
-        </StackPanel>
+
+            <!-- Now playing panel: fan carousel, big title/artist, actions, up next, transport -->
+            <ScrollViewer x:Name="NowPlayingScroll"
+                          Visibility="{x:Bind Player.PanelVisibility, Mode=OneWay}"
+                          VerticalScrollMode="Disabled"
+                          HorizontalScrollMode="Disabled"
+                          Padding="0">
+                <StackPanel x:Name="NowPlayingPanel"
+                            Spacing="20"
+                            MaxWidth="560"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+
+                    <!-- Fan carousel: previous (left, scaled/faded), current (center,
+                         largest), next (right, scaled/faded). 2D scale approximates the
+                         perspective + rotateY fan from DESIGN_TOKENS; WinUI 3 has no
+                         PlaneProjection in projection. -->
+                    <Grid x:Name="CarouselGrid"
+                          Width="240" Height="240"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,-8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Previous track: scaled down, faded -->
+                        <Border x:Name="CarouselPrev"
+                                Grid.Column="0"
+                                Width="96" Height="96"
+                                CornerRadius="{StaticResource CardCornerRadius}"
+                                Background="{ThemeResource RaisedBrush}"
+                                Opacity="0.55"
+                                RenderTransformOrigin="0.5,0.5"
+                                Visibility="Collapsed">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="0.8" ScaleY="0.8" />
+                            </Border.RenderTransform>
+                            <Image x:Name="CarouselPrevImage"
+                                   Stretch="UniformToFill"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                        </Border>
+
+                        <!-- Current track: centered, largest, full opacity -->
+                        <Border CornerRadius="{StaticResource CardCornerRadius}"
+                                Width="200" Height="200"
+                                Background="{ThemeResource RaisedBrush}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                            <Image x:Name="CarouselCurrentImage"
+                                   Stretch="UniformToFill"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                        </Border>
+
+                        <!-- Next track: scaled down, faded -->
+                        <Border x:Name="CarouselNext"
+                                Grid.Column="2"
+                                Width="96" Height="96"
+                                CornerRadius="{StaticResource CardCornerRadius}"
+                                Background="{ThemeResource RaisedBrush}"
+                                Opacity="0.55"
+                                RenderTransformOrigin="0.5,0.5"
+                                Visibility="Collapsed">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="0.8" ScaleY="0.8" />
+                            </Border.RenderTransform>
+                            <Image x:Name="CarouselNextImage"
+                                   Stretch="UniformToFill"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
+
+                    <!-- Big bold title + artist, per DESIGN_TOKENS Now Playing -->
+                    <TextBlock x:Name="TitleText"
+                               Text="{x:Bind Player.TrackTitle, Mode=OneWay}"
+                               Style="{StaticResource PageHeadlineText}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1" />
+
+                    <TextBlock x:Name="ArtistText"
+                               Text="{x:Bind Player.TrackArtist, Mode=OneWay}"
+                               Visibility="{x:Bind Player.ArtistVisibility, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1" />
+
+                    <!-- Quiet status line for resolve/parse errors only — never byte counts. -->
+                    <TextBlock x:Name="StatusText"
+                               Text="{x:Bind Player.StatusText, Mode=OneWay}"
+                               Visibility="{x:Bind Player.StatusVisibility, Mode=OneWay}"
+                               Style="{StaticResource MutedText}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               MaxWidth="460" />
+
+                    <!-- Seek bar: single bar with buffered segment; times only. -->
+                    <Grid ColumnSpacing="12" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="PositionText"
+                                   Grid.Column="0"
+                                   Text="0:00"
+                                   Style="{StaticResource MutedText}"
+                                   VerticalAlignment="Center"
+                                   MinWidth="34" />
+
+                        <controls:BufferedSeekBar x:Name="SeekBar"
+                                                  Grid.Column="1"
+                                                  VerticalAlignment="Center"
+                                                  SeekRequested="SeekBar_SeekRequested"
+                                                  PreviewChanged="SeekBar_PreviewChanged"
+                                                  AutomationProperties.Name="Seek bar" />
+
+                        <TextBlock x:Name="DurationText"
+                                   Grid.Column="2"
+                                   Text="0:00"
+                                   Style="{StaticResource MutedText}"
+                                   VerticalAlignment="Center"
+                                   MinWidth="34"
+                                   TextAlignment="Right" />
+                    </Grid>
+
+                    <!-- Action icon row: like (local toggle) + queue (scroll to Up Next).
+                         Lyrics deferred — DESIGN_TOKENS marks it "not yet mocked." -->
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="24"
+                                HorizontalAlignment="Center">
+                        <Button x:Name="LikeButton"
+                                Style="{StaticResource IconButtonStyle}"
+                                AutomationProperties.Name="Like"
+                                Click="LikeButton_Click">
+                            <FontIcon x:Name="LikeGlyph"
+                                      Glyph="&#xE735;"
+                                      FontSize="20"
+                                      FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                      Foreground="{ThemeResource TextSecondaryBrush}" />
+                        </Button>
+                        <Button x:Name="QueueButton"
+                                Style="{StaticResource IconButtonStyle}"
+                                AutomationProperties.Name="Up Next"
+                                Click="QueueButton_Click">
+                            <FontIcon Glyph="&#xE8FD;"
+                                      FontSize="20"
+                                      FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                      Foreground="{ThemeResource TextSecondaryBrush}" />
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Up Next: the upcoming queue, clickable to start from that track. -->
+                    <StackPanel x:Name="UpNextPanel"
+                                Spacing="2"
+                                Visibility="{x:Bind Queue.HasUpcoming, Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="8"
+                                    Margin="0,4,0,0">
+                            <TextBlock Text="Up Next"
+                                       Style="{StaticResource SectionHeaderText}" />
+                            <TextBlock Text="{x:Bind Queue.Upcoming.Count, Mode=OneWay}"
+                                       Style="{StaticResource MutedText}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ItemsControl x:Name="UpNextList"
+                                      ItemsSource="{x:Bind Queue.Upcoming, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="services:QueueTrack">
+                                    <Button Background="Transparent"
+                                            BorderThickness="0"
+                                            HorizontalContentAlignment="Stretch"
+                                            Padding="0,4"
+                                            Click="UpNext_Click">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="44" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0"
+                                                    Width="44" Height="44"
+                                                    CornerRadius="6"
+                                                    Background="{ThemeResource RaisedBrush}">
+                                                <Image Source="{x:Bind ArtworkUrl, Mode=OneWay}"
+                                                       Stretch="UniformToFill"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1"
+                                                        VerticalAlignment="Center"
+                                                        Spacing="1">
+                                                <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                                           Style="{StaticResource CardTitleText}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           MaxLines="1" />
+                                                <TextBlock Text="{x:Bind Artist, Mode=OneWay}"
+                                                           Style="{StaticResource MutedText}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           MaxLines="1" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{x:Bind VideoId, Mode=OneWay}"
+                                                       Style="{StaticResource MutedText}"
+                                                       Visibility="Collapsed" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Autoplay toggle: persisted in PlayerState, controls end-of-queue
+                         behaviour (Phase 6: prefetch at 50%). -->
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="10"
+                                HorizontalAlignment="Center">
+                        <TextBlock Text="Autoplay"
+                                   Style="{StaticResource SecondaryText}"
+                                   VerticalAlignment="Center" />
+                        <ToggleSwitch x:Name="AutoplayToggle"
+                                      IsOn="{x:Bind Player.AutoplayOn, Mode=TwoWay}"
+                                      OnContent=""
+                                      OffContent=""
+                                      AutomationProperties.Name="Autoplay" />
+                    </StackPanel>
+
+                    <!-- Floating transport pill: glass + specular highlight (same treatment
+                         as the MainWindow player bar from Phase 3). -->
+                    <Border Background="{ThemeResource GlassStrongBrush}"
+                            BorderBrush="{ThemeResource TokenBorderStrongBrush}"
+                            BorderThickness="1"
+                            CornerRadius="18"
+                            Padding="14,10"
+                            Margin="0,8,0,0"
+                            AutomationProperties.Name="Now Playing transport">
+                        <Grid>
+                            <!-- Diagonal specular highlight, clipped to the pill by the
+                                 parent Border's CornerRadius. -->
+                            <Rectangle HorizontalAlignment="Left"
+                                       VerticalAlignment="Center"
+                                       Width="60" Height="120"
+                                       Fill="#29FFFFFF"
+                                       Margin="-20,0,120,0"
+                                       RenderTransformOrigin="0.5,0.5">
+                                <Rectangle.RenderTransform>
+                                    <RotateTransform Angle="120" />
+                                </Rectangle.RenderTransform>
+                            </Rectangle>
+
+                            <Grid ColumnSpacing="8" Margin="0,2,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Button Grid.Column="0"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        AutomationProperties.Name="Previous track"
+                                        IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
+                                        Click="PrevButton_Click">
+                                    <FontIcon Glyph="&#xE892;"
+                                              FontSize="18"
+                                              FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                                </Button>
+
+                                <Button Grid.Column="2"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        AutomationProperties.Name="Next track"
+                                        IsEnabled="{x:Bind Queue.HasUpcoming, Mode=OneWay}"
+                                        Click="NextButton_Click">
+                                    <FontIcon Glyph="&#xE893;"
+                                              FontSize="18"
+                                              FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                                </Button>
+
+                                <Button Grid.Column="1"
+                                        Width="56" Height="56"
+                                        CornerRadius="28"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        HorizontalAlignment="Center"
+                                        AutomationProperties.Name="Play or pause"
+                                        IsEnabled="{x:Bind Player.CanToggle, Mode=OneWay}"
+                                        Click="PlayPause_Click">
+                                    <TextBlock x:Name="PlayPauseGlyph"
+                                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                               FontSize="22"
+                                               Text="{x:Bind Player.PlayGlyph, Mode=OneWay}" />
+                                </Button>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </Page>

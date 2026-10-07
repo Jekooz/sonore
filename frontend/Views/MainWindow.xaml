@@ -3,7 +3,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:YtMusicClient.Views.Controls">
 
-    <Grid Background="{ThemeResource AppBackgroundBrush}">
+    <Grid x:Name="RootGrid" Background="{ThemeResource AppBackgroundBrush}">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator x:Name="ToggleAccel" Key="Space" IsEnabled="True" Invoked="ToggleAccel_Invoked" />
+            <KeyboardAccelerator x:Name="SeekBackAccel" Key="Left" Modifiers="None" IsEnabled="True" Invoked="SeekBackAccel_Invoked" />
+            <KeyboardAccelerator x:Name="SeekForwardAccel" Key="Right" Modifiers="None" IsEnabled="True" Invoked="SeekForwardAccel_Invoked" />
+            <KeyboardAccelerator x:Name="VolumeUpAccel" Key="Up" Modifiers="None" IsEnabled="True" Invoked="VolumeUpAccel_Invoked" />
+            <KeyboardAccelerator x:Name="VolumeDownAccel" Key="Down" Modifiers="None" IsEnabled="True" Invoked="VolumeDownAccel_Invoked" />
+        </Grid.KeyboardAccelerators>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -82,7 +89,8 @@
                     Background="Transparent"
                     BorderThickness="0"
                     Padding="8,4"
-                    Visibility="Collapsed">
+                    Visibility="Collapsed"
+                    AutomationProperties.Name="Account">
                 <Button.Flyout>
                     <MenuFlyout>
                         <MenuFlyoutItem Text="Sign out" Click="SignOut_Click" />
@@ -117,14 +125,18 @@
 
         <Frame x:Name="ContentFrame" Grid.Row="1" />
 
-        <!-- Persistent player bar: on every screen, glass chrome per DESIGN_TOKENS.
-             Clicking the artwork/title expands into the full Now Playing view. -->
+        <!-- Persistent player bar: rounded glass pill, per DESIGN_TOKENS.
+             Glass rgba(255,255,255,0.10) with blur-equivalent dark tint,
+             TokenBorderStrongBrush outline, and a diagonal specular highlight
+             (120deg white gradient at ~0.16 opacity) on the leading edge. -->
         <Grid x:Name="PlayerBar"
               Grid.Row="2"
               Height="64"
-              Background="{ThemeResource GlassBrush}"
-              BorderBrush="{ThemeResource TokenBorderBrush}"
-              BorderThickness="0,1,0,0"
+              Margin="0,0,16,16"
+              CornerRadius="18"
+              Background="{ThemeResource GlassStrongBrush}"
+              BorderBrush="{ThemeResource TokenBorderStrongBrush}"
+              BorderThickness="1"
               Padding="16,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -132,6 +144,23 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
+
+            <!-- Diagonal specular highlight: white gradient at 120deg, ~0.16 opacity,
+                 clipped to the pill by being a child of the rounded Grid. -->
+            <Rectangle x:Name="PlayerBarSpecular"
+                       Grid.Column="0" Grid.ColumnSpan="4"
+                       Fill="#29FFFFFF"
+                       Margin="-20,0,120,0"
+                       Width="60" Height="120"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Left">
+                <Rectangle.RenderTransform>
+                    <RotateTransform Angle="120" CenterX="30" CenterY="30" />
+                </Rectangle.RenderTransform>
+                <Rectangle.Clip>
+                    <RectangleGeometry Rect="0,0,60,120" />
+                </Rectangle.Clip>
+            </Rectangle>
 
             <!-- Art + title/artist: one click target that opens Now Playing. -->
             <Button x:Name="PlayerBarExpand"
@@ -172,7 +201,8 @@
                                           VerticalAlignment="Center"
                                           IsEnabled="False"
                                           SeekRequested="BarSeekBar_SeekRequested"
-                                          PreviewChanged="BarSeekBar_PreviewChanged" />
+                                          PreviewChanged="BarSeekBar_PreviewChanged"
+                                          AutomationProperties.Name="Seek bar" />
                 <TextBlock x:Name="BarDurationText" Grid.Column="2" Text="–:––"
                            Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="34"
                            TextAlignment="Right" />
@@ -184,7 +214,7 @@
                         AutomationProperties.Name="Previous"
                         IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
                         Click="BarPrevButton_Click">
-                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Text="\uE892" />
+                    <FontIcon Glyph="&#xE892;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
                 </Button>
                 <Button x:Name="BarPlayButton"
                         Width="44" Height="44" CornerRadius="22"
@@ -200,7 +230,7 @@
                         AutomationProperties.Name="Next"
                         IsEnabled="{x:Bind Queue.HasUpcoming, Mode=OneWay}"
                         Click="BarNextButton_Click">
-                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Text="\uE893" />
+                    <FontIcon Glyph="&#xE893;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
                 </Button>
             </StackPanel>
 
@@ -209,16 +239,28 @@
                 <Button x:Name="BarMuteButton" Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Mute"
                         Click="BarMuteButton_Click">
-                    <TextBlock x:Name="BarMuteGlyph"
-                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                               FontSize="16" Text="\uE767" />
+                    <FontIcon x:Name="BarMuteGlyph"
+                              Glyph="&#xE767;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
                 </Button>
                 <Slider x:Name="BarVolumeSlider"
                         Width="90" Minimum="0" Maximum="100" StepFrequency="1"
                         Value="{x:Bind Player.VolumePercent, Mode=TwoWay}"
                         VerticalAlignment="Center"
                         AutomationProperties.Name="Volume"
-                        ValueChanged="BarVolumeSlider_ValueChanged" />
+                        ValueChanged="BarVolumeSlider_ValueChanged">
+                    <Slider.ContextFlyout>
+                        <MenuFlyout />
+                    </Slider.ContextFlyout>
+                    <Slider.Resources>
+                        <SolidColorBrush x:Key="SliderThumbBackground" Color="#FA2D48" />
+                        <SolidColorBrush x:Key="SliderOuterThumbBackground" Color="#FA2D48" />
+                        <SolidColorBrush x:Key="SliderThumbBorderBrush" Color="#FA2D48" />
+                        <SolidColorBrush x:Key="SliderTrackValueFill" Color="#FA2D48" />
+                        <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FA2D48" />
+                        <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FA2D48" />
+                        <SolidColorBrush x:Key="SliderTrackValueFillDisabled" Color="#FA2D48" />
+                    </Slider.Resources>
+                </Slider>
             </StackPanel>
         </Grid>
     </Grid>

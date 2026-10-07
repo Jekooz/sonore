@@ -47,7 +47,7 @@
                       Grid.Row="1"
                       Visibility="Collapsed">
             <StackPanel Spacing="24">
-                <ProgressRing x:Name="LoadingRing" Width="36" Height="36" IsActive="False" />
+                <ProgressRing x:Name="LoadingRing" Width="36" Height="36" IsActive="False" Foreground="{ThemeResource AccentBrush}" />
                 <TextBlock x:Name="ErrorText"
                            Style="{StaticResource SecondaryText}"
                            TextWrapping="Wrap"
@@ -124,7 +124,8 @@
                                                         BorderThickness="0"
                                                         Padding="0"
                                                         Margin="0,0,16,16"
-                                                        Click="HomeCard_Click">
+                                                        Click="HomeCard_Click"
+                                                        AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
                                                     <StackPanel Width="108" Spacing="6">
                                                         <Border Width="108" Height="108"
                                                                 CornerRadius="{StaticResource CardCornerRadius}">
@@ -166,7 +167,8 @@
                                             BorderThickness="0"
                                             Padding="0"
                                             Margin="0,0,0,4"
-                                            Click="HomeCard_Click">
+                                            Click="HomeCard_Click"
+                                            AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
                                         <Grid ColumnSpacing="10">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="44" />

@@ -3,7 +3,9 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using YtMusicClient.Services;
@@ -99,7 +101,7 @@ namespace YtMusicClient.Views
                         break;
 
                     case nameof(Services.PlayerState.Volume):
-                        BarMuteGlyph.Text = App.PlayerState.VolumePercent <= 0 ? "\uE74F" : "\uE767"; // muted : speaker
+                        BarMuteGlyph.Glyph = App.PlayerState.VolumePercent <= 0 ? "\uE74F" : "\uE767"; // muted : speaker
                         break;
                 }
             });
@@ -175,6 +177,99 @@ namespace YtMusicClient.Views
         }
 
         /// <summary>
+        /// Keyboard shortcuts: Space = toggle play/pause, Left/Right = seek ±5s
+        /// (clamped to [0, Duration]), Up/Down = volume ±5%. Skipped when the
+        /// user is typing in a TextBox, dragging a Slider, or pressing a button —
+        /// those elements own keyboard focus and their own accelerators/shortcuts.
+        /// </summary>
+        private bool CanAcceptKeyboardShortcut()
+        {
+            var focused = FocusManager.GetFocusedElement();
+            if (focused == null)
+                return true;
+
+            // TextBox — user is typing text.
+            if (focused is TextBox)
+                return false;
+
+            // Slider — user is scrubbing volume.
+            if (focused is Slider)
+                return false;
+
+            // ButtonBase subtypes own their clicks.
+            if (focused is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase)
+                return false;
+
+            return true;
+        }
+
+        private void ToggleAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (!CanAcceptKeyboardShortcut())
+            {
+                args.Handled = false;
+                return;
+            }
+
+            App.Playback.TogglePlayPause();
+            args.Handled = true;
+        }
+
+        private void SeekBackAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (!CanAcceptKeyboardShortcut())
+            {
+                args.Handled = false;
+                return;
+            }
+
+            var state = App.PlayerState;
+            var pos = state.Position - TimeSpan.FromSeconds(5);
+            App.Playback.Seek(pos < TimeSpan.Zero ? TimeSpan.Zero : pos);
+            args.Handled = true;
+        }
+
+        private void SeekForwardAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (!CanAcceptKeyboardShortcut())
+            {
+                args.Handled = false;
+                return;
+            }
+
+            var state = App.PlayerState;
+            var pos = state.Position + TimeSpan.FromSeconds(5);
+            App.Playback.Seek(pos > state.Duration ? state.Duration : pos);
+            args.Handled = true;
+        }
+
+        private void VolumeUpAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (!CanAcceptKeyboardShortcut())
+            {
+                args.Handled = false;
+                return;
+            }
+
+            var vol = App.PlayerState.VolumePercent;
+            App.PlayerState.VolumePercent = Math.Min(100, vol + 5);
+            args.Handled = true;
+        }
+
+        private void VolumeDownAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (!CanAcceptKeyboardShortcut())
+            {
+                args.Handled = false;
+                return;
+            }
+
+            var vol = App.PlayerState.VolumePercent;
+            App.PlayerState.VolumePercent = Math.Max(0, vol - 5);
+            args.Handled = true;
+        }
+
+        /// <summary>
         /// Keep the title bar in sync with sign-in state: the account chip
         /// (photo + name, with a sign-out menu) replaces the wordmark once
         /// the account is known.
@@ -195,6 +290,13 @@ namespace YtMusicClient.Views
             AccountChip.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
             AppTitleText.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
 
+            var name = ViewModel.AccountName ?? "";
+
+            if (signedIn && !string.IsNullOrEmpty(name))
+                AccountChip.SetValue(AutomationProperties.NameProperty, "Account: " + name);
+            else
+                AccountChip.SetValue(AutomationProperties.NameProperty, "Account");
+
             bool hasPhoto = !string.IsNullOrEmpty(ViewModel.AccountPhotoUrl);
             AccountPhoto.Visibility = hasPhoto ? Visibility.Visible : Visibility.Collapsed;
             PhotoFallback.Visibility = hasPhoto ? Visibility.Collapsed : Visibility.Visible;
@@ -204,7 +306,6 @@ namespace YtMusicClient.Views
                 ? new ImageBrush { ImageSource = new BitmapImage(new Uri(ViewModel.AccountPhotoUrl)) }
                 : null;
 
-            var name = ViewModel.AccountName ?? "";
             AccountInitial.Text = string.IsNullOrEmpty(name) ? "" : name.Trim()[0].ToString().ToUpperInvariant();
         }
 

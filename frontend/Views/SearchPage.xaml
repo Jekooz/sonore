@@ -10,7 +10,8 @@
                  PlaceholderText="Search songs, albums, artists…"
                  CornerRadius="10"
                  MinHeight="40"
-                 KeyDown="SearchBox_KeyDown" />
+                 KeyDown="SearchBox_KeyDown"
+                 AutomationProperties.Name="Search" />
 
         <!-- Category filter chips, built from the real result
              categories of the last search ("All" + each group). -->
@@ -19,7 +20,7 @@
                                Visibility="Collapsed" />
 
         <StackPanel Orientation="Horizontal" Spacing="12">
-            <ProgressRing x:Name="LoadingRing" Width="24" Height="24" IsActive="False" />
+            <ProgressRing x:Name="LoadingRing" Width="24" Height="24" IsActive="False" Foreground="{ThemeResource AccentBrush}" />
             <TextBlock x:Name="ErrorText"
                        Style="{StaticResource SecondaryText}"
                        TextWrapping="Wrap"
@@ -39,7 +40,8 @@
                             BorderThickness="0"
                             Padding="0"
                             HorizontalContentAlignment="Stretch"
-                            Click="Result_Click">
+                            Click="Result_Click"
+                            AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
                         <Grid ColumnSpacing="12" Margin="0,4" MinHeight="56">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="56" />

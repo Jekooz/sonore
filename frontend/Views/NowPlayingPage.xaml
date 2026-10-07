@@ -92,7 +92,8 @@
                                           Grid.Column="1"
                                           VerticalAlignment="Center"
                                           SeekRequested="SeekBar_SeekRequested"
-                                          PreviewChanged="SeekBar_PreviewChanged" />
+                                          PreviewChanged="SeekBar_PreviewChanged"
+                                          AutomationProperties.Name="Seek bar" />
 
                 <TextBlock x:Name="DurationText"
                            Grid.Column="2"
@@ -113,8 +114,7 @@
                         AutomationProperties.Name="Previous track"
                         IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
                         Click="PrevButton_Click">
-                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                               FontSize="18" Text="&#xE892;" />
+                    <FontIcon Glyph="&#xE892;" FontSize="18" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
                 </Button>
 
                 <Button x:Name="PlayPauseButton"
@@ -135,8 +135,7 @@
                         AutomationProperties.Name="Next track"
                         IsEnabled="{x:Bind Queue.HasUpcoming, Mode=OneWay}"
                         Click="NextButton_Click">
-                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                               FontSize="18" Text="&#xE893;" />
+                    <FontIcon Glyph="&#xE893;" FontSize="18" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
                 </Button>
             </StackPanel>
         </StackPanel>

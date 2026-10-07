@@ -46,6 +46,9 @@ namespace YtMusicClient.Services
         // shuffle pass, so repeats only come back on repeat-all wrap.
         private readonly HashSet<string> _playedShuffle = new();
 
+        /// <summary>The VideoId for which we already fired the 50%-prefetch on this track.</summary>
+        private string _prefetchFiredFor;
+
         // The playback queue, in order, with the position of the track now playing.
         // Filled by the list overload of PlayAsync; a standalone play leaves it empty
         // (or re-aims _queueIndex when the track happens to be part of the queue).
@@ -145,6 +148,7 @@ namespace YtMusicClient.Services
             if (string.IsNullOrWhiteSpace(videoId))
                 return;
 
+            _prefetchFiredFor = null; // new track: re-evaluate prefetch at 50%
             int generation = ++_generation;
             _finished = false;
 
@@ -218,8 +222,11 @@ namespace YtMusicClient.Services
                 _statusText = "";
                 Log("playing");
 
-                if (HasNext && !App.PlayerState.Shuffle) // shuffle picks randomly — a pre-warmed next would miss
-                    _ = PrefetchNextAsync();
+                // Prefetch moves to 50% played (Phase 6): starting the resolve too
+                // early wastes the connection slot and the warm can cool before the
+                // hand-off; starting too late adds a gap at end-of-track. 50% gives
+                // the second half of the track to resolve + warm the next one.
+                // Shuffle is excluded: a random next would miss the pre-warmed track.
 
                 // History for Previous: record only committed, non-duplicate plays.
                 if (_history.Count == 0 || _history[^1].VideoId != videoId)
@@ -327,6 +334,7 @@ namespace YtMusicClient.Services
             if (next < 0)
                 return false;
 
+            _prefetchFiredFor = null; // advancing to a new track: re-evaluate prefetch at 50%
             _queueIndex = next;
             var track = _queue[_queueIndex];
             _playedShuffle.Add(track.VideoId);
@@ -448,7 +456,9 @@ namespace YtMusicClient.Services
             });
         }
 
-        /// <summary>Engine 4 Hz heartbeat: position/duration/cached → PlayerState.</summary>
+        /// <summary>Engine 4 Hz heartbeat: position/duration/cached → PlayerState.
+        /// Also fires the 50%-prefetch for the next track once the current one
+        /// crosses the halfway mark (Phase 6).</summary>
         private void Engine_PlaybackTick(object sender, EventArgs e)
         {
             RunOnUi(() =>
@@ -457,6 +467,23 @@ namespace YtMusicClient.Services
                 state.Position = _engine.Position;
                 state.Duration = _engine.Duration;
                 state.BufferedFraction = _engine.CachedFraction;
+
+                // Prefetch the next track once the current one is halfway played
+                // (Phase 6). Fires once per track; re-fires only after a new track
+                // starts (which clears _prefetchFiredFor in PlayAsync/PlayNext).
+                if (HasTrack && state.IsPlaying && _queueIndex + 1 < _queue.Count
+                    && _prefetchFiredFor != _queue[_queueIndex].VideoId
+                    && !App.PlayerState.Shuffle)
+                {
+                    double progress = state.Duration.TotalSeconds > 0
+                        ? state.Position.TotalSeconds / state.Duration.TotalSeconds
+                        : 0;
+                    if (progress >= 0.5)
+                    {
+                        _prefetchFiredFor = _queue[_queueIndex].VideoId;
+                        _ = PrefetchNextAsync();
+                    }
+                }
             });
         }
 

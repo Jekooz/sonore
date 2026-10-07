@@ -11,6 +11,27 @@
                 <ResourceDictionary Source="ms-appx:///Themes/DesignTokens.xaml" />
                 <ResourceDictionary Source="ms-appx:///Themes/NavStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Default focus ring for every Button that does not set its own style:
+                 2px accent on the outer focus rect, matching the styled buttons above.
+                 Styled buttons (IconButtonStyle, AccentButtonStyle, NavPillRadioButton,
+                 FilterChipRadioButton) override this with their own setters. -->
+            <Style TargetType="Button">
+                <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AccentBrush}" />
+                <Setter Property="FocusVisualPrimaryThickness" Value="0,0,0,2" />
+                <Setter Property="FocusVisualSecondaryThickness" Value="0" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+            </Style>
+
+            <!-- Default focus ring for TextBox: accent focus rect + accent selection
+                 highlight so the search box never shows the system accent. -->
+            <Style TargetType="TextBox">
+                <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AccentBrush}" />
+                <Setter Property="FocusVisualPrimaryThickness" Value="0,0,0,2" />
+                <Setter Property="FocusVisualSecondaryThickness" Value="0" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="SelectionHighlightColor" Value="{ThemeResource AccentBrush}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 

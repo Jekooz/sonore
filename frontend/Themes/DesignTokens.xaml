@@ -62,13 +62,18 @@
         <Setter Property="Foreground" Value="{ThemeResource TextMutedBrush}" />
     </Style>
 
-    <!-- Accent CTA (Sign in with Google etc.): accent fill, white text, pill shape. -->
+    <!-- Accent CTA (Sign in with Google etc.): accent fill, white text, pill shape.
+         2px accent focus ring on keyboard focus (DESIGN_TOKENS focus-ring spec). -->
     <Style x:Key="AccentButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="{ThemeResource AccentBrush}" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="20,8" />
+        <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AccentBrush}" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="0,0,0,2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="0" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
     </Style>
 
 </ResourceDictionary>

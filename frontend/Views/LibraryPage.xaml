@@ -59,7 +59,7 @@
         <!-- Signed-in content -->
         <ScrollViewer x:Name="ContentScroll" Grid.Row="2" Visibility="Collapsed">
             <StackPanel Spacing="16">
-                <ProgressRing x:Name="LoadingRing" Width="36" Height="36" IsActive="False" />
+                <ProgressRing x:Name="LoadingRing" Width="36" Height="36" IsActive="False" Foreground="{ThemeResource AccentBrush}" />
                 <TextBlock x:Name="ErrorText"
                            Style="{StaticResource SecondaryText}"
                            TextWrapping="Wrap"
@@ -169,7 +169,8 @@
                                         BorderThickness="0"
                                         Padding="0"
                                         HorizontalContentAlignment="Stretch"
-                                        Click="LikedTrack_Click">
+                                        Click="LikedTrack_Click"
+                                        AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
                                     <Grid ColumnSpacing="12" Margin="0,4" Height="52">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="52" />

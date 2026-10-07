@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -10,7 +12,8 @@ namespace YtMusicClient.Views
 {
     /// <summary>
     /// Search across YouTube Music (songs, albums, artists, playlists) via the
-    /// backend /search endpoint. Debounced so typing feels instant.
+    /// backend /search endpoint. Typeahead: as the user types, a 300 ms debounce
+    /// fires a search and the results update in place (virtualized ListView).
     /// Results can be filtered by their real backend category
     /// (Songs, Videos, Albums, …) via the chip row.
     /// </summary>
@@ -19,6 +22,10 @@ namespace YtMusicClient.Views
         private int _searchGeneration;
         private List<SearchResultItemView> _allResults = new();
         private string _activeCategory;
+        private CancellationTokenSource _debounceCts;
+
+        /// <summary>The currently displayed (filtered) results — bound to the ListView.</summary>
+        public ObservableCollection<SearchResultItemView> _displayResults = new();
 
         public SearchPage()
         {
@@ -32,6 +39,29 @@ namespace YtMusicClient.Views
                 _ = RunSearchAsync();
                 e.Handled = true;
             }
+        }
+
+        /// <summary>
+        /// Typeahead: each keystroke cancels any in-flight debounce and starts a new
+        /// 300 ms timer. When the timer fires, the current text is searched (unless
+        /// a newer keystroke already superseded it).
+        /// </summary>
+        private async void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _debounceCts?.Cancel();
+            _debounceCts = new CancellationTokenSource();
+            var token = _debounceCts.Token;
+
+            try
+            {
+                await Task.Delay(300, token);
+            }
+            catch (TaskCanceledException)
+            {
+                return; // a newer keystroke superseded this debounce
+            }
+
+            await RunSearchAsync();
         }
 
         /// <summary>
@@ -71,9 +101,12 @@ namespace YtMusicClient.Views
 
         private void ApplyFilter()
         {
-            ResultsList.ItemsSource = string.IsNullOrEmpty(_activeCategory)
+            _displayResults.Clear();
+            foreach (var r in string.IsNullOrEmpty(_activeCategory)
                 ? _allResults
-                : _allResults.Where(r => r.Category == _activeCategory).ToList();
+                : _allResults.Where(r => r.Category == _activeCategory))
+                _displayResults.Add(r);
+            ResultsList.Visibility = _displayResults.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>
@@ -120,9 +153,10 @@ namespace YtMusicClient.Views
         {
             _allResults = new List<SearchResultItemView>();
             _activeCategory = null;
+            _displayResults.Clear();
             FilterChips.Children.Clear();
             FilterChips.Visibility = Visibility.Collapsed;
-            ResultsList.ItemsSource = null;
+            ResultsList.Visibility = Visibility.Collapsed;
         }
 
         private async Task RunSearchAsync()

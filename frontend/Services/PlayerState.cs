@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
-using Windows.Storage;
+using System.Text.Json;
 
 namespace YtMusicClient.Services
 {
@@ -29,28 +31,39 @@ namespace YtMusicClient.Services
         private bool _autoplayOn = true;
         private double _volume = 0.8;
 
-        // Lazy-init settings — ApplicationData.Current.LocalSettings must be
-        // accessed from the UI thread in WinUI3, but this type is constructed
-        // during App type init / OnLaunched before the dispatcher is pumping.
-        // Defer reads until first use (lazy), and swallow any failure so the
-        // app can still run with defaults.
-        private static ApplicationDataContainer _settings;
-        private static ApplicationDataContainer Settings
+        // Settings live in %LOCALAPPDATA%\YtMusicClient\settings.json — the same
+        // folder as the audio cache. ApplicationData.Current throws
+        // InvalidOperationException for unpackaged apps (WindowsAppSDK #1721;
+        // verified in ytmusic_crash.log: PlayerState..ctor → OnLaunched on the
+        // UI thread), so a plain JSON file is the one storage that works here.
+        private static readonly string SettingsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "YtMusicClient", "settings.json");
+        private static readonly object SettingsGate = new object();
+        private static Dictionary<string, double> _settings;
+
+        private static Dictionary<string, double> GetSettings()
         {
-            get
+            lock (SettingsGate)
             {
-                if (_settings != null) return _settings;
+                if (_settings != null)
+                    return _settings;
+
+                Dictionary<string, double> loaded = null;
+                bool corrupt = false;
                 try
                 {
-                    _settings = ApplicationData.Current.LocalSettings;
+                    if (File.Exists(SettingsPath))
+                        loaded = JsonSerializer.Deserialize<Dictionary<string, double>>(
+                            File.ReadAllText(SettingsPath));
                 }
                 catch
                 {
-                    // If ApplicationData isn't ready yet (e.g. during early
-                    // initialization), just leave it null — reads will fall
-                    // back to defaults and the app keeps running.
-                    _settings = null;
+                    corrupt = true; // hand-edited or truncated file → defaults
                 }
+                _settings = loaded ?? new Dictionary<string, double>();
+                if (corrupt)
+                    PlaybackLog.Write("settings.json unreadable — falling back to defaults");
                 return _settings;
             }
         }
@@ -105,9 +118,9 @@ namespace YtMusicClient.Services
         public Microsoft.UI.Xaml.Visibility StatusVisibility => string.IsNullOrEmpty(StatusText) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
         public bool Liked { get => _liked; set => Set(ref _liked, value); }
 
-        public bool Shuffle { get => _shuffle; set { if (Set(ref _shuffle, value)) Persist("Shuffle", value); } }
+        public bool Shuffle { get => _shuffle; set { if (Set(ref _shuffle, value)) Persist("Shuffle", value ? 1 : 0); } }
         public RepeatMode Repeat { get => _repeat; set { if (Set(ref _repeat, value)) Persist("RepeatMode", (int)value); } }
-        public bool AutoplayOn { get => _autoplayOn; set { if (Set(ref _autoplayOn, value)) Persist("AutoplayOn", value); } }
+        public bool AutoplayOn { get => _autoplayOn; set { if (Set(ref _autoplayOn, value)) Persist("AutoplayOn", value ? 1 : 0); } }
 
         public double Volume
         {
@@ -116,14 +129,13 @@ namespace YtMusicClient.Services
             {
                 if (Set(ref _volume, Math.Clamp(value, 0, 1)))
                 {
-                    Persist("VolumeSliderPercent", _volume);
+                    Persist("Volume", _volume);
                     Raise(nameof(VolumePercent));
                 }
             }
         }
 
-        /// <summary>The volume as the slider sees it (0-100). Same settings key as the
-        /// old MainShellViewModel value, so an existing install keeps its level.</summary>
+        /// <summary>The volume as the slider sees it (0-100).</summary>
         public double VolumePercent
         {
             get => Volume * 100;
@@ -132,51 +144,38 @@ namespace YtMusicClient.Services
 
         public PlayerState()
         {
-            // Defer settings reads — they happen lazily on first access to
-            // ApplicationData.Current.LocalSettings, which avoids the crash
-            // that occurred when this constructor ran before the UI thread
-            // dispatcher was ready.
             try
             {
-                var settings = Settings;
-                if (settings != null)
-                {
-                    _volume = ReadDouble(settings, "VolumeSliderPercent", 0.8);
-                    _shuffle = ReadDouble(settings, "Shuffle", 0) != 0;
-                    _autoplayOn = ReadDouble(settings, "AutoplayOn", 1) != 0;
-                    _repeat = (RepeatMode)Math.Clamp((int)ReadDouble(settings, "RepeatMode", 0), 0, 2);
-                }
+                _volume = Math.Clamp(ReadDouble("Volume", 0.8), 0, 1);
+                _shuffle = ReadDouble("Shuffle", 0) != 0;
+                _autoplayOn = ReadDouble("AutoplayOn", 1) != 0;
+                _repeat = (RepeatMode)Math.Clamp((int)ReadDouble("RepeatMode", 0), 0, 2);
             }
             catch
             {
-                // If settings access fails for any reason, keep defaults.
+                // Unreadable settings must never block startup — keep defaults.
             }
         }
 
         // ---------------- plumbing ----------------
 
-        private static void Persist(string key, object value)
+        private static void Persist(string key, double value)
         {
             try
             {
-                var settings = Settings;
-                if (settings != null)
-                    settings.Values[key] = value;
+                lock (SettingsGate)
+                {
+                    GetSettings()[key] = value;
+                    Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
+                    File.WriteAllText(SettingsPath, JsonSerializer.Serialize(GetSettings()));
+                }
             }
             catch { /* persisting must never break playback */ }
         }
 
-        private static double ReadDouble(ApplicationDataContainer settings, string key, double fallback)
+        private static double ReadDouble(string key, double fallback)
         {
-            try
-            {
-                object stored = settings.Values[key];
-                if (stored is double d) return d;
-                if (stored is long l) return l; // XAML setters box as long
-                if (stored is int i) return i;
-            }
-            catch { }
-            return fallback;
+            return GetSettings().TryGetValue(key, out double value) ? value : fallback;
         }
 
         private bool Set<T>(ref T field, T value, [CallerMemberName] string name = null)

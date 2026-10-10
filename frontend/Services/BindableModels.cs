@@ -84,6 +84,12 @@ namespace YtMusicClient.Services
         /// <summary>Present on song/video cards — non-empty means the card can play.</summary>
         public string VideoId => _item.VideoId;
 
+        /// <summary>Album id (MPREb_…) — set on album cards, which play as a collection.</summary>
+        public string BrowseId => _item.BrowseId;
+
+        /// <summary>Playlist id — set on playlist cards, which play as a collection.</summary>
+        public string PlaylistId => _item.PlaylistId;
+
         public string ThumbnailUrl => Thumbnail.PickUrl(_item.Thumbnails, 544);
 
         /// <summary>ImageSource-typed art for x:Bind — null when absent. Binding a
@@ -112,6 +118,9 @@ namespace YtMusicClient.Services
 
         public string Title => _item.Title;
         public string Count => _item.Count;
+
+        /// <summary>Real playlist id — lets a playlist card resolve its tracks.</summary>
+        public string PlaylistId => _item.PlaylistId;
 
         public string ThumbnailUrl => Thumbnail.PickUrl(_item.Thumbnails, 544);
 
@@ -142,6 +151,9 @@ namespace YtMusicClient.Services
         public string Artist => _item.Artist;
         public string Subscribers => _item.Subscribers;
 
+        /// <summary>Real channel id (UC…) — lets an artist card open their tracklist.</summary>
+        public string BrowseId => _item.BrowseId;
+
         public string ThumbnailUrl => Thumbnail.PickUrl(_item.Thumbnails, 320);
 
         /// <summary>ImageSource-typed art for x:Bind — null when absent. Binding a
@@ -170,6 +182,9 @@ namespace YtMusicClient.Services
 
         public string Title => _item.Title;
         public string Year => _item.Year;
+
+        /// <summary>Real album id (MPREb_…) — lets an album card resolve its tracks.</summary>
+        public string BrowseId => _item.BrowseId;
 
         public string ThumbnailUrl => Thumbnail.PickUrl(_item.Thumbnails, 544);
 
@@ -221,6 +236,51 @@ namespace YtMusicClient.Services
         public event PropertyChangedEventHandler PropertyChanged;
     }
 
+    /// <summary>
+    /// One row of a collection (album / playlist / artist) tracklist. Carries the
+    /// row number plus the real track fields, so the row can render its index and
+    /// play itself without re-looking-up anything from the collection.
+    /// </summary>
+    public class CollectionTrackView : INotifyPropertyChanged
+    {
+        private readonly Track _item;
+
+        public CollectionTrackView(Track item, int index)
+        {
+            _item = item;
+            Index = index;
+        }
+
+        /// <summary>Zero-based position in the collection — playing a row uses this.</summary>
+        public int Index { get; }
+
+        /// <summary>1-based label shown in the tracklist gutter.</summary>
+        public string Number => (Index + 1).ToString();
+
+        public string Title => _item.Title;
+        public string ArtistText => _item.ArtistText;
+        public string Duration => _item.Duration;
+
+        /// <summary>Song id — non-empty means the row can play.</summary>
+        public string VideoId => _item.VideoId;
+
+        public string ThumbnailUrl => Thumbnail.PickUrl(_item.Thumbnails, 120);
+
+        /// <summary>ImageSource-typed art for x:Bind — null when absent. Binding a
+        /// string to ImageSource crashes on null/"" (XamlBindingHelper.ConvertValue
+        /// throws E_INVALIDARG), so templates must bind this instead.</summary>
+        public ImageSource ThumbnailImage
+        {
+            get
+            {
+                var url = ThumbnailUrl;
+                return string.IsNullOrEmpty(url) ? null : new BitmapImage(new Uri(url));
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+    }
+
     public class SearchResultItemView : INotifyPropertyChanged
     {
         private readonly SearchResultGroup _item;
@@ -231,14 +291,36 @@ namespace YtMusicClient.Services
         }
 
         public string Title => _item.Title;
-        public string Artist => _item.Artist;
         public string ResultType => _item.ResultType;
+
+        /// <summary>Normalized credit line (artist(s)/author) — see SearchResultGroup.CreditText.</summary>
+        public string Artist => _item.CreditText;
+
+        /// <summary>Duration string (e.g. 4:19) — null when the result has none.</summary>
+        public string Duration => _item.Duration;
+
+        /// <summary>Artist credit + secondary info (views / song count) in one line.</summary>
+        public string SubText
+        {
+            get
+            {
+                var artist = _item.CreditText;
+                var info = _item.InfoText;
+                if (!string.IsNullOrEmpty(artist) && !string.IsNullOrEmpty(info))
+                    return artist + "  \u2022  " + info;
+                return artist ?? info ?? "";
+            }
+        }
 
         /// <summary>Backend group label (Songs, Videos, Albums, …) — drives the filter chips.</summary>
         public string Category => _item.Category;
 
         /// <summary>Song/video id — non-empty means the result can play.</summary>
         public string VideoId => _item.VideoId;
+
+        /// <summary>Album id / playlist id — set on album/playlist results.</summary>
+        public string BrowseId => _item.BrowseId;
+        public string PlaylistId => _item.PlaylistId;
 
         public string ThumbnailUrl => Thumbnail.PickUrl(_item.Thumbnails, 120);
 

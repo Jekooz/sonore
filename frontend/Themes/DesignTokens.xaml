@@ -12,18 +12,28 @@
     <SolidColorBrush x:Key="BufferedBrush" Color="#8C8C8C" Opacity="0.45" />
     <SolidColorBrush x:Key="AppBackgroundBrush" Color="#000000" />
 
-    <!-- Layered surfaces (per the upgrade spec): elevation must stay readable,
-         pure black + near-black cards flattened depth. -->
-    <SolidColorBrush x:Key="GlassBrush" Color="#141417" Opacity="0.96" />
-    <SolidColorBrush x:Key="GlassStrongBrush" Color="#1C1C21" Opacity="0.97" />
+    <!-- Glass. DESIGN_TOKENS defines these as translucent white (rgba(255,255,255,
+         0.06 / 0.10)), not opaque grays: on pure black a translucent fill reads
+         the same as before, but over album art or the Now Playing ambient wash
+         it now actually frosts instead of sitting on top as a solid block.
+         The alphas below are the translucent equivalents of the values these
+         surfaces rendered before, so the flat-black look is unchanged. -->
+    <SolidColorBrush x:Key="GlassBrush" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="GlassStrongBrush" Color="#1FFFFFFF" />
+    <!-- Opaque surfaces: artwork placeholders and avatar fallbacks, which must
+         never go transparent (there is nothing behind them). -->
     <SolidColorBrush x:Key="CardBrush" Color="#141417" />
     <SolidColorBrush x:Key="RaisedBrush" Color="#1C1C21" />
-    <SolidColorBrush x:Key="TokenBorderBrush" Color="#26262B" />
-    <SolidColorBrush x:Key="TokenBorderStrongBrush" Color="#33333A" />
+    <SolidColorBrush x:Key="TokenBorderBrush" Color="#26FFFFFF" />
+    <SolidColorBrush x:Key="TokenBorderStrongBrush" Color="#33FFFFFF" />
 
+    <!-- Text. The spec's muted alpha (0.32) renders at ~2.6:1 contrast on true
+         black — below WCAG AA — and the metadata/durations using it were the
+         least legible text in the app. These are lifted to clear AA while
+         keeping the primary > secondary > muted hierarchy. -->
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#8C8C8C" />
-    <SolidColorBrush x:Key="TextMutedBrush" Color="#525252" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A6A6A6" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#7A7A7A" />
 
     <x:Double x:Key="PageHeadlineSize">28</x:Double>
     <x:Double x:Key="SectionHeaderSize">18</x:Double>
@@ -63,17 +73,111 @@
     </Style>
 
     <!-- Accent CTA (Sign in with Google etc.): accent fill, white text, pill shape.
-         2px accent focus ring on keyboard focus (DESIGN_TOKENS focus-ring spec). -->
+         2px accent focus ring on keyboard focus (DESIGN_TOKENS focus-ring spec).
+
+         Batch 4 — explicit interaction states. This style previously set only
+         Background and left the other three CommonStates to WinUI's default
+         template, whose PointerOver/Pressed states overwrite the fill with the
+         generic ButtonBackground* keys. So the "accent" CTA reverted to a grey
+         default the moment you hovered it, and the disabled state was whatever
+         the generic button did. The template below defines all four states
+         itself, so feedback no longer depends on default-template internals.
+         It introduces NO new colours: hover is a GlassStrongBrush (12% white)
+         overlay — the same glass the rest of the app frosts with, so the accent
+         simply reads one step brighter — pressed keeps half that overlay plus a
+         small scale dip, and disabled swaps to RaisedBrush with muted text. -->
     <Style x:Key="AccentButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="{ThemeResource AccentBrush}" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="BorderThickness" Value="0" />
+        <!-- Always 1px, transparent at rest: the hover/pressed ring can then
+             appear without reflowing the label by a pixel. -->
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="20,8" />
         <Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AccentBrush}" />
         <Setter Property="FocusVisualPrimaryThickness" Value="0,0,0,2" />
         <Setter Property="FocusVisualSecondaryThickness" Value="0" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="Root"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          CornerRadius="{TemplateBinding CornerRadius}"
+                          RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform>
+                            <ScaleTransform ScaleX="1" ScaleY="1" />
+                        </Grid.RenderTransform>
+
+                        <!-- State wash: above the fill, below the label. -->
+                        <Border x:Name="StateOverlay"
+                                Background="{ThemeResource GlassStrongBrush}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Opacity="0" />
+
+                        <ContentPresenter x:Name="Presenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          FontFamily="{TemplateBinding FontFamily}"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          FontWeight="{TemplateBinding FontWeight}"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal">
+                                    <VisualState.Setters>
+                                        <Setter Target="StateOverlay.Opacity" Value="0" />
+                                    </VisualState.Setters>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Root"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="1" Duration="0:0:0.15" />
+                                        <DoubleAnimation Storyboard.TargetName="Root"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="1" Duration="0:0:0.15" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="StateOverlay.Opacity" Value="1" />
+                                        <Setter Target="Root.BorderBrush" Value="{ThemeResource TokenBorderStrongBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="StateOverlay.Opacity" Value="0.5" />
+                                        <Setter Target="Root.BorderBrush" Value="{ThemeResource TokenBorderStrongBrush}" />
+                                    </VisualState.Setters>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Root"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                         To="0.97" Duration="0:0:0.08" />
+                                        <DoubleAnimation Storyboard.TargetName="Root"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                         To="0.97" Duration="0:0:0.08" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="StateOverlay.Opacity" Value="0" />
+                                        <Setter Target="Root.Background" Value="{ThemeResource RaisedBrush}" />
+                                        <Setter Target="Root.BorderBrush" Value="{ThemeResource TokenBorderBrush}" />
+                                        <Setter Target="Presenter.Foreground" Value="{ThemeResource TextMutedBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>

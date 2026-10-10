@@ -5,22 +5,123 @@
       Background="{ThemeResource AppBackgroundBrush}"
       NavigationCacheMode="Enabled">
 
-    <StackPanel Padding="32,24" Spacing="16" MaxWidth="900" HorizontalAlignment="Stretch">
-        <TextBox x:Name="SearchBox"
-                 PlaceholderText="Search songs, albums, artists…"
-                 CornerRadius="10"
-                 MinHeight="40"
-                 KeyDown="SearchBox_KeyDown"
-                 TextChanged="SearchBox_TextChanged"
-                 AutomationProperties.Name="Search" />
+    <Grid Padding="32,24" RowSpacing="14">
+        <!-- Results/chips appearing and disappearing reflow smoothly. -->
+        <Grid.ChildrenTransitions>
+            <TransitionCollection>
+                <RepositionThemeTransition />
+            </TransitionCollection>
+        </Grid.ChildrenTransitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-        <!-- Category filter chips, built from the real result
-             categories of the last search ("All" + each group). -->
-        <VariableSizedWrapGrid x:Name="FilterChips"
-                               Orientation="Horizontal"
-                               Visibility="Collapsed" />
+        <!-- Search box. History (last searches) lives in a flyout: click the
+             icon or just start deleting to open it, click an entry to re-run. -->
+        <Grid Grid.Row="0" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-        <StackPanel Orientation="Horizontal" Spacing="12">
+            <TextBox x:Name="SearchBox"
+                     PlaceholderText="Search songs, albums, artists&#x2026;"
+                     CornerRadius="19"
+                     MinHeight="40"
+                     MaxWidth="560"
+                     HorizontalAlignment="Stretch"
+                     KeyDown="SearchBox_KeyDown"
+                     TextChanged="SearchBox_TextChanged"
+                     GotFocus="SearchBox_GotFocus"
+                     AutomationProperties.Name="Search" />
+
+            <Button x:Name="HistoryButton"
+                    Grid.Column="1"
+                    Style="{StaticResource IconButtonStyle}"
+                    AutomationProperties.Name="Recent searches"
+                    VerticalAlignment="Stretch"
+                    ToolTipService.ToolTip="Recent searches">
+                <Button.Flyout>
+                    <Flyout x:Name="HistoryFlyout"
+                            Placement="Bottom"
+                            Opened="HistoryFlyout_Opened">
+                        <StackPanel Width="280" Spacing="4">
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock Text="Recent searches"
+                                           Style="{StaticResource SectionHeaderText}" FontSize="14" />
+                                <Button x:Name="ClearHistoryButton"
+                                        Content="Clear all"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="6,2"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextMutedBrush}"
+                                        AutomationProperties.Name="Clear search history"
+                                        Click="ClearHistoryButton_Click" />
+                            </Grid>
+                            <ItemsControl x:Name="HistoryList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Button Style="{StaticResource RowButtonStyle}"
+                                                Padding="6,6"
+                                                AutomationProperties.Name="{x:Bind}"
+                                                Click="HistoryItem_Click">
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Grid.Column="0"
+                                                          Glyph="&#xE81C;"
+                                                          FontSize="13"
+                                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                                          Foreground="{ThemeResource TextMutedBrush}" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{x:Bind}"
+                                                           Style="{StaticResource CardTitleText}"
+                                                           FontWeight="Normal"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           MaxLines="1" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock x:Name="HistoryEmptyText"
+                                       Text="Nothing here yet — searches are remembered on this device."
+                                       Style="{StaticResource MutedText}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,4,0,0"
+                                       Visibility="Collapsed" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+                <FontIcon Glyph="&#xE81C;" FontSize="15"
+                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+            </Button>
+        </Grid>
+
+        <!-- Category chips: All + the real YT Music search filters. A chip re-runs
+             the current query through that backend filter (server-side tab, like
+             music.youtube.com). No results = nothing to filter by. -->
+        <StackPanel x:Name="FilterChips"
+                    Grid.Row="1"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    Visibility="Collapsed">
+            <StackPanel.ChildrenTransitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition FromVerticalOffset="10" />
+                </TransitionCollection>
+            </StackPanel.ChildrenTransitions>
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12">
             <ProgressRing x:Name="LoadingRing" Width="24" Height="24" IsActive="False" Foreground="{ThemeResource AccentBrush}" />
             <TextBlock x:Name="ErrorText"
                        Style="{StaticResource SecondaryText}"
@@ -29,14 +130,26 @@
         </StackPanel>
 
         <TextBlock x:Name="ResultsPlaceholder"
+                   Grid.Row="3"
                    Style="{StaticResource SecondaryText}"
                    Text="Type to search YouTube Music." />
 
         <ListView x:Name="ResultsList"
+                  Grid.Row="3"
                   ItemsSource="{x:Bind _displayResults, Mode=OneWay}"
                   SelectionMode="None"
                   ScrollViewer.IsDeferredScrollingEnabled="True"
                   Visibility="Collapsed">
+            <ListView.Resources>
+                <!-- The row button paints its own hover highlight; silence the
+                     ListViewItem's default one so a hovered row never
+                     double-highlights (default chrome + RowButtonStyle fill). -->
+                <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="Transparent" />
+            </ListView.Resources>
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
                     <VirtualizingStackPanel />
@@ -46,16 +159,14 @@
                 <DataTemplate x:DataType="services:SearchResultItemView">
                     <!-- Transparent button: the whole row is clickable; results with a
                          videoId (songs/videos) start playback from the handler. -->
-                    <Button Background="Transparent"
-                            BorderThickness="0"
-                            Padding="0"
-                            HorizontalContentAlignment="Stretch"
+                    <Button Style="{StaticResource RowButtonStyle}"
                             Click="Result_Click"
                             AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
                         <Grid ColumnSpacing="12" Margin="0,4" MinHeight="56">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="56" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
@@ -70,12 +181,23 @@
                                 <TextBlock Text="{x:Bind Title}"
                                            Style="{StaticResource CardTitleText}"
                                            TextTrimming="CharacterEllipsis" MaxLines="1" />
-                                <TextBlock Text="{x:Bind Artist}"
+                                <!-- Artist credit from the real artists[]/artist/author fields;
+                                     views/song count appended when the backend has them. -->
+                                <TextBlock Text="{x:Bind SubText}"
                                            Style="{StaticResource MutedText}"
                                            TextTrimming="CharacterEllipsis" MaxLines="1" />
                             </StackPanel>
 
-                            <Border Grid.Column="2"
+                            <!-- Duration (e.g. 4:19) when present, from the backend result. -->
+                            <TextBlock Grid.Column="2"
+                                       Text="{x:Bind Duration}"
+                                       Style="{StaticResource MutedText}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center" />
+
+                            <!-- Type badge (Song, Video, Album, Artist, …): what the
+                                 result actually is, per the backend resultType. -->
+                            <Border Grid.Column="3"
                                     CornerRadius="9"
                                     Background="{ThemeResource GlassStrongBrush}"
                                     Padding="8,3"
@@ -89,5 +211,5 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-    </StackPanel>
+    </Grid>
 </Page>

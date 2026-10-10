@@ -29,6 +29,7 @@ import ctypes.wintypes as wintypes
 import json
 import logging
 import os
+import re
 import threading
 
 import keyring
@@ -156,16 +157,18 @@ def _dpapi_decrypt(data: bytes) -> bytes:
 
 
 def _build_cookie_header(cookie_map: dict) -> str:
-    """Serialize the cookies we know into a single Cookie header value."""
+    """
+    Serialize exactly the cookies ytmusicapi needs into a Cookie header value.
+
+    Only REQUIRED + USEFUL cookie names are forwarded. Search.eye results used to
+    "append every other cookie that arrived" — 24 Google cookies, far beyond what
+    the 2560-byte Credential Manager blob (pre-DPAPI) or the settings flow needs,
+    and needlessly exposing session material to disk. Keep the jar small.
+    """
     parts = []
     for name in dict.fromkeys(REQUIRED_COOKIES + USEFUL_COOKIES):
         value = cookie_map.get(name)
         if value:
-            parts.append(f"{name}={value}")
-    # Also append any other cookies that arrived (don't lose extras Google sets).
-    known = set(REQUIRED_COOKIES + USEFUL_COOKIES)
-    for name, value in cookie_map.items():
-        if name not in known and value:
             parts.append(f"{name}={value}")
     return "; ".join(parts)
 
@@ -293,6 +296,23 @@ class YtmusicService:
 
     # ---------- session methods ----------
 
+    def verify_candidate(self, cookie_map: dict) -> dict:
+        """Confirm YouTube accepts these cookies, WITHOUT touching stored ones.
+
+        Sign-in must never damage a working session (M2): if a hand-off carries
+        the wrong account, an expired jar or a partial set, the attempt has to
+        fail while the previously stored headers stay exactly as they were. So
+        verification is deliberately separate from store_session(), and it must
+        NOT go through call()/clear_session() — that path drops the stored
+        session on a 401/403, which is the behaviour being avoided here.
+
+        Raises AuthError when required cookies are missing, or whatever the
+        upstream call raised when YouTube rejects the candidate.
+        """
+        headers = build_auth_headers(cookie_map)
+        candidate = YTMusic(auth=headers)
+        return candidate.get_account_info()
+
     def store_session(self, cookie_map: dict) -> dict:
         """Validate cookies, store headers securely, reset the client.
 
@@ -365,12 +385,20 @@ class YtmusicService:
             fn = getattr(client, method)
             return fn(*args, **kwargs)
         except Exception as e:
-            msg = str(e)
-            if "authentication" in msg.lower() or "not signed in" in msg.lower():
-                # Stored cookies most likely expired - drop the session so the
-                # frontend prompts sign-in again instead of looping on errors.
+            # The substring "authentication" used to decide session expiry, which
+            # also fired on network failures phrased with the same word. Classify
+            # on the real HTTP status instead: ytmusicapi surfaces request errors
+            # with a status attribute (or an "extracted <status>" message).
+            status = getattr(e, "status", None)
+            if status is None:
+                m = re.search(r"\b(?:extracted|status)[: ]+(\d{3})\b", str(e))
+                status = int(m.group(1)) if m else None
+            if status in (401, 403):
+                # Cookies most likely expired - drop the session so the frontend
+                # prompts sign-in again instead of looping on errors.
                 self.clear_session()
                 raise AuthError("Session expired or invalid. Please sign in again.") from e
+            # Any other failure (network, YouTube outage): keep the session.
             raise
 
 

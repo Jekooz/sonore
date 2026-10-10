@@ -68,6 +68,18 @@ namespace YtMusicClient.Services
         public Action Next;
 
         /// <summary>True when a queue exists and a further track follows the current one.</summary>
+        /// <summary>Reset playback debug state between runs (used by diagnostics / tests).</summary>
+        public void ResetDebugState()
+        {
+            _generation++;
+            _finished = false;
+            _statusText = "";
+            _currentUrl = null;
+            _prefetchFiredFor = null;
+            _lastPlayRequestUtc = DateTime.MinValue;
+            _lastPlayRequestVideoId = null;
+        }
+
         public bool HasNext => _queueIndex + 1 < _queue.Count;
 
         /// <summary>Set by the shell: Previous-button semantics (restart vs history).</summary>
@@ -100,6 +112,11 @@ namespace YtMusicClient.Services
 
         /// <summary>Track length in seconds once known, or 0.</summary>
         public double DurationSeconds => Duration.TotalSeconds;
+
+        /// <summary>The current track art, for the mini-chip + carousel refresh path.
+        /// Exposed for the Now Playing transport pill and the 3-card fan carousel so
+        /// they can observe art swaps without re-parsing PlayerState.Track.</summary>
+        public string CurrentArtworkUrl => ArtworkUrl;
 
         public PlaybackService()
         {

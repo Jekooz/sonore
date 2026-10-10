@@ -16,15 +16,22 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        <!-- Two-column shell: fixed navigation sidebar + flexible content. The title
+             bar and the persistent player bar span both columns. -->
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
         <!-- Glass chrome: title bar + tab pill, per DESIGN_TOKENS (glass only on floating chrome). -->
         <Grid x:Name="AppTitleBar"
               Grid.Row="0"
+              Grid.ColumnSpan="2"
               Height="48"
               Background="{ThemeResource GlassBrush}"
               BorderBrush="{ThemeResource TokenBorderBrush}"
               BorderThickness="0,0,0,1"
-              Padding="16,0,0,0">
+              Padding="32,0,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -46,31 +53,10 @@
                        VerticalAlignment="Center"
                        Margin="0,0,10,0" />
 
-            <!-- Pill segmented control: active tab = white bg + black text,
-                 inactive = transparent + secondary text. -->
-            <Border Grid.Column="1"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Background="{ThemeResource GlassStrongBrush}"
-                    BorderBrush="{ThemeResource TokenBorderStrongBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{ThemeResource PillCornerRadius}"
-                    Padding="4">
-                <StackPanel Orientation="Horizontal" Spacing="2">
-                    <RadioButton x:Name="HomeTab" GroupName="NavTabs"
-                                 Style="{StaticResource NavPillRadioButton}"
-                                 Tag="home" Content="Home" IsChecked="True" />
-                    <RadioButton x:Name="SearchTab" GroupName="NavTabs"
-                                 Style="{StaticResource NavPillRadioButton}"
-                                 Tag="search" Content="Search" />
-                    <RadioButton x:Name="LibraryTab" GroupName="NavTabs"
-                                 Style="{StaticResource NavPillRadioButton}"
-                                 Tag="library" Content="Library" />
-                    <RadioButton x:Name="NowPlayingTab" GroupName="NavTabs"
-                                 Style="{StaticResource NavPillRadioButton}"
-                                 Tag="nowplaying" Content="Now Playing" />
-                </StackPanel>
-            </Border>
+            <!-- Navigation moved out of the title bar into the sidebar below
+                 (sidebar + flexible content + persistent bottom player). The title
+                 bar keeps the brand mark and the account chip; the spacer column is
+                 what holds the chip over on the right. -->
 
             <!-- Signed out: quiet wordmark, clear of the caption buttons. -->
             <TextBlock x:Name="AppTitleText"
@@ -123,7 +109,108 @@
             </Button>
         </Grid>
 
-        <Frame x:Name="ContentFrame" Grid.Row="1" />
+        <!-- Navigation sidebar: the same four RadioButtons, with the same x:Name,
+             Tag and GroupName as the old title-bar pill, so the code-behind wiring
+             (HomeTab.Checked += NavTab_Checked, NavTab_Tapped) and the programmatic
+             selections (ShowNowPlaying, the sign-out flow) keep working untouched.
+             Only the style and the column changed. -->
+        <Border x:Name="NavSidebar"
+                Grid.Row="1"
+                Grid.Column="0"
+                Width="196"
+                Margin="12,4,0,12"
+                Padding="8"
+                CornerRadius="14"
+                VerticalAlignment="Top"
+                Background="{ThemeResource GlassBrush}"
+                BorderBrush="{ThemeResource TokenBorderBrush}"
+                BorderThickness="1">
+            <StackPanel Spacing="2">
+                <RadioButton x:Name="HomeTab" GroupName="NavTabs"
+                             Style="{StaticResource NavSidebarRadioButton}"
+                             Tag="home" Content="Home" IsChecked="True"
+                             AutomationProperties.Name="Home" />
+                <RadioButton x:Name="SearchTab" GroupName="NavTabs"
+                             Style="{StaticResource NavSidebarRadioButton}"
+                             Tag="search" Content="Search"
+                             AutomationProperties.Name="Search" />
+                <RadioButton x:Name="LibraryTab" GroupName="NavTabs"
+                             Style="{StaticResource NavSidebarRadioButton}"
+                             Tag="library" Content="Library"
+                             AutomationProperties.Name="Library" />
+                <RadioButton x:Name="NowPlayingTab" GroupName="NavTabs"
+                             Style="{StaticResource NavSidebarRadioButton}"
+                             Tag="nowplaying" Content="Now Playing"
+                             AutomationProperties.Name="Now Playing" />
+            </StackPanel>
+        </Border>
+
+        <!-- Page swap animation: NavigationThemeTransition eases each tab's
+             content in/out instead of hard-cutting between pages. -->
+        <Frame x:Name="ContentFrame" Grid.Row="1" Grid.Column="1">
+            <Frame.ContentTransitions>
+                <TransitionCollection>
+                    <NavigationThemeTransition>
+                        <NavigationThemeTransition.DefaultNavigationTransitionInfo>
+                            <EntranceNavigationTransitionInfo />
+                        </NavigationThemeTransition.DefaultNavigationTransitionInfo>
+                    </NavigationThemeTransition>
+                </TransitionCollection>
+            </Frame.ContentTransitions>
+        </Frame>
+
+        <!-- Browser sign-in overlay: shown while /auth/browser/start is in
+             flight. True-black glass scrim per DESIGN_TOKENS; a single card
+             with the live state, a Cancel button, and the extension-install
+             helper when the hand-off needs it. -->
+        <Grid x:Name="BrowserSignInOverlay"
+              Grid.Row="1"
+              Grid.ColumnSpan="2"
+              Background="#E6000000"
+              Opacity="0"
+              Visibility="Collapsed">
+            <Border Background="{ThemeResource GlassStrongBrush}"
+                    BorderBrush="{ThemeResource TokenBorderStrongBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    MaxWidth="420"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="24">
+                <StackPanel Spacing="12">
+                    <ProgressRing x:Name="SignInRing"
+                                  Width="32" Height="32"
+                                  IsActive="True"
+                                  Foreground="{ThemeResource AccentBrush}" />
+                    <TextBlock x:Name="SignInHeadline"
+                               Text="Waiting for you to sign in…"
+                               Style="{StaticResource SectionHeaderText}"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap" />
+                    <TextBlock x:Name="SignInDetail"
+                               Style="{StaticResource SecondaryText}"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap" />
+                    <Button x:Name="OpenExtensionFolderButton"
+                            Content="Open the helper extension folder"
+                            Style="{StaticResource AccentButtonStyle}"
+                            CornerRadius="{StaticResource PillCornerRadius}"
+                            HorizontalAlignment="Center"
+                            Visibility="Collapsed"
+                            Click="OpenExtensionFolder_Click" />
+                    <Button x:Name="CancelSignInButton"
+                            Content="Cancel"
+                            Background="Transparent"
+                            BorderThickness="1"
+                            BorderBrush="{ThemeResource TokenBorderStrongBrush}"
+                            Foreground="{ThemeResource TextSecondaryBrush}"
+                            CornerRadius="{StaticResource PillCornerRadius}"
+                            Padding="20,8"
+                            HorizontalAlignment="Center"
+                            Click="CancelSignIn_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
 
         <!-- Persistent player bar: rounded glass pill, per DESIGN_TOKENS.
              Glass rgba(255,255,255,0.10) with blur-equivalent dark tint,
@@ -131,8 +218,9 @@
              (120deg white gradient at ~0.16 opacity) on the leading edge. -->
         <Grid x:Name="PlayerBar"
               Grid.Row="2"
+              Grid.ColumnSpan="2"
               Height="64"
-              Margin="0,0,16,16"
+              Margin="16,0,16,16"
               CornerRadius="18"
               Background="{ThemeResource GlassStrongBrush}"
               BorderBrush="{ThemeResource TokenBorderStrongBrush}"
@@ -145,21 +233,26 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- Diagonal specular highlight: white gradient at 120deg, ~0.16 opacity,
-                 clipped to the pill by being a child of the rounded Grid. -->
+            <!-- Leading-edge specular sheen: a real soft diagonal gradient (~0.16
+                 peak), sized to stay inside the pill. It used to be a SOLID
+                 #29FFFFFF slab 120px tall rotated 120° inside a 64px bar, so it
+                 overshot the pill's bounds and rendered as a hard-edged block —
+                 the artefact on the player bar. Ignore pointer input so the
+                 sheen never steals clicks from the controls beneath it. -->
             <Rectangle x:Name="PlayerBarSpecular"
                        Grid.Column="0" Grid.ColumnSpan="4"
-                       Fill="#29FFFFFF"
-                       Margin="-20,0,120,0"
-                       Width="60" Height="120"
+                       Width="160" Height="64"
+                       RadiusX="18" RadiusY="18"
                        VerticalAlignment="Center"
-                       HorizontalAlignment="Left">
-                <Rectangle.RenderTransform>
-                    <RotateTransform Angle="120" CenterX="30" CenterY="30" />
-                </Rectangle.RenderTransform>
-                <Rectangle.Clip>
-                    <RectangleGeometry Rect="0,0,60,120" />
-                </Rectangle.Clip>
+                       HorizontalAlignment="Left"
+                       IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#00FFFFFF" Offset="0" />
+                        <GradientStop Color="#29FFFFFF" Offset="0.45" />
+                        <GradientStop Color="#00FFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
             </Rectangle>
 
             <!-- Art + title/artist: one click target that opens Now Playing. -->
@@ -176,12 +269,16 @@
                             CornerRadius="8"
                             Background="{ThemeResource RaisedBrush}" />
                     <StackPanel VerticalAlignment="Center" Spacing="1" MaxWidth="220">
+                        <!-- The bar is only 220px wide, so both lines trim — the
+                             tooltip is what keeps the FULL metadata reachable. -->
                         <TextBlock x:Name="BarTitle"
                                    Text="{x:Bind Player.TrackTitle, Mode=OneWay}"
+                                   ToolTipService.ToolTip="{x:Bind Player.TrackTitle, Mode=OneWay}"
                                    Style="{StaticResource CardTitleText}"
                                    TextTrimming="CharacterEllipsis" MaxLines="1" />
                         <TextBlock x:Name="BarArtist"
                                    Text="{x:Bind Player.TrackArtist, Mode=OneWay}"
+                                   ToolTipService.ToolTip="{x:Bind Player.TrackArtist, Mode=OneWay}"
                                    Style="{StaticResource MutedText}"
                                    TextTrimming="CharacterEllipsis" MaxLines="1" />
                     </StackPanel>
@@ -196,15 +293,17 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="BarPositionText" Grid.Column="0" Text="–:––"
-                           Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="34" />
+                           Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="46" />
+                <!-- Enabled only while a track is loaded (x:Bind): pointer-driven
+                     seek needs a loaded source, otherwise drags do nothing. -->
                 <controls:BufferedSeekBar x:Name="BarSeekBar" Grid.Column="1"
                                           VerticalAlignment="Center"
-                                          IsEnabled="False"
+                                          IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
                                           SeekRequested="BarSeekBar_SeekRequested"
                                           PreviewChanged="BarSeekBar_PreviewChanged"
                                           AutomationProperties.Name="Seek bar" />
                 <TextBlock x:Name="BarDurationText" Grid.Column="2" Text="–:––"
-                           Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="34"
+                           Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="46"
                            TextAlignment="Right" />
             </Grid>
 
@@ -248,17 +347,19 @@
                         VerticalAlignment="Center"
                         AutomationProperties.Name="Volume"
                         ValueChanged="BarVolumeSlider_ValueChanged">
-                    <Slider.ContextFlyout>
-                        <MenuFlyout />
-                    </Slider.ContextFlyout>
+                    <!-- Accent comes from the token, not a second copy of the hex.
+                         These were seven hard-coded # FA2D48 values duplicating
+                         AccentColor, so a change to the accent (or a future
+                         artwork-derived accent) silently left the volume slider
+                         behind on the old colour. -->
                     <Slider.Resources>
-                        <SolidColorBrush x:Key="SliderThumbBackground" Color="#FA2D48" />
-                        <SolidColorBrush x:Key="SliderOuterThumbBackground" Color="#FA2D48" />
-                        <SolidColorBrush x:Key="SliderThumbBorderBrush" Color="#FA2D48" />
-                        <SolidColorBrush x:Key="SliderTrackValueFill" Color="#FA2D48" />
-                        <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FA2D48" />
-                        <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FA2D48" />
-                        <SolidColorBrush x:Key="SliderTrackValueFillDisabled" Color="#FA2D48" />
+                        <SolidColorBrush x:Key="SliderThumbBackground" Color="{StaticResource AccentColor}" />
+                        <SolidColorBrush x:Key="SliderOuterThumbBackground" Color="{StaticResource AccentColor}" />
+                        <SolidColorBrush x:Key="SliderThumbBorderBrush" Color="{StaticResource AccentColor}" />
+                        <SolidColorBrush x:Key="SliderTrackValueFill" Color="{StaticResource AccentColor}" />
+                        <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="{StaticResource AccentColor}" />
+                        <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="{StaticResource AccentColor}" />
+                        <SolidColorBrush x:Key="SliderTrackValueFillDisabled" Color="{StaticResource AccentColor}" />
                     </Slider.Resources>
                 </Slider>
             </StackPanel>

@@ -1,19 +1,24 @@
 using System;
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using YtMusicClient.Services;
 
 namespace YtMusicClient.Views
 {
     /// <summary>
-    /// Now Playing: ambient artwork background, 3D-style fan carousel of the
-    /// previous/current/next tracks, big title/artist, action icons (like +
-    /// queue), the Up Next panel, an autoplay toggle, and a floating transport
-    /// pill. Binds to <see cref="PlayerState"/> and <see cref="QueueManager"/>
-    /// via x:Bind for text; one PropertyChanged subscription each drives the
-    /// imperative bits (artwork, carousel, seek bar, times). No polling timers.
+    /// Now Playing: ambient artwork background, a 3-card carousel — current track
+    /// center, previous/next smaller at the sides (click to jump; the right card
+    /// previews the next song, per the mockup) — seek bar, like + autoplay
+    /// actions, and a floating transport pill whose mini chip shows the playing
+    /// track. (The Up Next rail this used to describe was removed from the page;
+    /// the queue is represented by the side preview cards.) Binds to
+    /// <see cref="PlayerState"/> and <see cref="QueueManager"/> via x:Bind for
+    /// text; one PropertyChanged subscription each drives the imperative bits
+    /// (artwork, carousel, seek bar, times). No polling timers.
     /// </summary>
     public sealed partial class NowPlayingPage : Page
     {
@@ -22,25 +27,33 @@ namespace YtMusicClient.Views
         public PlayerState Player => App.PlayerState;
         public QueueManager Queue => App.Queue;
 
+        // Last artwork painted, so a track change (not every state tick) drives
+        // the cross-fade into the new ambient + card art.
+        private string _lastArtUrl;
+
         public NowPlayingPage()
         {
             InitializeComponent();
 
             App.PlayerState.PropertyChanged += Player_PropertyChanged;
             App.Queue.PropertyChanged += Queue_PropertyChanged;
-            Loaded += NowPlayingPage_Loaded;
-            Unloaded += NowPlayingPage_Unloaded;
+            App.Playback.PropertyChanged += Playback_PropertyChanged;
         }
 
-        private void NowPlayingPage_Loaded(object sender, RoutedEventArgs e)
+        private void NowPlayingPage_OnLoaded(object sender, RoutedEventArgs e)
         {
             RefreshFromState(); // pages are cached (NavigationCacheMode=Enabled): catch up on load
+            RefreshCarousel();  // side preview cards need this too: queue changes alone won't fire while hidden
+            if (App.Window is MainWindow mainWindow)
+                mainWindow.SetPlayerBarVisible(false); // this page IS the full player
         }
 
-        private void NowPlayingPage_Unloaded(object sender, RoutedEventArgs e)
+        private void NowPlayingPage_OnUnloaded(object sender, RoutedEventArgs e)
         {
             // PropertyChanged stays subscribed: the page is cached and re-shown,
             // and the handlers are cheap when nothing is playing.
+            if (App.Window is MainWindow mainWindow)
+                mainWindow.SetPlayerBarVisible(true);
         }
 
         /// <summary>PlayerState changes: track/artwork, seek bar, times.</summary>
@@ -51,6 +64,19 @@ namespace YtMusicClient.Views
                 ApplyPlayerChange(e.PropertyName);
             else
                 _ = queue.TryEnqueue(() => ApplyPlayerChange(e.PropertyName));
+        }
+
+        /// <summary>PlaybackService changes: art swap refresh for the center card + mini chip.</summary>
+        private void Playback_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(PlaybackService.CurrentArtworkUrl))
+            {
+                var queue = App.Window?.DispatcherQueue;
+                if (queue == null || queue.HasThreadAccess)
+                    Player_ArtworkChanged();
+                else
+                    _ = queue.TryEnqueue(Player_ArtworkChanged);
+            }
         }
 
         /// <summary>QueueManager changes: carousel (prev/current/next) redraw.</summary>
@@ -67,6 +93,18 @@ namespace YtMusicClient.Views
                 else
                     _ = queue.TryEnqueue(RefreshCarousel);
             }
+        }
+
+        /// <summary>Artwork swaps: refresh the center card and the mini chip so the
+        /// transport pill track art can update without waiting on another Track change.
+        /// Mirrors the new CurrentArtworkUrl path (M2 playback polish).</summary>
+        private void Player_ArtworkChanged()
+        {
+            var url = App.Playback.CurrentArtworkUrl;
+            SetArt(CarouselCurrentArt, url);
+            SetArt(MiniTrackArt, url);
+            MiniTrackName.Text = Player.TrackTitle;
+            MiniTrackSubtitle.Text = Player.TrackArtist;
         }
 
         private void ApplyPlayerChange(string propertyName)
@@ -87,29 +125,64 @@ namespace YtMusicClient.Views
                     }
                     DurationText.Text = Player.Duration > TimeSpan.Zero ? FormatTime(Player.Duration) : "–:––";
                     break;
+
+                case nameof(PlayerState.Volume):
+                    PageMuteGlyph.Glyph = Player.VolumePercent <= 0 ? "\uE74F" : "\uE767"; // muted : speaker
+                    break;
+
+                case nameof(PlayerState.Shuffle):
+                case nameof(PlayerState.Repeat):
+                    UpdatePlayModes();
+                    break;
             }
         }
 
         /// <summary>
-        /// Update the ambient background + the carousel artwork from the current
-        /// track (and its prev/next neighbours). Called on Track change and on
-        /// queue changes.
+        /// Update the ambient background + the carousel cards from the current
+        /// track. Called on Track change (and on load for cached pages).
+        /// Mapped to the Spotify-style Now Playing mock: center card shows artist
+        /// on top and track title below; mini chip in the transport pill mirrors it.
         /// </summary>
         private void RefreshFromState()
         {
             var state = App.PlayerState;
             string url = state.Track?.ArtworkUrl;
+            bool artChanged = !string.Equals(url, _lastArtUrl, StringComparison.Ordinal);
+            _lastArtUrl = url;
 
-            // Ambient background: the current track's own art, dimmed.
+            // Ambient background: the current track's own art, oversized + dimmed.
             SetImageSource(AmbientArt, url);
             AmbientArt.Visibility = !string.IsNullOrEmpty(url) ? Visibility.Visible : Visibility.Collapsed;
             AmbientOverlay.Visibility = AmbientArt.Visibility;
 
-            // Carousel: current artwork is the big center card.
-            SetImageSource(CarouselCurrentImage, url);
-            CarouselCurrentImage.Visibility = state.HasTrack ? Visibility.Visible : Visibility.Collapsed;
+            // New track: ease the ambient wash and the card art in instead of
+            // hard-swapping, so skipping tracks feels continuous.
+            if (artChanged)
+            {
+                Motion.Fade(AmbientArt, 0, 0.3, 0.45);
+                Motion.Fade(CarouselCurrentArt, 0.35, 1, 0.35);
+                Motion.Fade(MiniTrackArt, 0.35, 1, 0.35);
+            }
 
-            // Carousel neighbours refresh on the next queue tick (Queue_PropertyChanged
+            // Center card: track title first (the prominent line), artist beneath it.
+            SetArt(CarouselCurrentArt, url);
+            CurrentTitle.Text = state.Track?.Title ?? "";
+            CurrentArtist.Text = state.Track?.Artist ?? "";
+
+            // Mini chip art in the transport pill.
+            SetArt(MiniTrackArt, url);
+
+            MiniTrackName.Text = state.Track?.Title ?? "";
+            MiniTrackSubtitle.Text = state.Track?.Artist ?? "";
+
+            PageMuteGlyph.Glyph = state.VolumePercent <= 0 ? "\uE74F" : "\uE767";
+
+            // Per-track/local state: re-sync so a cached page (or a track that
+            // just changed) never shows the previous track's like or modes.
+            UpdateLikeGlyph();
+            UpdatePlayModes();
+
+            // Side cards refresh on the next queue tick (Queue_PropertyChanged
             // → RefreshCarousel) so they always reflect the live queue.
             if (!state.HasTrack)
             {
@@ -118,21 +191,36 @@ namespace YtMusicClient.Views
             }
         }
 
+        /// <summary>
+        /// Side preview cards: previous (left) and next (right) with their real
+        /// artist/track labels inside the glass card — the right card is the
+        /// "next song preview" the mockup shows.
+        /// </summary>
         private void RefreshCarousel()
         {
-            // Previous card: the track before current in the queue.
             var prev = Queue.Previous;
-            SetImageSource(CarouselPrevImage, prev?.ArtworkUrl);
+            SetArt(CarouselPrevArt, prev?.ArtworkUrl);
             CarouselPrev.Visibility = prev != null ? Visibility.Visible : Visibility.Collapsed;
+            if (prev != null)
+            {
+                CarouselPrevTitle.Text = prev.Title ?? "";
+                CarouselPrevArtist.Text = prev.Artist ?? "";
+            }
 
-            // Next card: the first upcoming track.
             var next = Queue.Upcoming.Count > 0 ? Queue.Upcoming[0] : null;
-            SetImageSource(CarouselNextImage, next?.ArtworkUrl);
+            SetArt(CarouselNextArt, next?.ArtworkUrl);
             CarouselNext.Visibility = next != null ? Visibility.Visible : Visibility.Collapsed;
+            if (next != null)
+            {
+                CarouselNextTitle.Text = next.Title ?? "";
+                CarouselNextArtist.Text = next.Artist ?? "";
+            }
         }
 
         private static void SetImageSource(Image image, string url)
         {
+            if (image == null)
+                return;
             if (string.IsNullOrEmpty(url))
             {
                 image.Source = null;
@@ -146,6 +234,34 @@ namespace YtMusicClient.Views
             catch (UriFormatException)
             {
                 image.Source = null; // bad URL: quiet placeholder, don't crash
+            }
+        }
+
+        /// <summary>Art painted as a Border's ImageBrush background: the rounded
+        /// corners clip the brush (a raw Image child would poke out of rounded
+        /// corners). Falls back to the raised placeholder on bad/empty URLs.</summary>
+        private static void SetArt(Border host, string url)
+        {
+            if (host == null)
+                return;
+
+            if (string.IsNullOrEmpty(url))
+            {
+                host.Background = (Brush)Application.Current.Resources["RaisedBrush"];
+                return;
+            }
+
+            try
+            {
+                host.Background = new ImageBrush
+                {
+                    ImageSource = new BitmapImage(new Uri(url)),
+                    Stretch = Stretch.UniformToFill
+                };
+            }
+            catch (UriFormatException)
+            {
+                host.Background = (Brush)Application.Current.Resources["RaisedBrush"];
             }
         }
 
@@ -168,48 +284,65 @@ namespace YtMusicClient.Views
         private void NextButton_Click(object sender, RoutedEventArgs e)
             => App.Playback.Next?.Invoke();
 
+        private void PageMuteButton_Click(object sender, RoutedEventArgs e)
+        {
+            var volume = App.PlayerState.VolumePercent;
+            App.PlayerState.VolumePercent = volume > 0 ? 0 : 80;
+        }
+
         /// <summary>Like toggle: flips the local PlayerState.Liked only.</summary>
         /// <remarks>The backend like endpoint is not wired yet (flagged to the user);
         /// the heart icon reflects local state so the UI is honest about what it knows.</remarks>
         private void LikeButton_Click(object sender, RoutedEventArgs e)
         {
             Player.Liked = !Player.Liked;
+            UpdateLikeGlyph();
+        }
+
+        /// <summary>Paint the heart from PlayerState.Liked. Re-run on track change and
+        /// page reload so it can never display a stale track's like.</summary>
+        private void UpdateLikeGlyph()
+        {
             LikeGlyph.Foreground = Player.Liked
-                ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentBrush"]
-                : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextSecondaryBrush"];
+                ? (Brush)Application.Current.Resources["AccentBrush"]
+                : (Brush)Application.Current.Resources["TextSecondaryBrush"];
             LikeGlyph.Glyph = Player.Liked ? "\uE736" : "\uE735"; // filled heart : outline heart
         }
 
-        /// <summary>Queue button: scroll the Up Next panel into view.</summary>
-        private void QueueButton_Click(object sender, RoutedEventArgs e)
+        private void ShuffleButton_Click(object sender, RoutedEventArgs e)
         {
-            if (UpNextPanel.Visibility == Visibility.Visible)
-            {
-                UpNextPanel.StartBringIntoView();
-            }
+            Player.Shuffle = !Player.Shuffle;
+            UpdatePlayModes();
         }
 
-        /// <summary>Up Next item click: start playback from that track in the current queue.</summary>
-        private async void UpNext_Click(object sender, RoutedEventArgs e)
+        /// <summary>Repeat cycles off → all → one, matching PlayerState.RepeatMode.</summary>
+        private void RepeatButton_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is not QueueTrack track)
-                return;
-            if (string.IsNullOrEmpty(track.VideoId))
-                return;
+            Player.Repeat = Player.Repeat switch
+            {
+                RepeatMode.Off => RepeatMode.All,
+                RepeatMode.All => RepeatMode.One,
+                _ => RepeatMode.Off,
+            };
+            UpdatePlayModes();
+        }
 
-            // The visible Up Next list is the queue context; play from this track.
-            var queue = new System.Collections.Generic.List<QueueTrack>(Queue.Upcoming.Count + 1);
-            queue.Add(Player.Track ?? track);
-            foreach (var t in Queue.Upcoming)
-                queue.Add(t);
+        /// <summary>Accent marks an active shuffle/repeat, per DESIGN_TOKENS (accent
+        /// only for active/interactive states); the labels stay descriptive.</summary>
+        private void UpdatePlayModes()
+        {
+            var accent = (Brush)Application.Current.Resources["AccentBrush"];
+            var secondary = (Brush)Application.Current.Resources["TextSecondaryBrush"];
 
-            int idx = queue.FindIndex(t => t.VideoId == track.VideoId);
-            if (idx < 0)
-                idx = 0;
+            ShuffleGlyph.Foreground = Player.Shuffle ? accent : secondary;
 
-            await App.Playback.PlayAsync(queue, idx);
-            if (App.Window is MainWindow mainWindow)
-                mainWindow.ShowNowPlaying();
+            RepeatGlyph.Foreground = Player.Repeat != RepeatMode.Off ? accent : secondary;
+            RepeatGlyph.Glyph = Player.Repeat == RepeatMode.One ? "\uE8ED" : "\uE8EE"; // one : all
+
+            ShuffleButton.SetValue(AutomationProperties.NameProperty,
+                Player.Shuffle ? "Shuffle on" : "Shuffle off");
+            RepeatButton.SetValue(AutomationProperties.NameProperty,
+                "Repeat " + Player.Repeat.ToString().ToLowerInvariant());
         }
 
         private static string FormatTime(TimeSpan time)

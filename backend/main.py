@@ -21,9 +21,11 @@ Endpoints:
 """
 
 import http.client
+import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -32,9 +34,14 @@ import threading
 import time
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from services.browser_auth import (
+    WAIT_TIMEOUT_SECONDS,
+    BrowserAuthSession,
+    detect_default_browser,
+)
 from services.ytmusic_client import (
     REQUIRED_COOKIES,
     AuthError,
@@ -47,6 +54,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ytmusic-backend")
 
 PORT_FILE = os.path.join(tempfile.gettempdir(), "ytmusic_sidecar_port.txt")
+
+# The port this process is actually listening on. Set in __main__ before
+# uvicorn.run so the extension can be told where to call back; the request URL
+# is only a fallback for a backend started some other way.
+_BOUND_PORT = 0
+
+# Where the companion extension lives. This is the ONLY folder a pairing file
+# can work from: an extension page may fetch resources only from its own
+# installation (Chrome docs, "Cross-origin network requests"), so a config file
+# anywhere else on disk is unreadable by the extension by design.
+_EXTENSION_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "browser-extension"
+)
+PAIRING_FILE = os.path.join(_EXTENSION_DIR, "sidecar.json")
 
 
 @app.get("/health")
@@ -67,60 +88,328 @@ def auth_status():
         return JSONResponse(content={"logged_in": False, "error": str(e)})
 
 
-@app.post("/auth/cookies")
-async def auth_cookies(payload: dict):
-    """
-    Complete sign-in. Body: {"cookies": {"SID": "...", "__Secure-3PAPISID": "...", ...}}
-
-    The frontend captures these from its embedded browser (WebView2 CookieManager,
-    which can read HttpOnly cookies) after the user signs in at music.youtube.com.
-    Headers are stored encrypted via Windows DPAPI — never written to disk in
-    plaintext.
-    """
-    cookies = payload.get("cookies")
-    if not isinstance(cookies, dict) or not cookies:
-        raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
-
-    # Log names only, never values — this is what tells us whether the capture
-    # side delivered a complete YouTube session when sign-in does not verify.
-    logger.info("Received %d cookies: %s", len(cookies), ", ".join(sorted(cookies)))
-    missing = [n for n in REQUIRED_COOKIES if not cookies.get(n)]
+def _log_cookie_count(cookies: dict, source: str, missing: list[str] | None = None) -> None:
+    """Log COUNTS only, never cookie names and never values."""
+    line = f"{source}: received {len(cookies)} cookies"
     if missing:
-        logger.warning("Missing required cookie(s): %s", ", ".join(missing))
+        line += f", {len(missing)} of {len(REQUIRED_COOKIES)} required cookie names missing"
+    logger.info(line)
 
+
+def _validate_and_store(cookies: dict, source: str) -> dict:
+    """
+    Shared completion path for every cookie source (WebView2 historically;
+    browser/extension hand-off now). Gate on required session cookies, confirm
+    the candidate against YouTube, and only then store it encrypted. A bad
+    hand-off therefore fails loudly here without disturbing the session that is
+    already stored. Anonymous cookies like YSC/VISITOR_INFO1_LIVE alone do NOT
+    count as signed in.
+    """
+    missing = [n for n in REQUIRED_COOKIES if not cookies.get(n)]
+    _log_cookie_count(cookies, source, missing)
+    if missing:
+        # 422 (not 401): the request delivered data, just not a signed-in set.
+        if any(cookies.get(n) for n in REQUIRED_COOKIES):
+            quantifier = "some"
+        else:
+            quantifier = "none"
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Sign-in incomplete: {quantifier} of the required session cookies "
+                f"are present ({len(missing)} of {len(REQUIRED_COOKIES)} missing). "
+                "Sign in to music.youtube.com in your browser, then try again."
+            ),
+        )
+
+    # Validate the candidate BEFORE touching the credential store (M2).
+    #
+    # The previous order stored first and cleared the session when YouTube then
+    # rejected it, so a single bad hand-off -- wrong account, stale cookies,
+    # half a jar -- destroyed a working session. Verification now runs against a
+    # throwaway client built from these cookies, leaving whatever is already
+    # stored completely untouched.
     try:
-        result = ytmusic_service.store_session(cookies)
-    except StorageError as e:
-        # StorageError subclasses AuthError, so it must be caught first.
-        logger.error("Keyring storage failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        account = ytmusic_service.verify_candidate(cookies)
     except AuthError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        logger.error("Candidate session from %s is incomplete.", source)
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        logger.exception("Storing session failed")
-        raise HTTPException(status_code=500, detail=f"Could not store session: {e}")
-
-    # Validate the session right away so the user learns immediately if the
-    # cookies don't actually work (e.g. signed into the wrong account).
-    try:
-        account = ytmusic_service.call("get_account_info")
-        result["account"] = account
-    except Exception as e:
+        # Log the exception TYPE only: str/repr of an upstream error can carry
+        # request detail, and this process must never record session material.
         logger.error(
-            "Session stored but YouTube did not treat it as authenticated: %r", e)
-        ytmusic_service.clear_session()
+            "Candidate session from %s was rejected by YouTube (%s).",
+            source, type(e).__name__)
         raise HTTPException(
             status_code=401,
             detail=f"Sign-in could not be verified with YouTube Music: {e}",
         )
 
-    return JSONResponse(content=result)
+    # Only now persist. StorageError subclasses AuthError, so it goes first.
+    try:
+        result = ytmusic_service.store_session(cookies)
+    except StorageError as e:
+        logger.error("Credential storage failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.exception("Storing session failed")
+        raise HTTPException(status_code=500, detail=f"Could not store session: {e}")
+
+    result["account"] = account
+    return result
+
+
+@app.post("/auth/cookies")
+async def auth_cookies(payload: dict):
+    """
+    Complete sign-in. Body: {"cookies": {"SID": "...", "__Secure-3PAPISID": "...", ...}}
+
+    Kept for programmatic/diagnostic use; the UI flow now goes through
+    /auth/browser/start + /auth/extension. Same validation + storage path.
+    """
+    cookies = payload.get("cookies")
+    if not isinstance(cookies, dict) or not cookies:
+        raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
+    return JSONResponse(content=_validate_and_store(cookies, "auth/cookies"))
 
 
 @app.post("/auth/signout")
 def auth_signout():
     ytmusic_service.clear_session()
     return JSONResponse(content={"signed_out": True})
+
+
+# ---------------- browser-based sign-in (replaces the WebView2 window) ----------------
+
+# The active BrowserAuthSession for this process, if a sign-in is in flight.
+_browser_session: BrowserAuthSession | None = None
+_browser_session_lock = threading.Lock()
+
+# Placed here by /auth/extension when the hand-off arrives. The session's poll
+# thread picks it up (cookie_source below), closing the loop without polling
+# playlists or disk.
+_extension_cookies: dict | None = None
+_extension_cookies_event = threading.Event()
+
+
+def _extension_cookie_source() -> dict | None:
+    """Strategy-B source: the extension POSTs its youtube.com jar here."""
+    global _extension_cookies
+    if _extension_cookies_event.wait(0.1):
+        _extension_cookies_event.clear()
+        jar = _extension_cookies
+        # Drop our copy: the session is already stored by the time this runs, so
+        # there is no reason to keep raw session cookies in memory afterwards.
+        _extension_cookies = None
+        return jar
+    return None
+
+
+def _clear_browser_session() -> None:
+    global _browser_session
+    with _browser_session_lock:
+        if _browser_session is not None:
+            _browser_session.cancel()
+        _browser_session = None
+
+
+# ---------------- extension pairing token ----------------
+
+# Sign-in hardening (M2). The hand-off used to be accepted from any local caller
+# at any time, and the X-Ytm-Token header was documented but never read. Now every
+# attempt issues one cryptographically random token, publishes {port, token} where
+# only the extension can read it, and demands that exact token back before anything
+# is stored. The token is single-use (consumed before the cookie jar is touched),
+# expires with the attempt, and is rotated by every new attempt -- so an
+# unsolicited request, a stale token and a replay are all rejected. Token values
+# are never logged.
+_pairing_token: str | None = None
+_pairing_issued_at = 0.0
+
+
+def _current_port(request: Request) -> int:
+    """The port the extension must call back on."""
+    return _BOUND_PORT or request.url.port or 0
+
+
+def _write_pairing_file(port: int, token: str) -> bool:
+    """Publish {port, token} for the extension to read.
+
+    Best-effort: if the folder is missing or unwritable the attempt simply
+    cannot pair, which the UI already reports, so this must never raise.
+    """
+    try:
+        os.makedirs(_EXTENSION_DIR, exist_ok=True)
+        tmp_path = PAIRING_FILE + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump({"port": port, "token": token}, f)
+        os.replace(tmp_path, PAIRING_FILE)
+        return True
+    except OSError as e:
+        logger.warning("Could not publish the extension pairing file: %s", e)
+        return False
+
+
+def _clear_pairing() -> None:
+    """Invalidate the pairing token and remove its file. Idempotent."""
+    global _pairing_token, _pairing_issued_at
+    _pairing_token = None
+    _pairing_issued_at = 0.0
+    try:
+        if os.path.exists(PAIRING_FILE):
+            os.remove(PAIRING_FILE)
+    except OSError as e:
+        logger.warning("Could not remove the extension pairing file: %s", e)
+
+
+def _issue_pairing(port: int) -> None:
+    """Rotate the pairing token for a new attempt.
+
+    Rotation is what retires the previous attempt's token: only the newest
+    hand-off can complete, even if an older popup is still open somewhere.
+    """
+    global _pairing_token, _pairing_issued_at
+    _pairing_token = secrets.token_urlsafe(32)
+    _pairing_issued_at = time.monotonic()
+    if _write_pairing_file(port, _pairing_token):
+        logger.info(
+            "Sign-in pairing token issued for port %s (valid %d s).",
+            port, int(WAIT_TIMEOUT_SECONDS),
+        )
+
+
+def _consume_pairing_token(provided: str | None) -> str | None:
+    """Validate the handshake token, or return why the request must be rejected.
+
+    A wrong token is NOT consumed, so a retry with the right one still works
+    (guessing is hopeless against 256 bits of entropy). A correct token IS
+    consumed here, before the caller stores anything, which is what makes a
+    replay impossible.
+    """
+    global _pairing_token, _pairing_issued_at
+    if not provided:
+        return "Missing pairing token."
+    if _pairing_token is None or not secrets.compare_digest(provided, _pairing_token):
+        return "Invalid pairing token."
+    if time.monotonic() - _pairing_issued_at > WAIT_TIMEOUT_SECONDS:
+        return "Pairing token expired."
+    _pairing_token = None
+    _pairing_issued_at = 0.0
+    return None
+
+
+def _sign_in_pending() -> bool:
+    """True while an attempt is actually waiting for a hand-off.
+
+    A timed-out, failed, cancelled or completed attempt still leaves an object
+    in _browser_session, so the state -- not merely its existence -- decides
+    whether a hand-off may be accepted.
+    """
+    session = _browser_session
+    return session is not None and session.status().get("state") == "waiting"
+
+
+@app.get("/auth/browser/info")
+def auth_browser_info():
+    """Friendly name of the default HTTPS browser, for the UI's prompt text."""
+    return JSONResponse(content={"browser": detect_default_browser()})
+
+
+@app.post("/auth/browser/start")
+def auth_browser_start(request: Request):
+    """
+    Start a sign-in: detect the default browser, open music.youtube.com in it,
+    and poll (2 s interval, 3 min timeout) for the extension hand-off. The UI
+    follows along via /auth/browser/status.
+
+    Also rotates the handshake token and publishes {port, token} into the
+    extension folder -- the only location the extension is able to read it from.
+    """
+    global _browser_session
+
+    _clear_browser_session()
+    _extension_cookies = None
+    _extension_cookies_event.clear()
+
+    session = BrowserAuthSession(cookie_source=_extension_cookie_source)
+    with _browser_session_lock:
+        _browser_session = session
+
+    # The session must exist before the token is issued: a hand-off is only
+    # accepted while an attempt is actually waiting.
+    _issue_pairing(_current_port(request))
+
+    session.start()
+    return JSONResponse(content=session.status())
+
+
+@app.get("/auth/browser/status")
+def auth_browser_status():
+    if _browser_session is None:
+        return JSONResponse(
+            content={"state": "idle", "browser": detect_default_browser(), "error": None}
+        )
+
+    status = _browser_session.status()
+    if status.get("state") != "waiting":
+        # Terminal state: the pairing file must not outlive the attempt it was
+        # issued for. Idempotent, and it is also the only thing that cleans up
+        # after a timeout.
+        _clear_pairing()
+    return JSONResponse(content=status)
+
+
+@app.post("/auth/browser/cancel")
+def auth_browser_cancel():
+    _clear_browser_session()
+    _clear_pairing()
+    return JSONResponse(content={"state": "cancelled"})
+
+
+@app.post("/auth/extension")
+def auth_extension(payload: dict, request: Request):
+    """
+    Extension hand-off: the MV3 companion extension reads youtube.com cookies
+    (chrome.cookies includes HttpOnly) and POSTs them here. Same validation +
+    storage as /auth/cookies, then the waiting browser session is marked done.
+
+    Auth: X-Ytm-Token must be the single-use pairing token this backend wrote to
+    browser-extension/sidecar.json when sign-in started. That rejects an
+    unsolicited caller, a token left over from an earlier attempt, and a replay
+    of one already accepted. 409 when no attempt is waiting; 401 otherwise.
+    Token and cookie VALUES are never logged.
+    """
+    global _extension_cookies
+
+    # Order matters: is anything waiting, then is the caller authorised, then is
+    # the body well formed. Nothing is stored until all three pass.
+    if not _sign_in_pending():
+        logger.warning("Rejected extension hand-off: no sign-in in progress.")
+        raise HTTPException(
+            status_code=409,
+            detail="No sign-in is in progress. Start sign-in from the app first.",
+        )
+
+    rejection = _consume_pairing_token(request.headers.get("X-Ytm-Token"))
+    if rejection is not None:
+        logger.warning("Rejected extension hand-off: %s", rejection)
+        raise HTTPException(status_code=401, detail=rejection)
+
+    cookies = payload.get("cookies")
+    if not isinstance(cookies, dict) or not cookies:
+        raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
+
+    try:
+        result = _validate_and_store(cookies, "auth/extension")
+    except HTTPException as e:
+        if _browser_session is not None:
+            _browser_session.fail(e.detail)
+        raise
+
+    _extension_cookies = cookies
+    _extension_cookies_event.set()
+
+    return JSONResponse(content=result)
 
 
 # ---------------- account + data ----------------
@@ -180,9 +469,164 @@ def library_liked():
     return JSONResponse(content=liked.get("tracks", []))
 
 
+# Album / playlist contents.
+#
+# The Home, Library and Search cards carry only an id — a browseId for albums
+# (MPREb_…) or a playlistId for playlists. Without these two endpoints there was
+# no way to turn a collection card into playable tracks, so clicking an album or
+# playlist did nothing at all and only single songs could play.
+def _normalize_album(track: dict) -> dict:
+    """Force the album field to the object shape the client DTO expects.
+
+    get_album() returns "album" as a plain string ("AUJLA SZN 1"), while
+    get_playlist()/get_liked_songs() return {"name": ..., "id": ...}. The
+    frontend Track DTO models the object shape, so a raw string made
+    deserialization throw (JsonException -> AlbumRef) and the album never
+    played. Normalizing here keeps one shape for every track list.
+    """
+    album = track.get("album")
+    if isinstance(album, str):
+        return {**track, "album": {"name": album, "id": None}}
+    return track
+
+
+def _credit_names(value) -> str:
+    """One credit line from ytmusicapi's inconsistent credit fields.
+
+    get_album() puts the performers in a list of {name,id}; get_playlist()
+    puts a single {name,id} in author (or owner). Normalizing keeps the
+    collection header from rendering "System.Collections..." or blank.
+    """
+    if isinstance(value, list):
+        return ", ".join(
+            n["name"] for n in value if isinstance(n, dict) and n.get("name")
+        )
+    if isinstance(value, dict):
+        return value.get("name") or ""
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _collection(kind: str, title, subtitle, thumbnails, tracks) -> dict:
+    """The one payload shape every collection page reads.
+
+    Album / playlist / artist all return {kind, title, subtitle, thumbnails,
+    trackCount, tracks} so the collection page can render its header and its
+    tracklist from a single fetch, and playback can reuse the same response
+    instead of hitting the backend twice.
+    """
+    return {
+        "kind": kind,
+        "title": title or "Unknown",
+        "subtitle": subtitle or "",
+        "thumbnails": thumbnails,
+        "trackCount": len(tracks),
+        "tracks": tracks,
+    }
+
+
+# NOTE: _data(method, **kwargs) forwards kwargs to the ytmusicapi method, so the
+# argument names must be its own (browseId / playlistId / channelId) — passing
+# positionally raises TypeError, which surfaces as a 500 rather than a 502.
+@app.get("/album/{browse_id}")
+def album_detail(browse_id: str):
+    """An album as a collection: real metadata + real track list (get_album)."""
+    album = _data("get_album", browseId=browse_id) or {}
+    tracks = [_normalize_album(t) for t in (album.get("tracks") or [])]
+    subtitle = _credit_names(album.get("artists")) or _credit_names(album.get("artist"))
+    year = album.get("year")
+    if year and subtitle:
+        subtitle = f"{subtitle} \u00b7 {year}"
+    elif year:
+        subtitle = str(year)
+    return JSONResponse(
+        content=_collection(
+            "album", album.get("title"), subtitle, album.get("thumbnails"), tracks
+        )
+    )
+
+
+@app.get("/playlist/{playlist_id}")
+def playlist_detail(playlist_id: str):
+    """A playlist as a collection: real metadata + real track list (get_playlist)."""
+    playlist = _data("get_playlist", playlistId=playlist_id) or {}
+    tracks = playlist.get("tracks") or []
+    subtitle = (
+        _credit_names(playlist.get("author"))
+        or _credit_names(playlist.get("owner"))
+        or _credit_names(playlist.get("privacy"))
+    )
+    return JSONResponse(
+        content=_collection(
+            "playlist",
+            playlist.get("title"),
+            subtitle,
+            playlist.get("thumbnails"),
+            tracks,
+        )
+    )
+
+
+@app.get("/artist/{channel_id}")
+def artist_detail(channel_id: str):
+    """An artist as a collection: their real top songs, playable as a tracklist.
+
+    get_artist() nests the songs under {"songs": {"results": [...]}}; each row
+    already carries a videoId, so the artist page can play any track the user
+    picks. Albums/singles live under their own keys and are not tracks, so they
+    are not flattened in here.
+    """
+    artist = _data("get_artist", channelId=channel_id) or {}
+    songs = (artist.get("songs") or {}).get("results") or []
+    tracks = [_normalize_album(t) for t in songs]
+    return JSONResponse(
+        content=_collection(
+            "artist",
+            artist.get("name"),
+            artist.get("subscribers"),
+            artist.get("thumbnails"),
+            tracks,
+        )
+    )
+
+
+# Search categories the frontend filter chips can ask for, mapped to the
+# real ytmusicapi search() filters. Chips drive server-side filtering, which
+# the user sees as Tabs on music.youtube.com (Songs / Videos / Albums / …).
+SEARCH_FILTERS = {
+    "songs": "songs",
+    "videos": "videos",
+    "albums": "albums",
+    "artists": "artists",
+    "playlists": "playlists",
+}
+
+
 @app.get("/search")
-def search(q: str = Query(..., min_length=1)):
-    results = _data("search", query=q, limit=20)
+def search(
+    q: str = Query(..., min_length=1),
+    filter: str | None = Query(default=None),
+):
+    """
+    Search YouTube Music.
+
+    filter: optional category (songs|videos|albums|artists|playlists) — when
+    set, the query goes through ytmusicapi's real search filter, exactly like
+    picking a tab on the YT Music web app. Without it a general search
+    returns the mixed result list (each item still carries its real
+    resultType, which the frontend renders as a small type badge).
+    """
+    kwargs = {"query": q, "limit": 20}
+    if filter:
+        if filter not in SEARCH_FILTERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown search filter '{filter}'. "
+                + "Allowed: " + ", ".join(SEARCH_FILTERS),
+            )
+        kwargs["filter"] = SEARCH_FILTERS[filter]
+    results = _data("search", **kwargs)
     return JSONResponse(content=results)
 
 
@@ -340,6 +784,7 @@ def _publish_when_ready(port: int, timeout: float = 20.0) -> None:
 
 if __name__ == "__main__":
     port = _choose_port()
+    _BOUND_PORT = port
 
     logger.info(f"Starting backend on port {port}")
     threading.Thread(target=_publish_when_ready, args=(port,), daemon=True).start()

@@ -184,24 +184,35 @@ namespace YtMusicClient.Views
         }
 
         /// <summary>
-        /// Card click: song/video cards (those carry a videoId) start playback;
-        /// album/playlist/artist cards keep doing nothing until detail pages exist.
-        /// The card's row is the queue, so Next walks the row from here.
+        /// Card click. Song/video cards carry a videoId and play straight away,
+        /// with the card's row as the queue (so Next walks that row). Album,
+        /// playlist and artist cards carry only an id, so the backend resolves
+        /// them and their tracklist opens — the user picks the track, instead of
+        /// the card silently doing nothing.
         /// </summary>
         private async void HomeCard_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is not HomeItemView item)
                 return;
-            if (string.IsNullOrEmpty(item.VideoId))
+
+            if (!string.IsNullOrEmpty(item.VideoId))
+            {
+                List<QueueTrack> rowQueue = _cardQueues.TryGetValue(item.VideoId, out var queued)
+                    ? queued
+                    : new List<QueueTrack> { new(item.VideoId, item.Title, item.Subtitle, item.ThumbnailUrl) };
+
+                await App.Playback.PlayAsync(rowQueue, rowQueue.FindIndex(t => t.VideoId == item.VideoId));
+                if (App.Window is MainWindow mainWindow)
+                    mainWindow.ShowNowPlaying();
+                return;
+            }
+
+            var detail = await CollectionQueue.ResolveAsync(item.BrowseId, item.PlaylistId);
+            if (detail == null)
                 return;
 
-            List<QueueTrack> queue = _cardQueues.TryGetValue(item.VideoId, out var rowQueue)
-                ? rowQueue
-                : new List<QueueTrack> { new(item.VideoId, item.Title, item.Subtitle, item.ThumbnailUrl) };
-
-            await App.Playback.PlayAsync(queue, queue.FindIndex(t => t.VideoId == item.VideoId));
-            if (App.Window is MainWindow mainWindow)
-                mainWindow.ShowNowPlaying();
+            if (App.Window is MainWindow window)
+                window.ShowCollection(new CollectionRequest(detail, item.ThumbnailUrl));
         }
 
         /// <summary>Hero banner Play button — plays the hero card.</summary>

@@ -6,6 +6,12 @@
       NavigationCacheMode="Enabled">
 
     <Grid Padding="32,24" RowSpacing="16">
+        <!-- Switching library sections reflows smoothly instead of jumping. -->
+        <Grid.ChildrenTransitions>
+            <TransitionCollection>
+                <RepositionThemeTransition />
+            </TransitionCollection>
+        </Grid.ChildrenTransitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -70,28 +76,41 @@
                     <ItemsControl x:Name="PlaylistsList">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170" />
+                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170">
+                                    <ItemsWrapGrid.ChildrenTransitions>
+                                        <TransitionCollection>
+                                            <EntranceThemeTransition FromVerticalOffset="16" />
+                                        </TransitionCollection>
+                                    </ItemsWrapGrid.ChildrenTransitions>
+                                </ItemsWrapGrid>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:PlaylistItemView">
-                                <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
-                                    <Border CornerRadius="{StaticResource CardCornerRadius}"
-                                            Width="160" Height="160">
-                                        <Border.Background>
-                                            <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
-                                                        Stretch="UniformToFill" />
-                                        </Border.Background>
-                                    </Border>
-                                    <TextBlock Text="{x:Bind Title}"
-                                               Style="{StaticResource CardTitleText}"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
-                                    <TextBlock Style="{StaticResource MutedText}"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1">
-                                        <Run Text="{x:Bind Count, Mode=OneWay}" />
-                                        <Run Text="songs" />
-                                    </TextBlock>
-                                </StackPanel>
+                                <!-- Whole card is one click target and starts the playlist.
+                                     It used to be an inert StackPanel: tapping a playlist
+                                     did nothing at all. -->
+                                <Button Style="{StaticResource CardButtonStyle}"
+                                        Click="PlaylistCard_Click"
+                                        AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
+                                    <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
+                                        <Border CornerRadius="{StaticResource CardCornerRadius}"
+                                                Width="160" Height="160">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                            Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
+                                        <TextBlock Text="{x:Bind Title}"
+                                                   Style="{StaticResource CardTitleText}"
+                                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                        <TextBlock Style="{StaticResource MutedText}"
+                                                   TextTrimming="CharacterEllipsis" MaxLines="1">
+                                            <Run Text="{x:Bind Count, Mode=OneWay}" />
+                                            <Run Text="songs" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -102,28 +121,40 @@
                     <ItemsControl x:Name="ArtistsList">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170" />
+                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170">
+                                    <ItemsWrapGrid.ChildrenTransitions>
+                                        <TransitionCollection>
+                                            <EntranceThemeTransition FromVerticalOffset="16" />
+                                        </TransitionCollection>
+                                    </ItemsWrapGrid.ChildrenTransitions>
+                                </ItemsWrapGrid>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:ArtistItemView">
-                                <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
-                                    <Border CornerRadius="60"
-                                            Width="120" Height="120"
-                                            HorizontalAlignment="Left">
-                                        <Border.Background>
-                                            <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
-                                                        Stretch="UniformToFill" />
-                                        </Border.Background>
-                                    </Border>
-                                    <TextBlock Text="{x:Bind Artist}"
-                                               Style="{StaticResource CardTitleText}"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
-                                    <TextBlock Style="{StaticResource MutedText}" MaxLines="1">
-                                        <Run Text="{x:Bind Subscribers, Mode=OneWay}" />
-                                        <Run Text="subscribers" />
-                                    </TextBlock>
-                                </StackPanel>
+                                <!-- Whole card is one click target and opens the artist's tracklist.
+                                     It used to be an inert StackPanel: tapping an artist did nothing. -->
+                                <Button Style="{StaticResource CardButtonStyle}"
+                                        Click="ArtistCard_Click"
+                                        AutomationProperties.Name="{x:Bind Artist, Mode=OneWay}">
+                                    <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
+                                        <Border CornerRadius="60"
+                                                Width="120" Height="120"
+                                                HorizontalAlignment="Left">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                            Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
+                                        <TextBlock Text="{x:Bind Artist}"
+                                                   Style="{StaticResource CardTitleText}"
+                                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                        <TextBlock Style="{StaticResource MutedText}" MaxLines="1">
+                                            <Run Text="{x:Bind Subscribers, Mode=OneWay}" />
+                                            <Run Text="subscribers" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -134,26 +165,37 @@
                     <ItemsControl x:Name="AlbumsList">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170" />
+                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170">
+                                    <ItemsWrapGrid.ChildrenTransitions>
+                                        <TransitionCollection>
+                                            <EntranceThemeTransition FromVerticalOffset="16" />
+                                        </TransitionCollection>
+                                    </ItemsWrapGrid.ChildrenTransitions>
+                                </ItemsWrapGrid>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:AlbumItemView">
-                                <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
-                                    <Border CornerRadius="{StaticResource CardCornerRadius}"
-                                            Width="160" Height="160">
-                                        <Border.Background>
-                                            <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
-                                                        Stretch="UniformToFill" />
-                                        </Border.Background>
-                                    </Border>
-                                    <TextBlock Text="{x:Bind Title}"
-                                               Style="{StaticResource CardTitleText}"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
-                                    <TextBlock Text="{x:Bind Year}"
-                                               Style="{StaticResource MutedText}"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
-                                </StackPanel>
+                                <!-- Whole card is one click target and starts the album. -->
+                                <Button Style="{StaticResource CardButtonStyle}"
+                                        Click="AlbumCard_Click"
+                                        AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
+                                    <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
+                                        <Border CornerRadius="{StaticResource CardCornerRadius}"
+                                                Width="160" Height="160">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                            Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
+                                        <TextBlock Text="{x:Bind Title}"
+                                                   Style="{StaticResource CardTitleText}"
+                                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                        <TextBlock Text="{x:Bind Year}"
+                                                   Style="{StaticResource MutedText}"
+                                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                    </StackPanel>
+                                </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -162,13 +204,21 @@
                 <!-- Liked songs (rows) -->
                 <StackPanel x:Name="LikedView" Spacing="8" Visibility="Collapsed">
                     <ItemsControl x:Name="LikedList">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel>
+                                    <StackPanel.ChildrenTransitions>
+                                        <TransitionCollection>
+                                            <EntranceThemeTransition FromVerticalOffset="14" />
+                                        </TransitionCollection>
+                                    </StackPanel.ChildrenTransitions>
+                                </StackPanel>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:TrackItemView">
                                 <!-- Transparent button so the whole row is clickable and starts playback. -->
-                                <Button Background="Transparent"
-                                        BorderThickness="0"
-                                        Padding="0"
-                                        HorizontalContentAlignment="Stretch"
+                                <Button Style="{StaticResource RowButtonStyle}"
                                         Click="LikedTrack_Click"
                                         AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
                                     <Grid ColumnSpacing="12" Margin="0,4" Height="52">
@@ -207,24 +257,35 @@
                     <ItemsControl x:Name="SubscriptionsList">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170" />
+                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="170">
+                                    <ItemsWrapGrid.ChildrenTransitions>
+                                        <TransitionCollection>
+                                            <EntranceThemeTransition FromVerticalOffset="16" />
+                                        </TransitionCollection>
+                                    </ItemsWrapGrid.ChildrenTransitions>
+                                </ItemsWrapGrid>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:ArtistItemView">
-                                <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
-                                    <Border CornerRadius="60"
-                                            Width="120" Height="120"
-                                            HorizontalAlignment="Left">
-                                        <Border.Background>
-                                            <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
-                                                        Stretch="UniformToFill" />
-                                        </Border.Background>
-                                    </Border>
-                                    <TextBlock Text="{x:Bind Artist}"
-                                               Style="{StaticResource CardTitleText}"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
-                                </StackPanel>
+                                <!-- Whole card is one click target and opens the artist's tracklist. -->
+                                <Button Style="{StaticResource CardButtonStyle}"
+                                        Click="ArtistCard_Click"
+                                        AutomationProperties.Name="{x:Bind Artist, Mode=OneWay}">
+                                    <StackPanel Width="160" Spacing="6" Margin="0,0,10,14">
+                                        <Border CornerRadius="60"
+                                                Width="120" Height="120"
+                                                HorizontalAlignment="Left">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{x:Bind ThumbnailImage, Mode=OneWay}"
+                                                            Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
+                                        <TextBlock Text="{x:Bind Artist}"
+                                                   Style="{StaticResource CardTitleText}"
+                                                   TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                    </StackPanel>
+                                </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

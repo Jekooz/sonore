@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -48,6 +49,13 @@ namespace YtMusicClient.Views
             SearchTab.Checked += NavTab_Checked;
             LibraryTab.Checked += NavTab_Checked;
             NowPlayingTab.Checked += NavTab_Checked;
+            // Tapping the tab you are already on has to work too: after opening a
+            // collection sub-page the tab stays checked, so Checked never fires
+            // again and that sub-page would otherwise be a dead end.
+            HomeTab.Tapped += NavTab_Tapped;
+            SearchTab.Tapped += NavTab_Tapped;
+            LibraryTab.Tapped += NavTab_Tapped;
+            NowPlayingTab.Tapped += NavTab_Tapped;
 
             ViewModel.PropertyChanged += ShellViewModel_PropertyChanged;
             UpdateAccountChrome();
@@ -306,7 +314,11 @@ namespace YtMusicClient.Views
                 ? new ImageBrush { ImageSource = new BitmapImage(new Uri(ViewModel.AccountPhotoUrl)) }
                 : null;
 
-            AccountInitial.Text = string.IsNullOrEmpty(name) ? "" : name.Trim()[0].ToString().ToUpperInvariant();
+            // Trim first, then index: a whitespace-only name would otherwise
+            // index an empty string and throw IndexOutOfRange out of the
+            // PropertyChanged handler.
+            var trimmed = name.Trim();
+            AccountInitial.Text = trimmed.Length == 0 ? "" : trimmed[0].ToString().ToUpperInvariant();
         }
 
         /// <summary>
@@ -381,41 +393,175 @@ namespace YtMusicClient.Views
         }
 
         /// <summary>
-        /// Full in-app sign-in: opens the embedded Google sign-in window, captures
-        /// cookies, hands them to the backend, and shows the result. The user never
-        /// leaves the app and never copies a code.
+        /// Browser-based sign-in: the backend opens music.youtube.com in the
+        /// user's DEFAULT browser; the paired extension hands the cookies back;
+        /// this overlay mirrors /auth/browser/status until it settles. The user
+        /// never copies a code; no embedded browser exists anymore.
         /// </summary>
         private async Task RunSignInFlowAsync()
         {
-            var signInWindow = new SignInWindow();
-            signInWindow.CookiesCaptured += async (sender, cookies) =>
+            BrowserAuthStatus status;
+            try
             {
-                if (cookies == null || cookies.Count == 0)
-                    return;
+                status = await _apiClient.StartBrowserSignInAsync();
+            }
+            catch (Exception ex)
+            {
+                App.ShellViewModel.AuthStatusText = "Sign-in failed";
+                await ShowMessageDialogAsync(
+                    "Could not start the browser sign-in: " + ex.Message +
+                    "\n\nMake sure the backend is running, then try again from the Home tab.");
+                return;
+            }
 
-                try
-                {
-                    var account = await _apiClient.SendCookiesAsync(cookies);
-                    App.ShellViewModel.IsLoggedIn = true;
-                    App.ShellViewModel.AuthStatusText = "Signed in";
-                    App.ShellViewModel.AccountName = account.AccountName;
-                    App.ShellViewModel.AccountPhotoUrl = string.IsNullOrEmpty(account.AccountPhotoUrl) ? null : account.AccountPhotoUrl;
-                    App.ShellViewModel.RaiseDataReady();
-                }
-                catch (Exception ex)
-                {
-                    App.ShellViewModel.AuthStatusText = "Sign-in failed";
-                    await ShowMessageDialogAsync(
-                        "Google sign-in could not be completed: " + ex.Message +
-                        "\n\nYou can try again from the Home tab.");
-                }
-            };
+            ShowSignInOverlay(status);
 
-            bool signedIn = await signInWindow.ShowAndWaitAsync();
-            if (!signedIn && !App.ShellViewModel.IsLoggedIn)
+            // Poll /auth/browser/status every 2 s (matching the backend's poll
+            // interval) until the state leaves waiting/idle.
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(2000);
+                    status = await _apiClient.GetBrowserSignInStatusAsync();
+
+                    UpdateSignInOverlay(status);
+
+                    if (status.State is not "waiting" and not "idle")
+                        break;
+                }
+            }
+            catch (Exception)
+            {
+                status = new BrowserAuthStatus { State = "failed", Error = "Lost contact with the backend." };
+            }
+            finally
+            {
+                HideSignInOverlay();
+            }
+
+            if (status.State == "success")
+            {
+                await LoadSignedInStateAsync();
+            }
+            else if (status.State == "failed" || status.State == "timeout")
+            {
+                App.ShellViewModel.AuthStatusText = "Not signed in";
+                // Point at the extension folder here: the sign-in card's
+                // "Open the helper extension folder" button is collapsed by
+                // HideSignInOverlay before this dialog is shown, so the path is
+                // the only route the user actually has.
+                await ShowMessageDialogAsync(
+                    "Sign-in did not complete: " + (status.Error ?? status.State) +
+                    "\n\nThis needs the helper extension loaded in the browser that just opened. " +
+                    "Load it unpacked (chrome://extensions -> Developer mode) from:\n" +
+                    (FindExtensionFolder() ?? "the browser-extension folder in the repo root") +
+                    "\n\nThen try again from the Home tab.");
+            }
+            else // cancelled by the user
             {
                 App.ShellViewModel.AuthStatusText = "Not signed in";
             }
+        }
+
+        // Guards the overlay's fade-out: a newer show/cancel bumps this so a
+        // stale Completed callback cannot collapse the overlay the user reopened.
+        private int _overlayAnimToken;
+
+        private void ShowSignInOverlay(BrowserAuthStatus status)
+        {
+            SignInRing.IsActive = true;
+            SignInHeadline.Text = string.IsNullOrEmpty(status.Browser) || status.Browser == "default browser"
+                ? "Waiting for you to sign in in your browser…"
+                : $"Waiting for you to sign in in {status.Browser}…";
+            // Was "this app picks it up automatically", which is not true: the
+            // cookies only arrive when the user clicks the helper extension's
+            // toolbar button. Telling them otherwise leaves them waiting for a
+            // hand-off that never starts (the 3-minute timeout then fires).
+            SignInDetail.Text = "music.youtube.com should have opened in your default browser. " +
+                "Sign in there, then click the YT Music Client Helper icon in that browser's toolbar.";
+            _overlayAnimToken++;
+            BrowserSignInOverlay.Visibility = Visibility.Visible;
+            Motion.Fade(BrowserSignInOverlay, 0, 1, 0.22);
+        }
+
+        private void UpdateSignInOverlay(BrowserAuthStatus status)
+        {
+            if (status.State == "waiting")
+                return; // headline already set at start
+
+            if (status.State == "failed")
+            {
+                SignInRing.IsActive = false;
+                SignInHeadline.Text = "Sign-in problem";
+                SignInDetail.Text = status.Error ?? "The helper extension could not deliver the cookies.";
+                // The extension step is the fix for the only expected failure mode.
+                OpenExtensionFolderButton.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void HideSignInOverlay()
+        {
+            SignInRing.IsActive = false;
+            OpenExtensionFolderButton.Visibility = Visibility.Collapsed;
+
+            int token = ++_overlayAnimToken;
+            Motion.FadeOut(BrowserSignInOverlay, 0.16, () =>
+            {
+                if (token == _overlayAnimToken)
+                    BrowserSignInOverlay.Visibility = Visibility.Collapsed;
+            });
+        }
+
+        private void CancelSignIn_Click(object sender, RoutedEventArgs e)
+        {
+            _ = CancelSignInAsync();
+        }
+
+        private async Task CancelSignInAsync()
+        {
+            try
+            {
+                await _apiClient.CancelBrowserSignInAsync();
+            }
+            catch
+            {
+                // Overlay close must not depend on the backend answering.
+            }
+            HideSignInOverlay();
+            App.ShellViewModel.AuthStatusText = "Not signed in";
+        }
+
+        /// <summary>
+        /// One-time helper: reveal the shipped extension folder so the user can
+        /// load it unpacked (chrome://extensions -> Developer mode -> Load
+        /// unpacked). Nothing is published to a web store.
+        /// </summary>
+        private void OpenExtensionFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dir = FindExtensionFolder();
+                if (dir != null)
+                    Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+            }
+            catch
+            {
+                // Opening Explorer is best-effort; the README documents the path.
+            }
+        }
+
+        private static string FindExtensionFolder()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null)
+            {
+                var candidate = Path.Combine(dir.FullName, "browser-extension");
+                if (Directory.Exists(candidate))
+                    return candidate;
+                dir = dir.Parent;
+            }
+            return null;
         }
 
         /// <summary>
@@ -426,6 +572,31 @@ namespace YtMusicClient.Views
         public void ShowNowPlaying()
         {
             NowPlayingTab.IsChecked = true;
+        }
+
+        /// <summary>
+        /// Open a collection (album / playlist / artist) inside the current tab's
+        /// frame. The card that was tapped already resolved it through the backend,
+        /// so the page renders straight from the passed-in detail — no second
+        /// round-trip. Players need their bar here: this page is not the full player.
+        /// </summary>
+        public void ShowCollection(CollectionRequest request)
+        {
+            if (request?.Detail == null)
+                return;
+
+            SetPlayerBarVisible(true);
+            ContentFrame.Navigate(typeof(CollectionPage), request);
+        }
+
+        /// <summary>
+        /// Show/hide the persistent player bar. The Now Playing page hides it
+        /// (it renders its own full transport per the mockup — two side-by-side
+        /// transports would duplicate every control); every other tab shows it.
+        /// </summary>
+        public void SetPlayerBarVisible(bool visible)
+        {
+            PlayerBar.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>Re-runs sign-in (Home tab button / sign-out flow).</summary>
@@ -463,19 +634,40 @@ namespace YtMusicClient.Views
 
         private void NavTab_Checked(object sender, RoutedEventArgs e)
         {
-            var tab = sender as RadioButton;
-            if (tab == null || ContentFrame == null)
+            if (sender is RadioButton tab)
+                NavigateToTab(tab.Tag as string);
+        }
+
+        /// <summary>
+        /// Re-tapping the active tab returns to that tab's root page. Without it a
+        /// collection sub-page (which lives inside the tab's frame) has no way back
+        /// except its own Back button; idempotent, so a fresh selection — where
+        /// Checked already navigated — does nothing extra.
+        /// </summary>
+        private void NavTab_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (sender is not RadioButton tab || ContentFrame == null)
                 return;
 
-            var tag = tab.Tag as string;
-            if (tag == "home")
-                ContentFrame.Navigate(typeof(HomePage));
-            else if (tag == "search")
-                ContentFrame.Navigate(typeof(SearchPage));
-            else if (tag == "library")
-                ContentFrame.Navigate(typeof(LibraryPage));
-            else if (tag == "nowplaying")
-                ContentFrame.Navigate(typeof(NowPlayingPage));
+            var target = PageForTag(tab.Tag as string);
+            if (target != null && ContentFrame.Content?.GetType() != target)
+                ContentFrame.Navigate(target);
+        }
+
+        private static Type PageForTag(string tag) => tag switch
+        {
+            "home" => typeof(HomePage),
+            "search" => typeof(SearchPage),
+            "library" => typeof(LibraryPage),
+            "nowplaying" => typeof(NowPlayingPage),
+            _ => null,
+        };
+
+        private void NavigateToTab(string tag)
+        {
+            var target = PageForTag(tag);
+            if (target != null && ContentFrame != null)
+                ContentFrame.Navigate(target);
         }
 
         private async Task<bool?> TryGetAuthStatusAsync()

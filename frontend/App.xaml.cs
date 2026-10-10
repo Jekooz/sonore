@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using YtMusicClient.Services;
 using YtMusicClient.Views;
@@ -30,6 +32,16 @@ namespace YtMusicClient
 
         private readonly SidecarLauncher _launcher;
 
+        // Single-instance guard. Two windows would fight over the one WASAPI
+        // output device and over the shared backend, so a second launch asks the
+        // running instance to come forward and then exits.
+        private const string SingleInstanceMutexName = @"Local\YtMusicClient.SingleInstance";
+        private const string ActivateEventName = @"Local\YtMusicClient.Activate";
+
+        private Mutex _instanceMutex;
+        private EventWaitHandle _activateSignal;
+        private CancellationTokenSource _activateCts;
+
         public App()
         {
             // WinUI stowed exceptions (0xC000027B) kill the process with no trace
@@ -44,7 +56,93 @@ namespace YtMusicClient
             _launcher = new SidecarLauncher();
         }
 
-        private static void LogCrash(string stage, Exception ex)
+        /// <summary>
+        /// Take the per-session single-instance mutex. True means we are the only
+        /// instance and should carry on. A mutex failure is treated as "carry on"
+        /// so a diagnostics problem can never stop the app from opening.
+        /// </summary>
+        private bool ClaimSingleInstance()
+        {
+            try
+            {
+                _instanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out bool createdNew);
+                return createdNew;
+            }
+            catch (Exception ex)
+            {
+                LogCrash("ClaimSingleInstance", ex);
+                return true;
+            }
+        }
+
+        /// <summary>Ask the instance that owns the mutex to bring its window forward.</summary>
+        private static void SignalExistingInstance()
+        {
+            try
+            {
+                if (EventWaitHandle.TryOpenExisting(ActivateEventName, out var signal))
+                {
+                    using (signal)
+                        signal.Set();
+                }
+            }
+            catch (Exception)
+            {
+                // Best effort: failing to raise the signal only means the user
+                // has to click the existing window themselves.
+            }
+        }
+
+        /// <summary>
+        /// Listen for a second launch's focus request. The wait runs on a thread
+        /// pool (background) thread so it can never hold the process open, and
+        /// the window is touched only through the UI dispatcher.
+        /// </summary>
+        private void StartActivationListener()
+        {
+            try
+            {
+                _activateSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+            }
+            catch (Exception ex)
+            {
+                LogCrash("StartActivationListener", ex);
+                return;
+            }
+
+            _activateCts = new CancellationTokenSource();
+            var token = _activateCts.Token;
+
+            _ = Task.Run(() =>
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        if (_activateSignal.WaitOne(500))
+                            Window?.DispatcherQueue.TryEnqueue(() => Window?.Activate());
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return; // shutting down
+                    }
+                }
+            });
+        }
+
+        private void StopActivationListener()
+        {
+            try { _activateCts?.Cancel(); } catch (Exception) { }
+            _activateCts = null;
+
+            try { _activateSignal?.Dispose(); } catch (Exception) { }
+            _activateSignal = null;
+
+            try { _instanceMutex?.Dispose(); } catch (Exception) { }
+            _instanceMutex = null;
+        }
+
+        internal static void LogCrash(string stage, Exception ex)
         {
             try
             {
@@ -60,15 +158,26 @@ namespace YtMusicClient
 
         protected override async void OnLaunched(LaunchActivatedEventArgs args)
         {
+            // Only one instance. A second launch must not open a second window
+            // that shares one audio device and one backend with the first.
+            if (!ClaimSingleInstance())
+            {
+                SignalExistingInstance();
+                Exit();
+                return;
+            }
+
             // Show the window first; backend startup must never block or crash activation.
             MainWindow window = new MainWindow();
             Window = window;
             window.Activate();
+            StartActivationListener();
             window.Closed += (sender, e) =>
             {
                 // Stop audio and release the WASAPI/WaveOut device before the
                 // sidecar goes away.
                 Playback.Dispose();
+                StopActivationListener();
                 _launcher.Shutdown();
             };
 

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sign in to YT Music Client</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      width: 260px;
+      margin: 0;
+      padding: 14px;
+      background: #0b0b0c;
+      color: #f2f2f3;
+      font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+    h1 { margin: 0 0 8px; font-size: 13px; font-weight: 600; letter-spacing: -0.1px; }
+    p { margin: 0 0 10px; }
+    #status { min-height: 34px; color: #b9b9bf; }
+    #status[data-tone="ok"] { color: #7ee0a3; }
+    #status[data-tone="warn"] { color: #ffb4b4; }
+    button {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #3a3a40;
+      border-radius: 999px;
+      background: #f2f2f3;
+      color: #0b0b0c;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .hint { margin: 10px 0 0; color: #85858d; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <h1>YT Music Client</h1>
+  <p id="status">Checking…</p>
+  <button id="send" type="button">Send my session to the app</button>
+  <p class="hint">
+    Sign in to music.youtube.com, then use this button while the app is waiting.
+    Nothing is stored by this extension.
+  </p>
+  <!-- External script: Manifest V3 forbids inline JavaScript in extension pages. -->
+  <script src="popup.js"></script>
+</body>
+</html>

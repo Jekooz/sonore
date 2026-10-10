@@ -143,6 +143,49 @@ namespace YtMusicClient.Views
                 mainWindow.ShowNowPlaying();
         }
 
+        /// <summary>Playlist card click: open the playlist's real tracklist.</summary>
+        private async void PlaylistCard_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not PlaylistItemView item)
+                return;
+
+            await OpenCollectionAsync(null, item.PlaylistId, item.ThumbnailUrl);
+        }
+
+        /// <summary>Album card click (art included): open the album's real tracklist.</summary>
+        private async void AlbumCard_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not AlbumItemView item)
+                return;
+
+            await OpenCollectionAsync(item.BrowseId, null, item.ThumbnailUrl);
+        }
+
+        /// <summary>Artist / subscription card click: open the artist's real tracklist.</summary>
+        private async void ArtistCard_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not ArtistItemView item)
+                return;
+
+            await OpenCollectionAsync(item.BrowseId, null, item.ThumbnailUrl);
+        }
+
+        /// <summary>
+        /// Resolve the card's collection through the backend, then open its
+        /// tracklist page. A card that does not resolve (or that the backend
+        /// refuses) stays a no-op rather than opening an empty page. Library
+        /// cards used to carry no click handler at all, so they were inert.
+        /// </summary>
+        private async Task OpenCollectionAsync(string browseId, string playlistId, string fallbackArtUrl)
+        {
+            var detail = await CollectionQueue.ResolveAsync(browseId, playlistId);
+            if (detail == null)
+                return;
+
+            if (App.Window is MainWindow mainWindow)
+                mainWindow.ShowCollection(new CollectionRequest(detail, fallbackArtUrl));
+        }
+
         private void ShowOnly(string section)
         {
             if (PlaylistsView == null)

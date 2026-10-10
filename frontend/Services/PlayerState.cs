@@ -77,6 +77,10 @@ namespace YtMusicClient.Services
             {
                 if (Set(ref _track, value))
                 {
+                    // Like is per-track (the backend like endpoint is not wired
+                    // yet), so a new track must start unliked — otherwise the
+                    // heart stays lit from whatever played before.
+                    Liked = false;
                     Raise(nameof(HasTrack));
                     Raise(nameof(TrackTitle));
                     Raise(nameof(TrackArtist));

@@ -5,3 +5,8 @@ obj/
 __pycache__/
 *.pyc
 .claude/settings.local.json
+
+# Written at runtime by the backend when a sign-in starts; holds a short-lived
+# pairing token. Must never be committed.
+browser-extension/sidecar.json
+browser-extension/sidecar.json.tmp

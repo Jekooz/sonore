@@ -6,6 +6,13 @@
       NavigationCacheMode="Enabled">
 
     <Grid Padding="32,24">
+        <!-- Layout changes (hero appears, sections show/hide) ease instead
+             of snapping. -->
+        <Grid.ChildrenTransitions>
+            <TransitionCollection>
+                <RepositionThemeTransition />
+            </TransitionCollection>
+        </Grid.ChildrenTransitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -47,6 +54,12 @@
                       Grid.Row="1"
                       Visibility="Collapsed">
             <StackPanel Spacing="24">
+                <!-- Loaded rows slide + fade in rather than popping. -->
+                <StackPanel.ChildrenTransitions>
+                    <TransitionCollection>
+                        <EntranceThemeTransition FromVerticalOffset="22" />
+                    </TransitionCollection>
+                </StackPanel.ChildrenTransitions>
                 <ProgressRing x:Name="LoadingRing" Width="36" Height="36" IsActive="False" Foreground="{ThemeResource AccentBrush}" />
                 <TextBlock x:Name="ErrorText"
                            Style="{StaticResource SecondaryText}"
@@ -113,16 +126,20 @@
                                     <ItemsControl ItemsSource="{x:Bind Contents}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
-                                                <ItemsStackPanel Orientation="Horizontal" />
+                                                <ItemsStackPanel Orientation="Horizontal">
+                                                    <ItemsStackPanel.ChildrenTransitions>
+                                                        <TransitionCollection>
+                                                            <EntranceThemeTransition FromVerticalOffset="16" />
+                                                        </TransitionCollection>
+                                                    </ItemsStackPanel.ChildrenTransitions>
+                                                </ItemsStackPanel>
                                             </ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="services:HomeItemView">
                                                 <!-- Click handler lives on the page; the row's DataContext is
                                                      the HomeItemView, so cards with a videoId start playback. -->
-                                                <Button Background="Transparent"
-                                                        BorderThickness="0"
-                                                        Padding="0"
+                                                <Button Style="{StaticResource CardButtonStyle}"
                                                         Margin="0,0,16,16"
                                                         Click="HomeCard_Click"
                                                         AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
@@ -163,9 +180,7 @@
                         <ItemsControl x:Name="RailItems">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="services:HomeItemView">
-                                    <Button Background="Transparent"
-                                            BorderThickness="0"
-                                            Padding="0"
+                                    <Button Style="{StaticResource RowButtonStyle}"
                                             Margin="0,0,0,4"
                                             Click="HomeCard_Click"
                                             AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">

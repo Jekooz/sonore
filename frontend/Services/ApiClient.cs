@@ -329,6 +329,9 @@ namespace YtMusicClient.Services
         [JsonPropertyName("count")]
         public string Count { get; set; }
 
+        [JsonPropertyName("author")]
+        public string Author { get; set; }
+
         [JsonPropertyName("owned")]
         public bool? Owned { get; set; }
     }

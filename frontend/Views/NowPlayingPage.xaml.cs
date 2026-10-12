@@ -102,9 +102,6 @@ namespace YtMusicClient.Views
         {
             var url = App.Playback.CurrentArtworkUrl;
             SetArt(CarouselCurrentArt, url);
-            SetArt(MiniTrackArt, url);
-            MiniTrackName.Text = Player.TrackTitle;
-            MiniTrackSubtitle.Text = Player.TrackArtist;
         }
 
         private void ApplyPlayerChange(string propertyName)
@@ -140,8 +137,6 @@ namespace YtMusicClient.Views
         /// <summary>
         /// Update the ambient background + the carousel cards from the current
         /// track. Called on Track change (and on load for cached pages).
-        /// Mapped to the Spotify-style Now Playing mock: center card shows artist
-        /// on top and track title below; mini chip in the transport pill mirrors it.
         /// </summary>
         private void RefreshFromState()
         {
@@ -161,19 +156,12 @@ namespace YtMusicClient.Views
             {
                 Motion.Fade(AmbientArt, 0, 0.3, 0.45);
                 Motion.Fade(CarouselCurrentArt, 0.35, 1, 0.35);
-                Motion.Fade(MiniTrackArt, 0.35, 1, 0.35);
             }
 
             // Center card: track title first (the prominent line), artist beneath it.
             SetArt(CarouselCurrentArt, url);
             CurrentTitle.Text = state.Track?.Title ?? "";
             CurrentArtist.Text = state.Track?.Artist ?? "";
-
-            // Mini chip art in the transport pill.
-            SetArt(MiniTrackArt, url);
-
-            MiniTrackName.Text = state.Track?.Title ?? "";
-            MiniTrackSubtitle.Text = state.Track?.Artist ?? "";
 
             PageMuteGlyph.Glyph = state.VolumePercent <= 0 ? "\uE74F" : "\uE767";
 

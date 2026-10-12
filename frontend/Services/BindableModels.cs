@@ -118,6 +118,9 @@ namespace YtMusicClient.Services
 
         public string Title => _item.Title;
         public string Count => _item.Count;
+        public string Author => _item.Author;
+        public bool HasAuthor => !string.IsNullOrWhiteSpace(Author);
+        public Microsoft.UI.Xaml.Visibility AuthorVisibility => HasAuthor ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
         /// <summary>Real playlist id — lets a playlist card resolve its tracks.</summary>
         public string PlaylistId => _item.PlaylistId;

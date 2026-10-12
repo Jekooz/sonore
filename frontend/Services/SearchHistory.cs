@@ -31,7 +31,21 @@ namespace YtMusicClient.Services
     /// </summary>
     public static class SearchHistory
     {
-        private const int MaxEntries = 8;
+        private const int MaxEntries = 10;
+
+        public static void Remove(string query)
+        {
+            var trimmed = query?.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+                return;
+
+            lock (Gate)
+            {
+                var list = EntriesInternal;
+                list.RemoveAll(e => string.Equals(e, trimmed, StringComparison.OrdinalIgnoreCase));
+                Persist();
+            }
+        }
 
         /// <summary>
         /// Replace the whole list (used by tests / reset scenarios). Persists

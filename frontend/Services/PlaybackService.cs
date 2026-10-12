@@ -67,7 +67,6 @@ namespace YtMusicClient.Services
         /// <summary>Set by the shell: plays the next track in the queue.</summary>
         public Action Next;
 
-        /// <summary>True when a queue exists and a further track follows the current one.</summary>
         /// <summary>Reset playback debug state between runs (used by diagnostics / tests).</summary>
         public void ResetDebugState()
         {
@@ -80,7 +79,34 @@ namespace YtMusicClient.Services
             _lastPlayRequestVideoId = null;
         }
 
-        public bool HasNext => _queueIndex + 1 < _queue.Count;
+        /// <summary>
+        /// True when PlayNext() would actually start a track: a later queue entry, a
+        /// repeat-all wrap, a shuffle jump elsewhere, or a repeat-one reload. The Next
+        /// controls and the SMTC next button both gate on this answer, so it has to
+        /// describe what the service really does. Asking only "is there an Upcoming
+        /// entry?" greyed Next out at the end of a repeat-all queue even though pressing
+        /// it — and auto-advance — would wrap to the first track.
+        /// One deliberate approximation: with shuffle and repeat off, every other track
+        /// may already have been played, in which case PlayNext still declines. A control
+        /// that is enabled and then does nothing is the milder failure of the two.
+        /// </summary>
+        public bool HasNext
+        {
+            get
+            {
+                var state = App.PlayerState;
+
+                if (state.Repeat == RepeatMode.One)
+                    return HasTrack;                                  // PlayNext reloads this track
+                if (_queueIndex + 1 < _queue.Count)
+                    return true;                                      // a later entry exists
+                if (state.Repeat == RepeatMode.All && _queue.Count > 0)
+                    return true;                                      // wraps to the first entry
+                if (state.Shuffle && _queue.Count > 1)
+                    return true;                                      // shuffle may jump elsewhere
+                return false;
+            }
+        }
 
         /// <summary>Set by the shell: Previous-button semantics (restart vs history).</summary>
         public Action PreviousByHistory;
@@ -125,12 +151,27 @@ namespace YtMusicClient.Services
             _engine.PlaybackTick += Engine_PlaybackTick;
 
             // Volume lives in PlayerState (bindable + persisted); the engine applies the curve.
-            App.PlayerState.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(PlayerState.Volume))
-                    _engine.SetVolume((float)App.PlayerState.Volume);
-            };
+            // Repeat and shuffle change how far Next can reach with no queue change at all,
+            // so the capability is refreshed from here too. A named handler rather than a
+            // lambda so Dispose can unsubscribe it: a discarded service must not keep
+            // writing into the shared queue (that also keeps the tests independent).
+            App.PlayerState.PropertyChanged += OnPlayerStateChanged;
             _engine.SetVolume((float)App.PlayerState.Volume);
+        }
+
+        private void OnPlayerStateChanged(object sender, PropertyChangedEventArgs e)
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(PlayerState.Volume):
+                    _engine.SetVolume((float)App.PlayerState.Volume);
+                    break;
+
+                case nameof(PlayerState.Repeat):
+                case nameof(PlayerState.Shuffle):
+                    App.Queue.CanAdvance = HasNext;
+                    break;
+            }
         }
 
         /// <summary>Volume entry point for PlayerState (0..1, perceptual curve applied in the engine).</summary>
@@ -165,6 +206,24 @@ namespace YtMusicClient.Services
             if (string.IsNullOrWhiteSpace(videoId))
                 return;
 
+            // Debounce FIRST, before anything at all is touched: a duplicate click has
+            // to be a true no-op. This gate used to sit below the generation bump, so
+            // the request it was meant to ignore had already superseded the load it was
+            // supposed to protect: the first click's resolve then hit its own
+            // "superseded during resolve" check, aborted itself, and playback never
+            // started — leaving the page on "Resolving stream…" with the play button
+            // disabled, because IsBusy was never cleared by anything else. Sitting above
+            // the reset also stops an ignored duplicate from clearing _finished, which
+            // would have made a played-out track look resumable.
+            if (videoId == _lastPlayRequestVideoId &&
+                (DateTime.UtcNow - _lastPlayRequestUtc).TotalMilliseconds < 700)
+            {
+                Log($"debounced duplicate play request for {videoId}");
+                return;
+            }
+            _lastPlayRequestUtc = DateTime.UtcNow;
+            _lastPlayRequestVideoId = videoId;
+
             _prefetchFiredFor = null; // new track: re-evaluate prefetch at 50%
             int generation = ++_generation;
             _finished = false;
@@ -176,7 +235,17 @@ namespace YtMusicClient.Services
             // A track outside the queue is a standalone play: the stale list
             // must not resurrect itself via auto-advance, so drop it. One
             // branch here covers every play path — they all route through.
-            int queueIdx = _queue.FindIndex(_queueIndex, t => t.VideoId == videoId);
+            // Guarded because List.FindIndex throws ArgumentOutOfRangeException for a
+            // negative start index, and _queueIndex IS -1 for a standalone play (that
+            // branch below drops the stale queue). Every caller of that path is
+            // fire-and-forget (`_ = PlayAsync(...)`), so the throw was invisible: a
+            // standalone track could never be reloaded — play-after-finish and
+            // Previous-from-history appeared to do nothing at all. Found by the Batch 5
+            // regression tests; the fallback below still searches the whole queue, so
+            // the "never hop back" intent is unchanged.
+            int queueIdx = _queueIndex >= 0 && _queueIndex < _queue.Count
+                ? _queue.FindIndex(_queueIndex, t => t.VideoId == videoId)
+                : -1;
             if (queueIdx < 0)
                 queueIdx = _queue.FindIndex(t => t.VideoId == videoId);
             if (queueIdx >= 0)
@@ -186,17 +255,6 @@ namespace YtMusicClient.Services
                 _queue.Clear();
                 _queueIndex = -1;
             }
-
-            // Debounce: same track requested again within 700 ms of the last
-            // request — treat as an accidental double-click and ignore.
-            if (videoId == _lastPlayRequestVideoId &&
-                (DateTime.UtcNow - _lastPlayRequestUtc).TotalMilliseconds < 700)
-            {
-                Log($"debounced duplicate play request for {videoId}");
-                return;
-            }
-            _lastPlayRequestUtc = DateTime.UtcNow;
-            _lastPlayRequestVideoId = videoId;
 
             Log($"play requested: {videoId} \"{title}\"");
 
@@ -259,6 +317,11 @@ namespace YtMusicClient.Services
 
                 // Nothing may keep playing behind an error the user is looking at.
                 _engine.Stop();
+                // The URL has to go with it: Stop() releases the output, so nothing is
+                // loaded any more. Leaving it set made TogglePlayPause take its "resume"
+                // branch and call Play() on a session that no longer existed — another
+                // silent no-op, and the reason a failed track could not be retried.
+                _currentUrl = null;
                 IsBusy = false;
                 _statusText = "Playback failed: " + FirstLine(ex.Message);
                 Log("FAILED:\n" + ex);
@@ -271,11 +334,23 @@ namespace YtMusicClient.Services
             if (!HasTrack)
                 return;
 
-            if (_finished)
+            // Nothing loaded to resume, or the track already played out: both mean
+            // "load it again". The first case is a failed (or superseded) resolve — and
+            // there CanToggle is HasTrack && !IsBusy, so the play button is ENABLED, yet
+            // neither test below matched and the press did nothing at all. The track was
+            // a dead end the user could only escape by finding it in a list again.
+            // _finished is checked as well because a finished track cannot resume from a
+            // stopped WaveOut session. The retry deliberately clears the duplicate gate:
+            // pressing play is a deliberate act, not the accidental double-click that
+            // gate exists to absorb. The !IsBusy guard matters — without it the Space
+            // accelerator (which is not state-gated) would restart an in-flight resolve
+            // every time it was pressed, and the load would never finish.
+            if (_finished || (!IsBusy && _currentUrl == null))
             {
-                // Finished tracks cannot resume from a stopped WaveOut session —
-                // go through the full load path again (the backend serves the
-                // cached URL, so this is fast).
+                // Both cases go back through the full load path; the backend serves a
+                // cached URL, so this is fast.
+                Log(_finished ? "reloading finished track" : "retrying load with nothing loaded");
+                _lastPlayRequestVideoId = null;
                 _ = PlayAsync(VideoId, Title, Artist, ArtworkUrl);
                 return;
             }
@@ -413,6 +488,7 @@ namespace YtMusicClient.Services
         public void Dispose()
         {
             _generation++;
+            App.PlayerState.PropertyChanged -= OnPlayerStateChanged;
             _engine.Dispose();
         }
 
@@ -464,11 +540,13 @@ namespace YtMusicClient.Services
                 state.Track = HasTrack ? new QueueTrack(VideoId, Title, Artist, ArtworkUrl) : null;
                 state.IsPlaying = _engine.IsPlaying;
                 state.IsBusy = IsBusy;
+                state.IsFinished = _finished;
                 state.Position = Position;
                 state.Duration = Duration;
                 state.BufferedFraction = BufferedFraction;
                 state.StatusText = _statusText;
                 App.Queue.Sync(_queue, _queueIndex);
+                App.Queue.CanAdvance = HasNext;
                 StateChanged?.Invoke(this, EventArgs.Empty);
             });
         }

@@ -8,17 +8,6 @@
       Loaded="NowPlayingPage_OnLoaded"
       Unloaded="NowPlayingPage_OnUnloaded">
 
-    <!-- Spotify-style Now Playing surface.
-         Brand mark + wordmark top, 3-card fan preview of the queue (prev /
-         current / next — center largest and full-opacity, sides scaled + faded
-         per DESIGN_TOKENS since WinUI 3 has no PlaneProjection), big bold title/
-         artist below, action icon row, then the wide floating transport pill that
-         carries prev/pause/next + a mini now-playing chip + aux controls.
-
-         Ambient background: the current track's own artwork, oversized, dimmed and
-         darkened for legibility. Color comes only from the track's art — never a
-         decorative palette (DESIGN_TOKENS). Accent (#FA2D48) is used only where
-         allowed by the existing tokens (active play button, liked heart). -->
     <Grid>
         <Image x:Name="AmbientArt"
                Stretch="UniformToFill"
@@ -32,12 +21,7 @@
                    Fill="#E6000000"
                    Visibility="Collapsed" />
 
-        <!-- Page content. Batch 4: 28,20 instead of 32,24. The vertical 4px is
-             handed to the carousel row, which is the only row that scales; the
-             horizontal trim is purely so the fan and the transport pill line up
-             on the same optical margin. -->
-        <Grid Padding="28,20">
-
+        <Grid Padding="24,16">
             <!-- Empty state: nothing has been started yet -->
             <StackPanel x:Name="EmptyState"
                         Spacing="16"
@@ -59,281 +43,217 @@
                            HorizontalAlignment="Center" />
             </StackPanel>
 
-            <!-- Now playing panel: brand wordmark, 3-card carousel, big title/artist,
-                 action row, Up Next rail, wide transport pill. Scrolls on small windows. -->
-            <!-- Deliberately NOT a ScrollViewer: the whole player has to fit on
-                 one screen. Every row but the carousel is Auto, and the carousel
-                 takes the leftover height, so the transport pill can never be
-                 pushed below the fold on any window size. -->
+            <!-- Unified Now Playing Panel -->
             <Grid x:Name="NowPlayingPanel"
                   Visibility="{x:Bind Player.PanelVisibility, Mode=OneWay}"
-                  MaxWidth="720"
+                  MaxWidth="680"
                   HorizontalAlignment="Center"
-                  VerticalAlignment="Stretch"
-                  RowSpacing="12">
-                <!-- Five rows since Batch 4: the status line no longer owns one
-                     (see below), so there is one less RowSpacing gap to pay for. -->
+                  VerticalAlignment="Center"
+                  RowSpacing="16">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Panel content eases in when a track starts (the panel
-                     flips from Collapsed to Visible). -->
                 <Grid.ChildrenTransitions>
                     <TransitionCollection>
                         <EntranceThemeTransition FromVerticalOffset="24" />
                     </TransitionCollection>
                 </Grid.ChildrenTransitions>
 
-                <!-- Brand line: Spotify-style mark + wordmark, kept on the app's accent. -->
-                <Grid Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0"
-                                Width="22" Height="22"
-                                CornerRadius="6"
-                                Background="{ThemeResource AccentBrush}"
-                                Margin="0,0,10,0" />
-                        <StackPanel Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    Spacing="6"
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="Now Playing"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="{ThemeResource TextSecondaryBrush}" />
-                        </StackPanel>
-                    </Grid>
+                <!-- 1. Heading: music note icon + "Now Playing" -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                    <FontIcon Glyph="&#xE8D6;" FontSize="18" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{ThemeResource AccentBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="Now Playing" FontSize="15" FontWeight="SemiBold" Foreground="{ThemeResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                </StackPanel>
 
-                <!-- 3-card fan preview of the queue: previous (left, smaller/faded),
-                     current (center, largest, full opacity), next (right, smaller/
-                     faded). The side cards ARE the prev/next previews — click to jump.
-                     WinUI 3 has no PlaneProjection, so the mock's 3D perspective fan is
-                     approximated with 2D scale + opacity per DESIGN_TOKENS: side cards are
-                     scaled down and dimmer, the center card is the largest and sharpest.
-                     Cards are glass panels: art on top (rounded top corners via ImageBrush),
-                     real artist + track name inside at the bottom. -->
-                <!-- DownOnly: the fan keeps its designed size on big windows and
-                     shrinks (uniformly) on short ones, so nothing overflows.
-                     Batch 4 checked whether it should also GROW on big windows —
-                     it cannot: NowPlayingPanel caps at MaxWidth 720 while the design
-                     box is 736 wide, so the horizontal term of the Uniform scale is
-                     already ~0.98 before height is even considered. The fan is
-                     width-bound, so StretchDirection="Both" could never produce a
-                     scale above 1 here; only the height term ever binds.
-                     At the measured 960x640 window that height is what binds: the
-                     carousel row gets ~248px (512 content − 40 page padding − 176
-                     of Auto rows − 48 of gaps), a 0.69 scale, hero art ~219x179.
-                     Reclaiming the collapsed status row below is what lifted that
-                     from ~193x158; no control was resized to get there. -->
-                <Viewbox Grid.Row="1"
-                         Stretch="Uniform"
-                         StretchDirection="DownOnly"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center">
-                <Grid x:Name="CarouselGrid"
-                      Width="736"
-                      Height="360"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Center">
+                <!-- 2. Carousel / Main Artwork + Queue Previews -->
+                <Grid Grid.Row="1" Width="660" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- Previous card: smaller, offset to the left, faded. -->
+                    <!-- Previous track preview card -->
                     <Button x:Name="CarouselPrev"
                             Grid.Column="0"
                             Style="{StaticResource CardButtonStyle}"
-                            Width="200"
+                            Width="150" Height="220"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
-                            Margin="0,0,8,0"
+                            Margin="0,0,12,0"
                             AutomationProperties.Name="Play previous track"
                             Visibility="Collapsed"
                             Click="PrevButton_Click">
-                        <Border CornerRadius="16"
+                        <Border CornerRadius="14"
                                 Background="{ThemeResource GlassStrongBrush}"
                                 BorderBrush="{ThemeResource TokenBorderStrongBrush}"
                                 BorderThickness="1"
-                                Opacity="0.6"
-                                RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform>
-                                <ScaleTransform ScaleX="0.9" ScaleY="0.9" />
-                            </Border.RenderTransform>
+                                Opacity="0.6">
                             <StackPanel>
                                 <Border x:Name="CarouselPrevArt"
-                                        Width="196" Height="156"
-                                        CornerRadius="15,15,0,0"
+                                        Width="148" Height="148"
+                                        CornerRadius="13,13,0,0"
                                         Background="{ThemeResource RaisedBrush}" />
-                                <!-- Same title-then-artist order as the centre card,
-                                     so the previews read consistently with the focal
-                                     card they sit next to. -->
-                                <StackPanel Margin="0,8,0,10" HorizontalAlignment="Center">
-                                    <!-- Previews wrap to a second line too; their
-                                         own titles are set in code (they are not
-                                         necessarily the loaded track), so no
-                                         tooltip here — a tooltip bound to the
-                                         current track would name the wrong song. -->
+                                <StackPanel Margin="6,6,6,6" HorizontalAlignment="Center">
                                     <TextBlock x:Name="CarouselPrevTitle"
-                                               FontSize="13"
-                                               FontWeight="Medium"
+                                               FontSize="12" FontWeight="Medium"
                                                Foreground="{ThemeResource TextPrimaryBrush}"
-                                               TextWrapping="WrapWholeWords"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="2"
+                                               TextTrimming="CharacterEllipsis" MaxLines="1"
                                                TextAlignment="Center" />
                                     <TextBlock x:Name="CarouselPrevArtist"
-                                               FontSize="12"
-                                               Foreground="{ThemeResource TextSecondaryBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="1"
+                                               FontSize="11" Foreground="{ThemeResource TextSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis" MaxLines="1"
                                                TextAlignment="Center" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>
                     </Button>
 
-                    <!-- Current card: big center art + artist/track. This is the focal card. -->
+                    <!-- Current focal card -->
                     <Border x:Name="CarouselCurrentCard"
                             Grid.Column="1"
-                            Width="320"
-                            CornerRadius="22"
+                            Width="300"
+                            CornerRadius="20"
                             Background="{ThemeResource GlassStrongBrush}"
                             BorderBrush="{ThemeResource TokenBorderStrongBrush}"
                             BorderThickness="1"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
-                        <StackPanel>
-                            <Border x:Name="CarouselCurrentArt"
-                                    Width="318" Height="260"
-                                    CornerRadius="21,21,0,0"
-                                    Background="{ThemeResource RaisedBrush}" />
-                            <!-- Hierarchy: artwork, then the track TITLE as the
-                                 prominent line, then the artist beneath it. This was
-                                 inverted — CurrentName held the artist at 18px SemiBold
-                                 in primary white while the title sat under it at 14px
-                                 secondary grey, so the dimmest line on the focal card
-                                 was the track name. Renamed as well, because the old
-                                 names are what made that inversion easy to miss.
-                                 No album line: QueueTrack carries VideoId/Title/
-                                 Artist/ArtworkUrl only, so there is nothing to show
-                                 without a data-layer change (see batch report). -->
-                            <!-- Long metadata on the FOCAL card: the title may take
-                                 a second line (the card is 320 wide, so 2 lines fit
-                                 in the 360-tall design box) and trims only if it
-                                 still overruns; the artist stays one line so the
-                                 card can never grow past the box and push the fan
-                                 out of its row. Eight pixels of margin paid for the
-                                 extra line, so the 260px artwork is untouched.
-                                 Both lines carry their full text as a tooltip:
-                                 trimming is a layout compromise, never data loss. -->
-                            <TextBlock x:Name="CurrentTitle"
-                                       FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Foreground="{ThemeResource TextPrimaryBrush}"
-                                       TextWrapping="WrapWholeWords"
-                                       TextTrimming="CharacterEllipsis"
-                                       MaxLines="2"
-                                       TextAlignment="Center"
-                                       ToolTipService.ToolTip="{x:Bind Player.TrackTitle, Mode=OneWay}"
-                                       Margin="16,10,16,2" />
-                            <TextBlock x:Name="CurrentArtist"
-                                       FontSize="14"
-                                       Foreground="{ThemeResource TextSecondaryBrush}"
-                                       TextTrimming="CharacterEllipsis"
-                                       MaxLines="1"
-                                       TextAlignment="Center"
-                                       ToolTipService.ToolTip="{x:Bind Player.TrackArtist, Mode=OneWay}"
-                                       Margin="16,0,16,12" />
-                        </StackPanel>
+                            HorizontalAlignment="Center">
+                        <Border x:Name="CarouselCurrentArt"
+                                Width="298" Height="298"
+                                CornerRadius="19"
+                                Background="{ThemeResource RaisedBrush}" />
                     </Border>
 
-                    <!-- Next card: smaller, offset to the right, faded. -->
+                    <!-- Next track preview card -->
                     <Button x:Name="CarouselNext"
                             Grid.Column="2"
                             Style="{StaticResource CardButtonStyle}"
-                            Width="200"
+                            Width="150" Height="220"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Center"
-                            Margin="8,0,0,0"
+                            Margin="12,0,0,0"
                             AutomationProperties.Name="Play next track"
                             Visibility="Collapsed"
                             Click="NextButton_Click">
-                        <Border CornerRadius="16"
+                        <Border CornerRadius="14"
                                 Background="{ThemeResource GlassStrongBrush}"
                                 BorderBrush="{ThemeResource TokenBorderStrongBrush}"
                                 BorderThickness="1"
-                                Opacity="0.6"
-                                RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform>
-                                <ScaleTransform ScaleX="0.9" ScaleY="0.9" />
-                            </Border.RenderTransform>
+                                Opacity="0.6">
                             <StackPanel>
                                 <Border x:Name="CarouselNextArt"
-                                        Width="196" Height="156"
-                                        CornerRadius="15,15,0,0"
+                                        Width="148" Height="148"
+                                        CornerRadius="13,13,0,0"
                                         Background="{ThemeResource RaisedBrush}" />
-                                <StackPanel Margin="0,8,0,10" HorizontalAlignment="Center">
+                                <StackPanel Margin="6,6,6,6" HorizontalAlignment="Center">
                                     <TextBlock x:Name="CarouselNextTitle"
-                                               FontSize="13"
-                                               FontWeight="Medium"
+                                               FontSize="12" FontWeight="Medium"
                                                Foreground="{ThemeResource TextPrimaryBrush}"
-                                               TextWrapping="WrapWholeWords"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="2"
+                                               TextTrimming="CharacterEllipsis" MaxLines="1"
                                                TextAlignment="Center" />
                                     <TextBlock x:Name="CarouselNextArtist"
-                                               FontSize="12"
-                                               Foreground="{ThemeResource TextSecondaryBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="1"
+                                               FontSize="11" Foreground="{ThemeResource TextSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis" MaxLines="1"
                                                TextAlignment="Center" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>
                     </Button>
                 </Grid>
-                </Viewbox>
 
-                <!-- Status and progress share ONE row on purpose. As a row of its
-                     own the status line — Collapsed nearly all of the time — still
-                     cost two RowSpacing gaps, because Grid.RowSpacing inserts a
-                     gap between every pair of rows whether or not anything is
-                     visible inside them. That was ~28px of permanently empty space,
-                     and the artwork is the element that was paying for it. Inside a
-                     StackPanel a Collapsed status now costs a single 6px gap.
-                     No control keeps its own fixed box: only wasted space moved. -->
-                <StackPanel Grid.Row="2" Spacing="6">
-                    <!-- Quiet status line for resolve/parse errors only — never byte counts. -->
+                <!-- 3. Track Info, Controls & Seek Bar (Unified Composition) -->
+                <StackPanel Grid.Row="2" Spacing="14" HorizontalAlignment="Center" Width="520">
+                    <!-- Title & Artist -->
+                    <StackPanel Spacing="4" HorizontalAlignment="Center">
+                        <TextBlock x:Name="CurrentTitle"
+                                   FontSize="22"
+                                   FontWeight="Bold"
+                                   Foreground="{ThemeResource TextPrimaryBrush}"
+                                   TextWrapping="WrapWholeWords"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="2"
+                                   TextAlignment="Center"
+                                   ToolTipService.ToolTip="{x:Bind Player.TrackTitle, Mode=OneWay}" />
+                        <TextBlock x:Name="CurrentArtist"
+                                   FontSize="15"
+                                   Foreground="{ThemeResource TextSecondaryBrush}"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1"
+                                   TextAlignment="Center"
+                                   ToolTipService.ToolTip="{x:Bind Player.TrackArtist, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <!-- Status line -->
                     <TextBlock x:Name="StatusText"
                                Text="{x:Bind Player.StatusText, Mode=OneWay}"
                                Visibility="{x:Bind Player.StatusVisibility, Mode=OneWay}"
                                Style="{StaticResource MutedText}"
                                HorizontalAlignment="Center"
                                TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               MaxWidth="460" />
+                               TextWrapping="Wrap" />
 
-                    <!-- Seek bar: single bar with buffered segment; times only. -->
-                    <Grid ColumnSpacing="12" Margin="0,2" HorizontalAlignment="Stretch">
+                    <!-- Primary Transport Controls (Shuffle, Prev, Play/Pause, Next, Repeat) -->
+                    <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Button x:Name="ShuffleButton"
+                                Style="{StaticResource IconButtonStyle}"
+                                AutomationProperties.Name="Shuffle"
+                                Click="ShuffleButton_Click">
+                            <FontIcon x:Name="ShuffleGlyph" Glyph="&#xE8B1;" FontSize="18"
+                                      FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                      Foreground="{ThemeResource TextSecondaryBrush}" />
+                        </Button>
+
+                        <Button Style="{StaticResource IconButtonStyle}"
+                                AutomationProperties.Name="Previous track"
+                                IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
+                                Click="PrevButton_Click">
+                            <FontIcon Glyph="&#xE892;" FontSize="22"
+                                      FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+
+                        <Button Width="56" Height="56"
+                                CornerRadius="28"
+                                Style="{StaticResource AccentButtonStyle}"
+                                AutomationProperties.Name="Play or pause"
+                                IsEnabled="{x:Bind Player.CanToggle, Mode=OneWay}"
+                                Click="PlayPause_Click">
+                            <TextBlock x:Name="PlayPauseGlyph"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="22"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Text="{x:Bind Player.PlayGlyph, Mode=OneWay}" />
+                        </Button>
+
+                        <Button Style="{StaticResource IconButtonStyle}"
+                                AutomationProperties.Name="Next track"
+                                IsEnabled="{x:Bind Queue.CanAdvance, Mode=OneWay}"
+                                Click="NextButton_Click">
+                            <FontIcon Glyph="&#xE893;" FontSize="22"
+                                      FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+
+                        <Button x:Name="RepeatButton"
+                                Style="{StaticResource IconButtonStyle}"
+                                AutomationProperties.Name="Repeat"
+                                Click="RepeatButton_Click">
+                            <FontIcon x:Name="RepeatGlyph" Glyph="&#xE8EE;" FontSize="18"
+                                      FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                      Foreground="{ThemeResource TextSecondaryBrush}" />
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Seek Bar & Timeline -->
+                    <Grid ColumnSpacing="12" HorizontalAlignment="Stretch">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- MinWidth 46, not 34: these shared one fixed width with
-                             the player bar, and 34px clips an hour-long track
-                             ("1:02:33" is ~48px at 13px), which shows as a
-                             truncated time next to a full one. -->
                         <TextBlock x:Name="PositionText"
                                    Grid.Column="0"
                                    Text="0:00"
@@ -344,6 +264,7 @@
                         <controls:BufferedSeekBar x:Name="SeekBar"
                                                   Grid.Column="1"
                                                   VerticalAlignment="Center"
+                                                  IsEnabled="{x:Bind Player.CanSeek, Mode=OneWay}"
                                                   SeekRequested="SeekBar_SeekRequested"
                                                   PreviewChanged="SeekBar_PreviewChanged"
                                                   AutomationProperties.Name="Seek bar" />
@@ -356,174 +277,38 @@
                                    MinWidth="46"
                                    TextAlignment="Right" />
                     </Grid>
-                </StackPanel>
 
-                <!-- Action row: like (local toggle) + autoplay (persisted),
-                     the mock's small glass action set under the card. -->
-                <StackPanel Grid.Row="3" Orientation="Horizontal"
-                            Spacing="20"
-                            HorizontalAlignment="Center">
-                    <Button x:Name="LikeButton"
-                            Style="{StaticResource IconButtonStyle}"
-                            AutomationProperties.Name="Like"
-                            Click="LikeButton_Click">
-                        <FontIcon x:Name="LikeGlyph"
-                                  Glyph="&#xE735;"
-                                  FontSize="20"
-                                  FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                  Foreground="{ThemeResource TextSecondaryBrush}" />
-                    </Button>
+                    <!-- Secondary Controls: Like, Autoplay, Volume -->
+                    <StackPanel Orientation="Horizontal" Spacing="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Button x:Name="LikeButton"
+                                Style="{StaticResource IconButtonStyle}"
+                                AutomationProperties.Name="Like"
+                                Click="LikeButton_Click">
+                            <FontIcon x:Name="LikeGlyph" Glyph="&#xE735;" FontSize="18"
+                                      FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                      Foreground="{ThemeResource TextSecondaryBrush}" />
+                        </Button>
 
-                    <!-- Autoplay: persisted toggle as a glass pill that lights
-                         up when on — same language as the filter chips. -->
-                    <ToggleButton x:Name="AutoplayToggle"
-                                  IsChecked="{x:Bind Player.AutoplayOn, Mode=TwoWay}"
-                                  Style="{StaticResource GlassPillToggleButton}"
-                                  AutomationProperties.Name="Autoplay">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE8B5;"
-                                      FontSize="14"
+                        <ToggleButton x:Name="AutoplayToggle"
+                                      IsChecked="{x:Bind Player.AutoplayOn, Mode=TwoWay}"
+                                      Style="{StaticResource GlassPillToggleButton}"
+                                      AutomationProperties.Name="Autoplay">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8B5;" FontSize="13"
+                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                                <TextBlock Text="Autoplay" FontSize="12" />
+                            </StackPanel>
+                        </ToggleButton>
+
+                        <Button Style="{StaticResource IconButtonStyle}"
+                                AutomationProperties.Name="Mute or unmute"
+                                Click="PageMuteButton_Click">
+                            <FontIcon x:Name="PageMuteGlyph" Glyph="&#xE767;" FontSize="18"
                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
-                            <TextBlock Text="Autoplay" FontSize="13" />
-                        </StackPanel>
-                    </ToggleButton>
+                        </Button>
+                    </StackPanel>
                 </StackPanel>
-
-                <!-- Wide Spotify-style transport pill: glass + specular highlight.
-                     Left: prev / (large accent play or pause) / next. Center: a
-                     mini now-playing chip (small art + artist + track) — the
-                     mock's in-pill now-playing element. Right: queued-rail toggle +
-                     mute. -->
-                <Border Grid.Row="4"
-                        Background="{ThemeResource GlassStrongBrush}"
-                        BorderBrush="{ThemeResource TokenBorderStrongBrush}"
-                        BorderThickness="1"
-                        CornerRadius="26"
-                        Padding="16,10"
-                        Margin="0,8,0,0"
-                        AutomationProperties.Name="Now Playing transport">
-                    <Grid ColumnSpacing="14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <!-- Shuffle + repeat: the persisted PlayerState modes that
-                                 PlayNext already honors were unreachable in the UI.
-                                 Accent marks "active", per DESIGN_TOKENS. -->
-                            <Button x:Name="ShuffleButton"
-                                    Style="{StaticResource IconButtonStyle}"
-                                    AutomationProperties.Name="Shuffle"
-                                    Click="ShuffleButton_Click">
-                                <FontIcon x:Name="ShuffleGlyph"
-                                          Glyph="&#xE8B1;"
-                                          FontSize="18"
-                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                          Foreground="{ThemeResource TextSecondaryBrush}" />
-                            </Button>
-
-                            <Button Style="{StaticResource IconButtonStyle}"
-                                    AutomationProperties.Name="Previous track"
-                                    Click="PrevButton_Click">
-                                <FontIcon Glyph="&#xE892;"
-                                          FontSize="20"
-                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
-                            </Button>
-
-                            <Button Width="56" Height="56"
-                                    CornerRadius="28"
-                                    Style="{StaticResource AccentButtonStyle}"
-                                    AutomationProperties.Name="Play or pause"
-                                    IsEnabled="{x:Bind Player.CanToggle, Mode=OneWay}"
-                                    Click="PlayPause_Click">
-                                <TextBlock x:Name="PlayPauseGlyph"
-                                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                           FontSize="24"
-                                           Text="{x:Bind Player.PlayGlyph, Mode=OneWay}" />
-                            </Button>
-
-                            <Button Style="{StaticResource IconButtonStyle}"
-                                    AutomationProperties.Name="Next track"
-                                    IsEnabled="{x:Bind Queue.HasUpcoming, Mode=OneWay}"
-                                    Click="NextButton_Click">
-                                <FontIcon Glyph="&#xE893;"
-                                          FontSize="20"
-                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
-                            </Button>
-
-                            <Button x:Name="RepeatButton"
-                                    Style="{StaticResource IconButtonStyle}"
-                                    AutomationProperties.Name="Repeat"
-                                    Click="RepeatButton_Click">
-                                <FontIcon x:Name="RepeatGlyph"
-                                          Glyph="&#xE8EE;"
-                                          FontSize="18"
-                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                          Foreground="{ThemeResource TextSecondaryBrush}" />
-                            </Button>
-                        </StackPanel>
-
-                        <!-- Mini track chip: small art + artist/track, exactly the
-                             mock's in-pill "now playing" element. -->
-                        <!-- Display-only chip: it used to scroll the Up Next rail
-                             into view, which no longer exists on this page. -->
-                        <Border x:Name="MiniTrackChip"
-                                Grid.Column="1"
-                                Background="Transparent"
-                                Padding="12,8"
-                                CornerRadius="14"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Center"
-                                AutomationProperties.Name="Playing now">
-                            <Grid ColumnSpacing="10" MinWidth="220">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Border x:Name="MiniTrackArt"
-                                        Grid.Column="0"
-                                        Width="40" Height="40"
-                                        CornerRadius="10"
-                                        Background="{ThemeResource RaisedBrush}" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                                    <TextBlock x:Name="MiniTrackName"
-                                               Text="{x:Bind Player.TrackTitle, Mode=OneWay}"
-                                               ToolTipService.ToolTip="{x:Bind Player.TrackTitle, Mode=OneWay}"
-                                               FontSize="13"
-                                               FontWeight="Medium"
-                                               Foreground="{ThemeResource TextPrimaryBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="1"
-                                               TextWrapping="NoWrap" />
-                                    <TextBlock x:Name="MiniTrackSubtitle"
-                                               Text="{x:Bind Player.TrackArtist, Mode=OneWay}"
-                                               ToolTipService.ToolTip="{x:Bind Player.TrackArtist, Mode=OneWay}"
-                                               FontSize="11"
-                                               Foreground="{ThemeResource TextSecondaryBrush}"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="1"
-                                               TextWrapping="NoWrap" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-
-                        <!-- Aux: mute. -->
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                            <Button Style="{StaticResource IconButtonStyle}"
-                                    AutomationProperties.Name="Mute or unmute"
-                                    Click="PageMuteButton_Click">
-                                <FontIcon x:Name="PageMuteGlyph"
-                                          Glyph="&#xE767;"
-                                          FontSize="18"
-                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </Border>
             </Grid>
         </Grid>
     </Grid>
 </Page>
-

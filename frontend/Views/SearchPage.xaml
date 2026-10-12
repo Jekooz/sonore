@@ -5,7 +5,7 @@
       Background="{ThemeResource AppBackgroundBrush}"
       NavigationCacheMode="Enabled">
 
-    <Grid Padding="32,24" RowSpacing="14">
+    <Grid Padding="32,24,32,96" RowSpacing="14" MaxWidth="960" HorizontalAlignment="Center">
         <!-- Results/chips appearing and disappearing reflow smoothly. -->
         <Grid.ChildrenTransitions>
             <TransitionCollection>
@@ -21,7 +21,7 @@
 
         <!-- Search box. History (last searches) lives in a flyout: click the
              icon or just start deleting to open it, click an entry to re-run. -->
-        <Grid Grid.Row="0" ColumnSpacing="8">
+        <Grid Grid.Row="0" ColumnSpacing="8" HorizontalAlignment="Stretch">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -31,7 +31,6 @@
                      PlaceholderText="Search songs, albums, artists&#x2026;"
                      CornerRadius="19"
                      MinHeight="40"
-                     MaxWidth="560"
                      HorizontalAlignment="Stretch"
                      KeyDown="SearchBox_KeyDown"
                      TextChanged="SearchBox_TextChanged"
@@ -48,7 +47,7 @@
                     <Flyout x:Name="HistoryFlyout"
                             Placement="Bottom"
                             Opened="HistoryFlyout_Opened">
-                        <StackPanel Width="280" Spacing="4">
+                        <StackPanel Width="320" Spacing="4">
                             <Grid Margin="0,0,0,6">
                                 <TextBlock Text="Recent searches"
                                            Style="{StaticResource SectionHeaderText}" FontSize="14" />
@@ -67,28 +66,47 @@
                             <ItemsControl x:Name="HistoryList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="x:String">
-                                        <Button Style="{StaticResource RowButtonStyle}"
-                                                Padding="6,6"
-                                                AutomationProperties.Name="{x:Bind}"
-                                                Click="HistoryItem_Click">
-                                            <Grid ColumnSpacing="8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <FontIcon Grid.Column="0"
-                                                          Glyph="&#xE81C;"
-                                                          FontSize="13"
-                                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                                          Foreground="{ThemeResource TextMutedBrush}" />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{x:Bind}"
-                                                           Style="{StaticResource CardTitleText}"
-                                                           FontWeight="Normal"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           MaxLines="1" />
-                                            </Grid>
-                                        </Button>
+                                        <Grid ColumnSpacing="8" Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0"
+                                                    Style="{StaticResource RowButtonStyle}"
+                                                    Padding="6,6"
+                                                    AutomationProperties.Name="{x:Bind}"
+                                                    Click="HistoryItem_Click">
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <FontIcon Grid.Column="0"
+                                                              Glyph="&#xE81C;"
+                                                              FontSize="13"
+                                                              FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                                              Foreground="{ThemeResource TextMutedBrush}"
+                                                              VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{x:Bind}"
+                                                               Style="{StaticResource CardTitleText}"
+                                                               FontWeight="Normal"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxLines="1"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Button>
+                                            <Button Grid.Column="1"
+                                                    Style="{StaticResource IconButtonStyle}"
+                                                    Padding="6"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.Name="Remove search item"
+                                                    ToolTipService.ToolTip="Remove"
+                                                    Click="RemoveHistoryItem_Click">
+                                                <FontIcon Glyph="&#xE711;" FontSize="10"
+                                                          FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                                            </Button>
+                                        </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -109,17 +127,19 @@
         <!-- Category chips: All + the real YT Music search filters. A chip re-runs
              the current query through that backend filter (server-side tab, like
              music.youtube.com). No results = nothing to filter by. -->
-        <StackPanel x:Name="FilterChips"
-                    Grid.Row="1"
-                    Orientation="Horizontal"
-                    Spacing="8"
-                    Visibility="Collapsed">
-            <StackPanel.ChildrenTransitions>
-                <TransitionCollection>
-                    <EntranceThemeTransition FromVerticalOffset="10" />
-                </TransitionCollection>
-            </StackPanel.ChildrenTransitions>
-        </StackPanel>
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                      HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled">
+            <StackPanel x:Name="FilterChips"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        Visibility="Collapsed">
+                <StackPanel.ChildrenTransitions>
+                    <TransitionCollection>
+                        <EntranceThemeTransition FromVerticalOffset="10" />
+                    </TransitionCollection>
+                </StackPanel.ChildrenTransitions>
+            </StackPanel>
+        </ScrollViewer>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12">
             <ProgressRing x:Name="LoadingRing" Width="24" Height="24" IsActive="False" Foreground="{ThemeResource AccentBrush}" />

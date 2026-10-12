@@ -5,7 +5,7 @@
       Background="{ThemeResource AppBackgroundBrush}"
       NavigationCacheMode="Enabled">
 
-    <Grid Padding="32,24">
+    <Grid Padding="32,24,32,96">
         <!-- Layout changes (hero appears, sections show/hide) ease instead
              of snapping. -->
         <Grid.ChildrenTransitions>

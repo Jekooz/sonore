@@ -292,6 +292,15 @@ namespace YtMusicClient.Views
             RefreshHistoryList();
         }
 
+        private void RemoveHistoryItem_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is string query && !string.IsNullOrEmpty(query))
+            {
+                SearchHistory.Remove(query);
+                RefreshHistoryList();
+            }
+        }
+
         internal void ResetForTest()
         {
             _activeFilter = null;

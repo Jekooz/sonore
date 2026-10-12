@@ -5,7 +5,7 @@
       Background="{ThemeResource AppBackgroundBrush}"
       NavigationCacheMode="Enabled">
 
-    <Grid Padding="32,24" RowSpacing="16">
+    <Grid Padding="32,24,32,96" RowSpacing="16">
         <!-- Switching library sections reflows smoothly instead of jumping. -->
         <Grid.ChildrenTransitions>
             <TransitionCollection>
@@ -104,6 +104,10 @@
                                         <TextBlock Text="{x:Bind Title}"
                                                    Style="{StaticResource CardTitleText}"
                                                    TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                         <TextBlock Text="{x:Bind Author, Mode=OneWay}"
+                                                    Visibility="{x:Bind AuthorVisibility, Mode=OneWay}"
+                                                    Style="{StaticResource SecondaryText}"
+                                                    TextTrimming="CharacterEllipsis" MaxLines="1" />
                                         <TextBlock Style="{StaticResource MutedText}"
                                                    TextTrimming="CharacterEllipsis" MaxLines="1">
                                             <Run Text="{x:Bind Count, Mode=OneWay}" />

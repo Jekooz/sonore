@@ -18,6 +18,11 @@ Endpoints:
   GET  /library/subscriptions   channel subscriptions
   GET  /library/liked           liked songs
   GET  /search?q=...            search songs / albums / artists / playlists
+  GET  /radio?videoId=...       real YT Music radio candidates for a seed song
+  GET  /recommendations?...     ranked autoplay candidates (radio + related,
+                                re-ranked with the local listening history)
+  POST /listening/events        one aggregated playback event per track
+  POST /ratings                 like / dislike / remove rating (rate_song)
 """
 
 import http.client
@@ -37,11 +42,16 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from pydantic import BaseModel, Field
+from typing import Literal
+
 from services.browser_auth import (
     WAIT_TIMEOUT_SECONDS,
     BrowserAuthSession,
     detect_default_browser,
 )
+from services import ranking, recommend
+from services.listening import listening_store
 from services.ytmusic_client import (
     REQUIRED_COOKIES,
     AuthError,
@@ -440,7 +450,14 @@ def home():
 
 @app.get("/library/playlists")
 def library_playlists():
-    return JSONResponse(content=_data("get_library_playlists", limit=50))
+    playlists = _data("get_library_playlists", limit=50) or []
+    normalized = []
+    for p in playlists:
+        item = dict(p)
+        author_val = p.get("author") or p.get("authors") or p.get("owner")
+        item["author"] = _credit_names(author_val) if author_val else ""
+        normalized.append(item)
+    return JSONResponse(content=normalized)
 
 
 @app.get("/library/artists")
@@ -630,6 +647,168 @@ def search(
     return JSONResponse(content=results)
 
 
+# ---------------- recommendations / ratings / listening history ----------------
+
+# Video ids are the same 6-20 char URL-safe alphabet YouTube uses; every id
+# that reaches yt-dlp or ytmusicapi passes this gate first (also used by
+# /stream).
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
+
+# Sensible limits on candidate counts and stored-history operations.
+MAX_CANDIDATES = 50
+MAX_EXCLUDE_IDS = 200
+
+
+class ListeningEventIn(BaseModel):
+    """One aggregated playback event, sent once when a track ends/aborts."""
+
+    videoId: str = Field(pattern=_VIDEO_ID_RE.pattern)
+    title: str | None = Field(default=None, max_length=300)
+    artist: str | None = Field(default=None, max_length=300)
+    source: str | None = Field(default=None, max_length=32)
+    startedAt: float | None = Field(default=None, ge=0, le=4e9)
+    listenedSeconds: float = Field(default=0, ge=0, le=86400)
+    durationSeconds: float = Field(default=0, ge=0, le=86400)
+    outcome: Literal["completed", "skipped", "stopped"]
+
+
+class RatingIn(BaseModel):
+    """Explicit song rating — like, dislike, or remove the rating."""
+
+    videoId: str = Field(pattern=_VIDEO_ID_RE.pattern)
+    rating: Literal["LIKE", "DISLIKE", "INDIFFERENT"]
+
+
+def _validate_video_id(video_id: str) -> None:
+    if not _VIDEO_ID_RE.fullmatch(video_id):
+        raise HTTPException(status_code=400, detail="Invalid video id.")
+
+
+def _parse_exclude(exclude: str | None) -> set[str]:
+    """Comma-separated video ids → validated set (bounded)."""
+    if not exclude:
+        return set()
+    ids = [e.strip() for e in exclude.split(",") if e.strip()]
+    if len(ids) > MAX_EXCLUDE_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many exclude ids (max {MAX_EXCLUDE_IDS}).",
+        )
+    for vid in ids:
+        _validate_video_id(vid)
+    return set(ids)
+
+
+def _ranked_candidates(seed: str, limit: int, exclude: set[str]) -> dict:
+    """
+    Shared path for /radio and /recommendations: real provider candidates
+    (radio + related), re-ranked with the local listening store and the
+    account's own YT Music history/likes. Provider failures surface as the
+    usual 401/502 through this helper — never as an empty-looking success.
+    """
+    try:
+        candidates = recommend.get_radio_candidates(
+            ytmusic_service.call, seed, max(limit * 2, 25)
+        )
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        logger.exception("radio candidate fetch failed")
+        raise HTTPException(
+            status_code=502, detail=f"YouTube Music request failed: {e}"
+        )
+
+    # The seed itself, the whole current queue and recent repeats must not
+    # come back as “new” recommendations.
+    blocked = set(exclude)
+    blocked.add(seed)
+
+    # Local stats and provider familiarity are best-effort enrichment:
+    # ranking still works (cold) when either is unavailable, so neither may
+    # fail the request.
+    try:
+        stats = listening_store.stats()
+    except Exception:
+        logger.exception("listening stats unavailable; ranking cold")
+        stats = None
+    try:
+        familiarity = recommend.provider_familiarity(ytmusic_service.call)
+    except Exception:
+        logger.exception("provider familiarity unavailable; ranking cold")
+        familiarity = None
+
+    tracks = ranking.rank(
+        candidates,
+        stats=stats,
+        familiarity=familiarity,
+        limit=limit,
+        exclude=blocked,
+    )
+    return {"seed": seed, "tracks": tracks, "count": len(tracks)}
+
+
+@app.get("/radio")
+def radio(
+    videoId: str = Query(..., description="Seed video id"),
+    limit: int = Query(30, ge=1, le=MAX_CANDIDATES),
+):
+    """Start Radio: genuine YT Music radio (+ related) for one seed song."""
+    _validate_video_id(videoId)
+    payload = _ranked_candidates(videoId, limit, exclude=set())
+    payload["source"] = "radio"
+    return JSONResponse(content=payload)
+
+
+@app.get("/recommendations")
+def recommendations(
+    seed: str = Query(..., description="Current video id"),
+    limit: int = Query(12, ge=1, le=MAX_CANDIDATES),
+    exclude: str | None = Query(
+        default=None,
+        description="Comma-separated videoIds already in the queue (bounded)",
+    ),
+):
+    """Autoplay: ranked candidates to append while the queue runs low."""
+    _validate_video_id(seed)
+    blocked = _parse_exclude(exclude)
+    payload = _ranked_candidates(seed, limit, exclude=blocked)
+    payload["source"] = "recommendations"
+    return JSONResponse(content=payload)
+
+
+@app.post("/listening/events")
+def listening_events(event: ListeningEventIn):
+    """
+    Store one aggregated playback event (not a position tick). The store
+    validates again, clamps numbers and caps growth; no secrets are kept.
+    """
+    try:
+        total = listening_store.record(event.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return JSONResponse(content={"recorded": True, "events": total})
+
+
+@app.post("/ratings")
+def ratings(payload: RatingIn):
+    """
+    Genuine like / dislike / unlike via ytmusicapi's rate_song. The explicit
+    rating is also remembered locally so the ranker can weigh it — distinct
+    from adding/removing the song in the library (a different provider op
+    this endpoint deliberately does not perform).
+    """
+    _data("rate_song", videoId=payload.videoId, rating=payload.rating)
+    try:
+        listening_store.set_rating(payload.videoId, payload.rating)
+    except Exception:
+        # The provider rating is the source of truth; a local-memory failure
+        # must not turn a successful rating into an error response.
+        logger.exception("Could not remember rating locally")
+    return JSONResponse(
+        content={"videoId": payload.videoId, "rating": payload.rating, "ok": True}
+    )
+
+
 # ---------------- playback ----------------
 
 # googlevideo URLs are signed and expire in about 6 hours; keep them a little
@@ -644,8 +823,6 @@ _YT_DLP = shutil.which("yt-dlp") or "yt-dlp"
 # itag 140 (m4a/AAC) plays through Windows Media Foundation. Prefer it, but
 # fall back to whatever audio YouTube serves rather than failing outright.
 _AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio"
-
-_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
 
 
 def _resolve_stream(video_id: str) -> str:

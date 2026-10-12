@@ -15,14 +15,24 @@ namespace YtMusicClient.Services
         private static readonly string LogFile =
             Path.Combine(Path.GetTempPath(), "ytmusic_playback.log");
 
+        private static readonly System.Diagnostics.Stopwatch _clock =
+            System.Diagnostics.Stopwatch.StartNew();
+
         public static void Write(string message)
         {
             try
             {
-                File.AppendAllText(LogFile, $"{DateTime.Now:o} {message}{Environment.NewLine}");
+                // Wall clock + a monotonic relative timestamp: the wall clock
+                // anchors logs to real time, the monotonic makes gaps between
+                // consecutive lines directly readable for stage timing (e.g.
+                // "play requested → stream resolved" is the resolve stage).
+                File.AppendAllText(LogFile, $"{DateTime.Now:o} [+{_clock.Elapsed.TotalSeconds:F3}s] {message}{Environment.NewLine}");
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+
+        /// <summary>Reset the stage clock so a new track's stages read from 0.</summary>
+        public static void ResetClock() => _clock.Restart();
     }
 }

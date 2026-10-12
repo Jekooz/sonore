@@ -272,7 +272,7 @@ namespace YtMusicClient.Services
                 }
 
                 if (stale) return false;
-                PlaybackLog.Write("engine: playing");
+                PlaybackLog.Write($"engine: playing (MF reader {reader.TotalTime.TotalSeconds:F0}s, device {output.GetType().Name} initialized)");
                 return true;
             }
             catch (Exception ex)

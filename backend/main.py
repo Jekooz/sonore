@@ -825,6 +825,51 @@ _YT_DLP = shutil.which("yt-dlp") or "yt-dlp"
 _AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio"
 
 
+def _warm_stream_cache(video_id: str) -> None:
+    """Resolve a stream URL in the background so a later /stream request hits the
+    cache instead of paying the yt-dlp subprocess cost (~3 s cold, measured).
+    Errors are swallowed: prefetch may fail for an unplayable video, the solve
+    path itself reports that properly when the track is actually requested."""
+    try:
+        _resolve_stream(video_id)
+        logger.info("prefetch: warmed stream cache for %s", video_id)
+    except HTTPException:
+        # Unplayable id (dead/expired link): leave the cache clean.
+        pass
+    except Exception:
+        logger.exception("prefetch failed for %s", video_id)
+
+
+# At most one warm-up runs at a time: a burst of /prefetch calls must not
+# queue dozens of yt-dlp subprocesses behind each other.
+_prefetch_lock = threading.Lock()
+
+
+@app.get("/prefetch/{video_id}")
+def prefetch(video_id: str):
+    """Warm the stream-URL cache for a video id (fire-and-forget, bounded)."""
+    if not _VIDEO_ID_RE.fullmatch(video_id):
+        raise HTTPException(status_code=400, detail="Invalid video id.")
+    # 202 Accepted: the work started (or already ran); the response does not
+    # wait for it. If the URL is already cached this returns immediately.
+    if video_id in _STREAM_CACHE and _STREAM_CACHE[video_id][1] > time.time():
+        return JSONResponse(status_code=200, content={"videoId": video_id, "warmed": "cached"})
+    if not _prefetch_lock.acquire(blocking=False):
+        return JSONResponse(status_code=202, content={"videoId": video_id, "warmed": "skipped-busy"})
+
+    def worker():
+        try:
+            _warm_stream_cache(video_id)
+        finally:
+            # The warm-up finishes while holding the gate: concurrent prefetch
+            # requests are skipped (never queued), so yt-dlp subprocesses cannot
+            # pile up.
+            _prefetch_lock.release()
+
+    threading.Thread(target=worker, daemon=True).start()
+    return JSONResponse(status_code=202, content={"videoId": video_id, "warmed": "started"})
+
+
 def _resolve_stream(video_id: str) -> str:
     """Resolve a playable audio URL for a video id using yt-dlp.
 

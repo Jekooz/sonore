@@ -160,7 +160,8 @@ namespace YtMusicClient.Services
 
             IsOpen = true;
             PlaybackLog.Write($"range cache open: {_length:N0} bytes, {_chunkCount} chunks, " +
-                              $"{_cached.Count} already cached, ranges {(_rangesSupported ? "ok" : "UNSUPPORTED")}");
+                              $"{_cached.Count} already cached, ranges {(_rangesSupported ? "ok" : "UNSUPPORTED")}, " +
+                              $"first 256KB probe done (chunk 0 on disk = first bytes ready for MF)");
             _pump = Task.Run(_rangesSupported ? PrefetchPumpAsync : SequentialPumpAsync);
         }
 

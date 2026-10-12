@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -17,6 +18,85 @@ namespace YtMusicClient.Views
     public sealed partial class MainWindow : Window
     {
         private ApiClient _apiClient;
+
+        // --- Minimum window size ----------------------------------------------------
+        // The shell's fixed chrome is AppTitleBar (48 logical px, row 0) plus the
+        // persistent mini-player's dedicated row (64 bar + 16 bottom margin = 80,
+        // row 2). The window has no built-in minimum, so shrinking it below 128
+        // logical px made the star row hit zero and the player row's container
+        // bottom cross the client-area edge — the margin collapsed, then the
+        // rounded bottom corners clipped ("mini-player clipped at the window
+        // bottom", measured via UIA: control gap plateaus at 9 px while the client
+        // keeps shrinking). Enforce a floor via WM_GETMINMAXINFO — the standard
+        // Win32 hook for WinUI 3 windows. Drag-resize, snap layouts and maximize
+        // all honour it; the title bar, caption buttons and normal windowing are
+        // untouched.
+
+        /// <summary>Row 0: the AppTitleBar's fixed height (logical px).</summary>
+        public const double TitleBarLogicalHeight = 48;
+
+        /// <summary>Row 2: the mini-player row — 64 bar + 16 bottom margin.</summary>
+        public const double PlayerRowLogicalHeight = 80;
+
+        /// <summary>Floor for row 1 (content) so the window stays usable.</summary>
+        public const double MinContentLogicalHeight = 192;
+
+        /// <summary>Minimum window track height (logical px) enforced by the
+        /// WM_GETMINMAXINFO hook: title bar + content floor + player row.</summary>
+        public const double MinWindowLogicalHeight =
+            TitleBarLogicalHeight + MinContentLogicalHeight + PlayerRowLogicalHeight; // 320
+
+        private const int GWL_WNDPROC = -4;
+        private const uint WM_GETMINMAXINFO = 0x0024;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativePoint { public int X; public int Y; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MinMaxInfo
+        {
+            public NativePoint ptReserved;
+            public NativePoint ptMaxSize;
+            public NativePoint ptMaxPosition;
+            public NativePoint ptMinTrackSize;
+            public NativePoint ptMaxTrackSize;
+        }
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll", EntryPoint = "CallWindowProcW")]
+        private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
+
+        // Field-held so the GC can never collect the delegate while native code holds it.
+        private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        private WndProcDelegate _minSizeWndProc;
+        private IntPtr _prevWndProc;
+
+        private void InstallMinimumWindowSize()
+        {
+            IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            _minSizeWndProc = MinSizeWndProc;
+            _prevWndProc = SetWindowLongPtr(hwnd, GWL_WNDPROC,
+                Marshal.GetFunctionPointerForDelegate(_minSizeWndProc));
+        }
+
+        private IntPtr MinSizeWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+        {
+            if (msg == WM_GETMINMAXINFO)
+            {
+                var mmi = Marshal.PtrToStructure<MinMaxInfo>(lParam);
+                double scale = GetDpiForWindow(hWnd) / 96.0;
+                // Physical pixels (the window is per-monitor DPI aware); ceil so the
+                // window can never end up a hair too short for the chrome.
+                mmi.ptMinTrackSize.Y = (int)Math.Ceiling(MinWindowLogicalHeight * scale);
+                Marshal.StructureToPtr(mmi, lParam, false);
+            }
+            return CallWindowProc(_prevWndProc, hWnd, msg, wParam, lParam);
+        }
 
         private static string FormatTime(TimeSpan time)
         {
@@ -45,6 +125,7 @@ namespace YtMusicClient.Views
             Title = "YouTube Music";
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1200, 800));
             PlayerState.ApplyTheme(App.PlayerState.AppTheme);
+            InstallMinimumWindowSize();
 
             HomeTab.Checked += NavTab_Checked;
             SearchTab.Checked += NavTab_Checked;
@@ -587,6 +668,7 @@ namespace YtMusicClient.Views
                 return;
 
             SetPlayerBarVisible(true);
+            SetNavCollapsed(false); // collections always render with the expanded sidebar
             ContentFrame.Navigate(typeof(CollectionPage), request);
         }
 
@@ -599,6 +681,68 @@ namespace YtMusicClient.Views
         {
             PlayerBar.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         }
+
+        /// <summary>Tag of the one destination that collapses the navigation.</summary>
+        private const string NowPlayingTag = "nowplaying";
+
+        /// <summary>The nav-chrome rule: the expanded sidebar collapses into the
+        /// hamburger for exactly one destination — Now Playing. Public so the
+        /// regression test can pin the contract without a live Window.
+        /// (Localized #nullable enable: the project compiles with nullable
+        /// disabled, but this contract explicitly accepts a null tag.)</summary>
+#nullable enable
+        public static bool ShouldCollapseNavFor(string? tag) => tag == NowPlayingTag;
+#nullable restore
+
+        /// <summary>Swap the expanded sidebar for the compact hamburger, or restore
+        /// it. Column 0 is Auto-sized, so the content area reclaims exactly the
+        /// sidebar width (196+12) and nothing else shifts. Callers always pass an
+        /// absolute value — never a toggle — so enter/leave on any path converges
+        /// to the right state and cannot go stale.</summary>
+        public void SetNavCollapsed(bool collapsed)
+        {
+            if (NavSidebar == null || HamburgerButton == null)
+                return; // called before InitializeComponent finished (defensive)
+            NavSidebar.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+            HamburgerButton.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>Hamburger flyout destination. The items carry the sidebar
+        /// RadioButtons' Tag values, so checking the tab runs the existing
+        /// Checked → NavTab_Checked → NavigateToTab path (the nav group unchecks
+        /// the previous tab). If the tab is already checked — the flyout can only
+        /// open on Now Playing, whose tab is checked — Checked would not fire, so
+        /// navigate directly, mirroring NavTab_Tapped's re-tap (and only when the
+        /// frame is off the root page, to avoid a duplicate back-stack entry).</summary>
+        private void NavFlyoutItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuFlyoutItem item || item.Tag is not string tag)
+                return;
+
+            var tab = TabForTag(tag);
+            if (tab == null)
+                return;
+
+            if (tab.IsChecked == true)
+            {
+                var target = PageForTag(tag);
+                if (ContentFrame?.Content?.GetType() != target)
+                    NavigateToTab(tag);
+            }
+            else
+            {
+                tab.IsChecked = true; // raises Checked → NavTab_Checked → NavigateToTab
+            }
+        }
+
+        private RadioButton TabForTag(string tag) => tag switch
+        {
+            "home" => HomeTab,
+            "search" => SearchTab,
+            "library" => LibraryTab,
+            "nowplaying" => NowPlayingTab,
+            _ => null,
+        };
 
         /// <summary>Re-runs sign-in (Home tab button / sign-out flow).</summary>
         public async Task StartSignInAsync()
@@ -668,7 +812,14 @@ namespace YtMusicClient.Views
         {
             var target = PageForTag(tag);
             if (target != null && ContentFrame != null)
+            {
+                // Chrome follows the destination: entering Now Playing collapses
+                // the sidebar to the hamburger immediately (no sidebar flash
+                // during the page transition); every other tab restores it here,
+                // with the page's Unloaded as the second, idempotent safety net.
+                SetNavCollapsed(ShouldCollapseNavFor(tag));
                 ContentFrame.Navigate(target);
+            }
         }
 
         private async Task<bool?> TryGetAuthStatusAsync()

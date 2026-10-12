@@ -5,7 +5,11 @@
       Background="{ThemeResource AppBackgroundBrush}"
       NavigationCacheMode="Enabled">
 
-    <Grid Padding="32,24,32,96">
+    <!-- Bottom padding 24 (was 96): the shell's player row (80) is a SEPARATE
+     grid row below this page — the old 96 double-reserved the bar and wasted
+     ~72 logical px of vertical space. Content can never scroll behind the bar:
+     this page only ever occupies the content row above it. -->
+    <Grid Padding="32,24,32,24">
         <!-- Layout changes (hero appears, sections show/hide) ease instead
              of snapping. -->
         <Grid.ChildrenTransitions>

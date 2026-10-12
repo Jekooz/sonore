@@ -6,6 +6,7 @@
       Background="Transparent"
       NavigationCacheMode="Enabled"
       Loaded="NowPlayingPage_OnLoaded"
+      SizeChanged="Page_SizeChanged"
       Unloaded="NowPlayingPage_OnUnloaded">
 
     <Grid>
@@ -43,13 +44,27 @@
                            HorizontalAlignment="Center" />
             </StackPanel>
 
-            <!-- Unified Now Playing Panel -->
+            <!-- Unified Now Playing Panel — wrapped in a vertical scroller so a
+                 compact-height window scrolls instead of clipping the transport
+                 (the old panel was VerticalAlignment=Center with all-Auto rows
+                 and no scroller: anything taller than the viewport clipped at
+                 BOTH ends). Visibility lives on the scroller, not the panel, so
+                 an empty player leaves no invisible overlay above the empty
+                 state. Horizontal scrolling stays disabled: nothing may push
+                 the controls sideways out of the window. -->
+            <ScrollViewer x:Name="NpScroller"
+                          Visibility="{x:Bind Player.PanelVisibility, Mode=OneWay}"
+                          VerticalScrollBarVisibility="Auto"
+                          VerticalScrollMode="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          HorizontalScrollMode="Disabled"
+                          ZoomMode="Disabled"
+                          IsTabStop="False">
             <Grid x:Name="NowPlayingPanel"
-                  Visibility="{x:Bind Player.PanelVisibility, Mode=OneWay}"
                   MaxWidth="680"
                   HorizontalAlignment="Center"
-                  VerticalAlignment="Center"
-                  RowSpacing="16">
+                  RowSpacing="16"
+                  Margin="0,4,0,16">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -69,7 +84,7 @@
                 </StackPanel>
 
                 <!-- 2. Carousel / Main Artwork + Queue Previews -->
-                <Grid Grid.Row="1" Width="660" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid Grid.Row="1" MaxWidth="660" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -165,7 +180,7 @@
                 </Grid>
 
                 <!-- 3. Track Info, Controls & Seek Bar (Unified Composition) -->
-                <StackPanel Grid.Row="2" Spacing="14" HorizontalAlignment="Center" Width="520">
+                <StackPanel Grid.Row="2" Spacing="14" HorizontalAlignment="Center" MaxWidth="520">
                     <!-- Title & Artist -->
                     <StackPanel Spacing="4" HorizontalAlignment="Center">
                         <TextBlock x:Name="CurrentTitle"
@@ -309,6 +324,7 @@
                     </StackPanel>
                 </StackPanel>
             </Grid>
+            </ScrollViewer>
         </Grid>
     </Grid>
 </Page>

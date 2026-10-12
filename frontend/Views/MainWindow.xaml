@@ -159,6 +159,38 @@
             </StackPanel>
         </Border>
 
+        <!-- Compact navigation: visible ONLY while Now Playing replaces the
+             sidebar (SetNavCollapsed). E700 is the three-line NavigationMenu
+             glyph. Sits in row 1 / column 0 — below the title bar's drag
+             region, exactly where the sidebar's top edge was — so it never
+             overlaps the artwork or the transport, and being a real Button it
+             stays clickable, focusable and named for accessibility. The flyout
+             reuses the sidebar's Tag values, so one handler drives the existing
+             Checked → NavigateToTab wiring instead of a second nav system. -->
+        <Button x:Name="HamburgerButton"
+                Grid.Row="1"
+                Grid.Column="0"
+                Width="44"
+                Height="44"
+                Padding="0"
+                Margin="12,4,0,12"
+                VerticalAlignment="Top"
+                HorizontalAlignment="Left"
+                Style="{StaticResource IconButtonStyle}"
+                Visibility="Collapsed"
+                AutomationProperties.Name="Navigation menu"
+                ToolTipService.ToolTip="Navigation menu">
+            <Button.Flyout>
+                <MenuFlyout Placement="Bottom">
+                    <MenuFlyoutItem Text="Home" Tag="home" Click="NavFlyoutItem_Click" />
+                    <MenuFlyoutItem Text="Search" Tag="search" Click="NavFlyoutItem_Click" />
+                    <MenuFlyoutItem Text="Library" Tag="library" Click="NavFlyoutItem_Click" />
+                    <MenuFlyoutItem Text="Now Playing" Tag="nowplaying" Click="NavFlyoutItem_Click" />
+                </MenuFlyout>
+            </Button.Flyout>
+            <FontIcon Glyph="&#xE700;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+        </Button>
+
         <!-- Page swap animation: NavigationThemeTransition eases each tab's
              content in/out instead of hard-cutting between pages. -->
         <Frame x:Name="ContentFrame" Grid.Row="1" Grid.Column="1">

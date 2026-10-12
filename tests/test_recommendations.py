@@ -21,6 +21,8 @@ Covered:
 import json
 import os
 import sys
+import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -534,3 +536,64 @@ def test_search_filter_still_validated(client, monkeypatch):
     resp = client.get("/search", params={"q": "oasis", "filter": "unicorns"})
     assert resp.status_code == 400
     assert "unicorns" in resp.json()["detail"]
+
+
+# ------------------------------------------------ stream prefetch (P2)
+
+def test_prefetch_invalid_id_rejected(client):
+    resp = client.get("/prefetch/not\x20an-id!")
+    assert resp.status_code == 400, resp.text
+
+
+def test_prefetch_returns_started_then_caches(client, monkeypatch):
+    """The prefetch endpoint warms the SAME cache /stream reads: after the
+    background warm completes, /stream must answer from the cache with the
+    exact URL the warm-up resolved (no second resolve round-trip).
+
+    The definitive cache-witness is /stream (same cache), NOT /prefetch's own
+    status: while /prefetch is idle-unlocked it may legitimately fire a NEW
+    warm-up (202 'started') once the cache check races a delayed write — asserting
+    on it made this test flaky. /stream 200 + exact URL is unambiguous."""
+    main._STREAM_CACHE.clear()
+    parallel = threading.Event()
+
+    def slow_resolve(vid):
+        parallel.wait(timeout=5)   # hold the warm-up in flight deterministically
+        return "https://cdn.example/audio"
+
+    monkeypatch.setattr(main, "_resolve_stream", slow_resolve)
+    try:
+        # 1st call starts the warm-up (202); a second call while it is busy is
+        # skipped rather than queued (bounded: one warm at a time).
+        t0 = time.perf_counter()
+        r_start = client.get("/prefetch/WARMID12345")
+        elapsed_202 = time.perf_counter() - t0
+        assert r_start.status_code == 202, r_start.text
+        assert r_start.json()["warmed"] == "started"
+        assert elapsed_202 < 0.3, "202 must return immediately, not wait for the resolve"
+
+        r_busy = client.get("/prefetch/WARMID12345")
+        if r_busy.status_code == 202:   # still warming
+            assert r_busy.json()["warmed"] == "skipped-busy"
+
+        # Release the warm-up and wait until the cache has landed, witnessed by
+        # /stream serving the warmed URL without invoking the slow resolver again.
+        parallel.set()
+        deadline = time.time() + 5
+        resp = client.get("/stream/WARMID12345")
+        while (resp.status_code != 200 or resp.json().get("url") != "https://cdn.example/audio") and time.time() < deadline:
+            time.sleep(0.05)
+            resp = client.get("/stream/WARMID12345")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["url"] == "https://cdn.example/audio"
+    finally:
+        parallel.set()
+        main._STREAM_CACHE.clear()
+
+
+
+def test_stream_still_validates_ids(client, monkeypatch):
+    """The /stream endpoint keeps its 400 on a malformed id — prefetch must not
+    have opened a validation bypass."""
+    resp = client.get("/stream/bad id!")
+    assert resp.status_code == 400

@@ -5,11 +5,11 @@
 
     <Grid x:Name="RootGrid" Background="{ThemeResource AppBackgroundBrush}">
         <Grid.KeyboardAccelerators>
-            <KeyboardAccelerator x:Name="ToggleAccel" Key="Space" IsEnabled="True" Invoked="ToggleAccel_Invoked" />
-            <KeyboardAccelerator x:Name="SeekBackAccel" Key="Left" Modifiers="None" IsEnabled="True" Invoked="SeekBackAccel_Invoked" />
-            <KeyboardAccelerator x:Name="SeekForwardAccel" Key="Right" Modifiers="None" IsEnabled="True" Invoked="SeekForwardAccel_Invoked" />
-            <KeyboardAccelerator x:Name="VolumeUpAccel" Key="Up" Modifiers="None" IsEnabled="True" Invoked="VolumeUpAccel_Invoked" />
-            <KeyboardAccelerator x:Name="VolumeDownAccel" Key="Down" Modifiers="None" IsEnabled="True" Invoked="VolumeDownAccel_Invoked" />
+            <KeyboardAccelerator x:Name="ToggleAccel" Key="Space" IsEnabled="True" Invoked="ToggleAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="SeekBackAccel" Key="Left" Modifiers="None" IsEnabled="True" Invoked="SeekBackAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="SeekForwardAccel" Key="Right" Modifiers="None" IsEnabled="True" Invoked="SeekForwardAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="VolumeUpAccel" Key="Up" Modifiers="None" IsEnabled="True" Invoked="VolumeUpAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="VolumeDownAccel" Key="Down" Modifiers="None" IsEnabled="True" Invoked="VolumeDownAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
         </Grid.KeyboardAccelerators>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -58,31 +58,44 @@
                  bar keeps the brand mark and the account chip; the spacer column is
                  what holds the chip over on the right. -->
 
-            <!-- Signed out: quiet wordmark, clear of the caption buttons. -->
-            <TextBlock x:Name="AppTitleText"
-                       Grid.Column="2"
-                       Text="YouTube Music"
-                       VerticalAlignment="Center"
-                       Margin="0,0,140,0"
-                       Style="{StaticResource MutedText}" />
+            <!-- Theme button & Account Chip -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,140,0">
+                <Button x:Name="ThemeButton"
+                        Style="{StaticResource IconButtonStyle}"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Theme options"
+                        ToolTipService.ToolTip="Change Theme">
+                    <Button.Flyout>
+                        <MenuFlyout Opened="ThemeFlyout_Opened">
+                            <RadioMenuFlyoutItem x:Name="DarkThemeItem" Text="Dark Theme" Click="ThemeDark_Click" />
+                            <RadioMenuFlyoutItem x:Name="LightThemeItem" Text="Light Theme" Click="ThemeLight_Click" />
+                            <RadioMenuFlyoutItem x:Name="SystemThemeItem" Text="System Theme" Click="ThemeSystem_Click" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                    <FontIcon Glyph="&#xE771;" FontSize="14" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                </Button>
 
-            <!-- Signed in: account chip — real photo + name from the
-                 backend /account response. Click opens the sign-out menu. -->
-            <Button x:Name="AccountChip"
-                    Grid.Column="2"
-                    VerticalAlignment="Center"
-                    Margin="0,0,140,0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Padding="8,4"
-                    Visibility="Collapsed"
-                    AutomationProperties.Name="Account">
-                <Button.Flyout>
-                    <MenuFlyout>
-                        <MenuFlyoutItem Text="Sign out" Click="SignOut_Click" />
-                    </MenuFlyout>
-                </Button.Flyout>
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <!-- Signed out: quiet wordmark, clear of the caption buttons. -->
+                <TextBlock x:Name="AppTitleText"
+                           Text="YouTube Music"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource MutedText}" />
+
+                <!-- Signed in: account chip — real photo + name from the
+                     backend /account response. Click opens the sign-out menu. -->
+                <Button x:Name="AccountChip"
+                        VerticalAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="8,4"
+                        Visibility="Collapsed"
+                        AutomationProperties.Name="Account">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="Sign out" Click="SignOut_Click" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <!-- Letter fallback for accounts without a photo URL. -->
                     <Border x:Name="PhotoFallback"
                             Width="28" Height="28"
@@ -107,6 +120,7 @@
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Button>
+        </StackPanel>
         </Grid>
 
         <!-- Navigation sidebar: the same four RadioButtons, with the same x:Name,
@@ -294,11 +308,13 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="BarPositionText" Grid.Column="0" Text="–:––"
                            Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="46" />
-                <!-- Enabled only while a track is loaded (x:Bind): pointer-driven
-                     seek needs a loaded source, otherwise drags do nothing. -->
+                <!-- Enabled only while a seek can actually land (x:Bind): seeking
+                     needs a loaded source, and PlaybackService.Seek declines while a
+                     track is still resolving and after it has finished — so gating on
+                     HasTrack alone accepted drags that did nothing. -->
                 <controls:BufferedSeekBar x:Name="BarSeekBar" Grid.Column="1"
                                           VerticalAlignment="Center"
-                                          IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
+                                          IsEnabled="{x:Bind Player.CanSeek, Mode=OneWay}"
                                           SeekRequested="BarSeekBar_SeekRequested"
                                           PreviewChanged="BarSeekBar_PreviewChanged"
                                           AutomationProperties.Name="Seek bar" />
@@ -327,7 +343,7 @@
                 </Button>
                 <Button x:Name="BarNextButton" Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Next"
-                        IsEnabled="{x:Bind Queue.HasUpcoming, Mode=OneWay}"
+                        IsEnabled="{x:Bind Queue.CanAdvance, Mode=OneWay}"
                         Click="BarNextButton_Click">
                     <FontIcon Glyph="&#xE893;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
                 </Button>

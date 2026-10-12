@@ -44,6 +44,7 @@ namespace YtMusicClient.Views
             SetTitleBar(AppTitleBar);
             Title = "YouTube Music";
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1200, 800));
+            PlayerState.ApplyTheme(App.PlayerState.AppTheme);
 
             HomeTab.Checked += NavTab_Checked;
             SearchTab.Checked += NavTab_Checked;
@@ -700,5 +701,22 @@ namespace YtMusicClient.Views
             };
             await dialog.ShowAsync();
         }
+
+        private void ThemeFlyout_Opened(object sender, object e)
+        {
+            var theme = App.PlayerState.AppTheme;
+            DarkThemeItem.IsChecked = theme == ElementThemeSetting.Dark;
+            LightThemeItem.IsChecked = theme == ElementThemeSetting.Light;
+            SystemThemeItem.IsChecked = theme == ElementThemeSetting.System;
+        }
+
+        private void ThemeDark_Click(object sender, RoutedEventArgs e)
+            => App.PlayerState.AppTheme = ElementThemeSetting.Dark;
+
+        private void ThemeLight_Click(object sender, RoutedEventArgs e)
+            => App.PlayerState.AppTheme = ElementThemeSetting.Light;
+
+        private void ThemeSystem_Click(object sender, RoutedEventArgs e)
+            => App.PlayerState.AppTheme = ElementThemeSetting.System;
     }
 }

@@ -14,11 +14,23 @@ namespace YtMusicClient.Services
     {
         private QueueTrack _current;
         private QueueTrack _previous;
+        private bool _canAdvance;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         public QueueTrack Current { get => _current; set => Set(ref _current, value); }
         public QueueTrack Previous { get => _previous; set => Set(ref _previous, value); }
+
+        /// <summary>
+        /// True when the Next control would actually start something. Pushed in by
+        /// PlaybackService — the only thing that knows the queue, the index, the shuffle
+        /// history and the repeat mode — on every state change and whenever repeat or
+        /// shuffle flips, so the transport buttons, the SMTC next button and auto-advance
+        /// can never disagree about whether Next is a dead end. HasUpcoming alone was not
+        /// that answer: at the end of a repeat-all queue the service wraps, so the button
+        /// must not be greyed out.
+        /// </summary>
+        public bool CanAdvance { get => _canAdvance; set => Set(ref _canAdvance, value); }
 
         public ObservableCollection<QueueTrack> Upcoming { get; } = new ObservableCollection<QueueTrack>();
 

@@ -7,6 +7,8 @@ using System.Text.Json;
 
 namespace YtMusicClient.Services
 {
+    public enum ElementThemeSetting { Dark = 0, Light = 1, System = 2 }
+
     public enum RepeatMode { Off, All, One }
 
     /// <summary>
@@ -21,6 +23,7 @@ namespace YtMusicClient.Services
         private QueueTrack _track;
         private bool _isPlaying;
         private bool _isBusy;
+        private bool _isFinished;
         private TimeSpan _position;
         private TimeSpan _duration;
         private double _bufferedFraction;
@@ -29,7 +32,34 @@ namespace YtMusicClient.Services
         private bool _shuffle;
         private RepeatMode _repeat = RepeatMode.Off;
         private bool _autoplayOn = true;
+        private ElementThemeSetting _appTheme = ElementThemeSetting.Dark;
         private double _volume = 0.8;
+
+        public ElementThemeSetting AppTheme
+        {
+            get => _appTheme;
+            set
+            {
+                if (Set(ref _appTheme, value))
+                {
+                    Persist("AppTheme", (int)value);
+                    ApplyTheme(value);
+                }
+            }
+        }
+
+        public static void ApplyTheme(ElementThemeSetting setting)
+        {
+            if (App.Window?.Content is Microsoft.UI.Xaml.FrameworkElement root)
+            {
+                root.RequestedTheme = setting switch
+                {
+                    ElementThemeSetting.Dark => Microsoft.UI.Xaml.ElementTheme.Dark,
+                    ElementThemeSetting.Light => Microsoft.UI.Xaml.ElementTheme.Light,
+                    _ => Microsoft.UI.Xaml.ElementTheme.Default,
+                };
+            }
+        }
 
         // Settings live in %LOCALAPPDATA%\YtMusicClient\settings.json — the same
         // folder as the audio cache. ApplicationData.Current throws
@@ -101,9 +131,23 @@ namespace YtMusicClient.Services
         public Microsoft.UI.Xaml.Visibility ArtistVisibility => string.IsNullOrEmpty(TrackArtist) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
 
         public bool IsPlaying { get => _isPlaying; set { if (Set(ref _isPlaying, value)) Raise(nameof(PlayGlyph)); } }
-        public bool IsBusy { get => _isBusy; set { if (Set(ref _isBusy, value)) Raise(nameof(CanToggle)); } }
+        public bool IsBusy { get => _isBusy; set { if (Set(ref _isBusy, value)) { Raise(nameof(CanToggle)); Raise(nameof(CanSeek)); } } }
+
+        /// <summary>The track reached its end with nothing to advance to. Mirrors
+        /// PlaybackService's own flag: a finished track can neither resume nor seek.</summary>
+        public bool IsFinished { get => _isFinished; set { if (Set(ref _isFinished, value)) Raise(nameof(CanSeek)); } }
+
         public string PlayGlyph => IsPlaying ? "\uE769" : "\uE768"; // pause : play
         public bool CanToggle => HasTrack && !IsBusy;
+
+        /// <summary>
+        /// True only when a seek would actually take effect. PlaybackService.Seek ignores
+        /// seeks while nothing is loaded (resolving or buffering) and once the track has
+        /// finished, but both seek bars were gated on HasTrack alone — so during
+        /// "Resolving stream…" they accepted a drag that silently did nothing and then
+        /// snapped back on the next tick. CanToggle is the play button's equivalent gate.
+        /// </summary>
+        public bool CanSeek => HasTrack && !IsBusy && !IsFinished;
 
         /// <summary>Position — raised from the engine's 4 Hz tick, not a per-page timer.</summary>
         public TimeSpan Position { get => _position; set => Set(ref _position, value); }
@@ -154,6 +198,7 @@ namespace YtMusicClient.Services
                 _shuffle = ReadDouble("Shuffle", 0) != 0;
                 _autoplayOn = ReadDouble("AutoplayOn", 1) != 0;
                 _repeat = (RepeatMode)Math.Clamp((int)ReadDouble("RepeatMode", 0), 0, 2);
+                _appTheme = (ElementThemeSetting)Math.Clamp((int)ReadDouble("AppTheme", 0), 0, 2);
             }
             catch
             {

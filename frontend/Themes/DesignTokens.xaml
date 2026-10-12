@@ -7,33 +7,48 @@
       Pitch black by default; color only from album art and the single accent.
     -->
 
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#000000" />
+            <SolidColorBrush x:Key="GlassBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="GlassStrongBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="CardBrush" Color="#141417" />
+            <SolidColorBrush x:Key="RaisedBrush" Color="#1C1C21" />
+            <SolidColorBrush x:Key="TokenBorderBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="TokenBorderStrongBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A6A6A6" />
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#7A7A7A" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FAF8F5" />
+            <SolidColorBrush x:Key="GlassBrush" Color="#0F000000" />
+            <SolidColorBrush x:Key="GlassStrongBrush" Color="#1A000000" />
+            <SolidColorBrush x:Key="CardBrush" Color="#EFECE6" />
+            <SolidColorBrush x:Key="RaisedBrush" Color="#E2DDD5" />
+            <SolidColorBrush x:Key="TokenBorderBrush" Color="#1F000000" />
+            <SolidColorBrush x:Key="TokenBorderStrongBrush" Color="#33000000" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1A1A" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#555555" />
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#777777" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#000000" />
+            <SolidColorBrush x:Key="GlassBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="GlassStrongBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="CardBrush" Color="#141417" />
+            <SolidColorBrush x:Key="RaisedBrush" Color="#1C1C21" />
+            <SolidColorBrush x:Key="TokenBorderBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="TokenBorderStrongBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A6A6A6" />
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#7A7A7A" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
     <Color x:Key="AccentColor">#FA2D48</Color>
     <SolidColorBrush x:Key="AccentBrush" Color="#FA2D48" />
     <SolidColorBrush x:Key="BufferedBrush" Color="#8C8C8C" Opacity="0.45" />
-    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#000000" />
-
-    <!-- Glass. DESIGN_TOKENS defines these as translucent white (rgba(255,255,255,
-         0.06 / 0.10)), not opaque grays: on pure black a translucent fill reads
-         the same as before, but over album art or the Now Playing ambient wash
-         it now actually frosts instead of sitting on top as a solid block.
-         The alphas below are the translucent equivalents of the values these
-         surfaces rendered before, so the flat-black look is unchanged. -->
-    <SolidColorBrush x:Key="GlassBrush" Color="#14FFFFFF" />
-    <SolidColorBrush x:Key="GlassStrongBrush" Color="#1FFFFFFF" />
-    <!-- Opaque surfaces: artwork placeholders and avatar fallbacks, which must
-         never go transparent (there is nothing behind them). -->
-    <SolidColorBrush x:Key="CardBrush" Color="#141417" />
-    <SolidColorBrush x:Key="RaisedBrush" Color="#1C1C21" />
-    <SolidColorBrush x:Key="TokenBorderBrush" Color="#26FFFFFF" />
-    <SolidColorBrush x:Key="TokenBorderStrongBrush" Color="#33FFFFFF" />
-
-    <!-- Text. The spec's muted alpha (0.32) renders at ~2.6:1 contrast on true
-         black — below WCAG AA — and the metadata/durations using it were the
-         least legible text in the app. These are lifted to clear AA while
-         keeping the primary > secondary > muted hierarchy. -->
-    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A6A6A6" />
-    <SolidColorBrush x:Key="TextMutedBrush" Color="#7A7A7A" />
 
     <x:Double x:Key="PageHeadlineSize">28</x:Double>
     <x:Double x:Key="SectionHeaderSize">18</x:Double>

@@ -49,6 +49,12 @@ namespace YtMusicClient.Services
         /// <summary>The VideoId for which we already fired the 50%-prefetch on this track.</summary>
         private string _prefetchFiredFor;
 
+        /// <summary>The VideoId whose warm-up is in flight for the track AFTER it.
+        /// A token, not a flag: a stale warm-up whose videoId no longer matches
+        /// is left to finish on the backend (harmless, bounded there) and its
+        /// engine-side result is discarded by LoadAsync's URL reconciliation.</summary>
+        private string _urlPrefetchFiredFor;
+
         // The playback queue, in order, with the position of the track now playing.
         // Filled by the list overload of PlayAsync; a standalone play leaves it empty
         // (or re-aims _queueIndex when the track happens to be part of the queue).
@@ -75,6 +81,7 @@ namespace YtMusicClient.Services
             _statusText = "";
             _currentUrl = null;
             _prefetchFiredFor = null;
+            _urlPrefetchFiredFor = null;
             _lastPlayRequestUtc = DateTime.MinValue;
             _lastPlayRequestVideoId = null;
         }
@@ -224,6 +231,7 @@ namespace YtMusicClient.Services
             _lastPlayRequestUtc = DateTime.UtcNow;
             _lastPlayRequestVideoId = videoId;
 
+            PlaybackLog.ResetClock();   // stage timing: all "[+Ns]" lines below are this track
             _prefetchFiredFor = null; // new track: re-evaluate prefetch at 50%
             int generation = ++_generation;
             _finished = false;
@@ -295,7 +303,15 @@ namespace YtMusicClient.Services
 
                 IsBusy = false;
                 _statusText = "";
-                Log("playing");
+                Log("playing (engine loaded: decode+device ready — first audio now at output)");
+
+                // Warm the backend's URL cache for the next entry the moment this
+                // track ACTUALLY starts (not at 50%): the yt-dlp resolve the backend
+                // pays is ~3 s cold (measured), and here it runs entirely parallel
+                // to the track's playback — invisible at hand-off time. Shuffle is
+                // excluded: a random next would miss the pre-warmed track.
+                if (!App.PlayerState.Shuffle)
+                    WarmUrlForNextTrack();
 
                 // Prefetch moves to 50% played (Phase 6): starting the resolve too
                 // early wastes the connection slot and the warm can cool before the
@@ -424,9 +440,8 @@ namespace YtMusicClient.Services
             }
 
             if (next < 0)
-                return false;
-
-            _prefetchFiredFor = null; // advancing to a new track: re-evaluate prefetch at 50%
+                return false;                _prefetchFiredFor = null; // advancing to a new track: re-evaluate prefetch at 50%
+            _urlPrefetchFiredFor = null;   // the NEXT after the NEXT must be warmed fresh
             _queueIndex = next;
             var track = _queue[_queueIndex];
             _playedShuffle.Add(track.VideoId);
@@ -475,13 +490,43 @@ namespace YtMusicClient.Services
             {
                 var next = _queue[_queueIndex + 1];
                 var stream = await App.ApiClient.GetStreamUrlAsync(next.VideoId);
-                await _engine.PrefetchNextAsync(stream.Url);
-                Log($"prefetched next: {next.VideoId}");
+                // Discard the engine result when the queue moved on while we
+                // were resolving: the warm cache is only correct for the track
+                // that is still next.
+                if (_queueIndex + 1 < _queue.Count && _queue[_queueIndex + 1].VideoId == next.VideoId)
+                {
+                    await _engine.PrefetchNextAsync(stream.Url);
+                    Log($"prefetched next: {next.VideoId}");
+                }
+                else
+                {
+                    Log("prefetch stale: queue moved past " + next.VideoId);
+                }
             }
             catch (Exception ex)
             {
                 Log("prefetch failed: " + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Warm the backend's stream-URL cache for the next queue entry the
+        /// moment a track starts (NOT at 50%): yt-dlp's resolve takes ~3 s cold
+        /// (measured 2.9–3.75 s on this host), so at 50% of a 3-minute track it
+        /// finishes comfortably, but for a short track it tails into the gap.
+        /// Cheap, bounded to one fire per track (per target videoId), and the
+        /// 50%-prefetch below still does the byte-level engine warm along the
+        /// already-warm URL.
+        /// </summary>
+        private void WarmUrlForNextTrack()
+        {
+            if (_queueIndex + 1 >= _queue.Count || App.ApiClient == null)
+                return;
+            var next = _queue[_queueIndex + 1];
+            if (next.VideoId == _urlPrefetchFiredFor)
+                return; // already warmed for this successor
+            _urlPrefetchFiredFor = next.VideoId;
+            _ = App.ApiClient.WarmStreamCacheAsync(next.VideoId);
         }
 
         /// <summary>Release the audio device and stop everything.</summary>

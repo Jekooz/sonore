@@ -180,6 +180,27 @@ namespace YtMusicClient.Services
             return await GetOrThrowAsync<StreamResponse>($"stream/{Uri.EscapeDataString(videoId)}");
         }
 
+        /// <summary>
+        /// Ask the sidecar to warm its stream-URL cache for a video id (from the
+        /// backend's yt-dlp resolve). Fire-and-forget: the response only says
+        /// the warm-up started (202) or was already cached (200); errors are
+        /// the caller's problem to log, never a reason to fail playback.
+        /// </summary>
+        public async Task WarmStreamCacheAsync(string videoId)
+        {
+            try
+            {
+                using var resp = await _client.GetAsync($"prefetch/{Uri.EscapeDataString(videoId)}");
+                if (!resp.IsSuccessStatusCode)
+                    System.Diagnostics.Debug.WriteLine($"prefetch {videoId}: {(int)resp.StatusCode}");
+            }
+            catch (Exception)
+            {
+                // A failed warm-up must never affect playback; the real resolve
+                // happens when the track is actually played.
+            }
+        }
+
         // ---------------- helpers ----------------
 
         private async Task<T> GetOrThrowAsync<T>(string path)

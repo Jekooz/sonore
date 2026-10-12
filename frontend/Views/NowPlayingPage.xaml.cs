@@ -31,6 +31,32 @@ namespace YtMusicClient.Views
         // the cross-fade into the new ambient + card art.
         private string _lastArtUrl;
 
+        /// <summary>Page width (px) at which the full 3-card carousel fits:
+        /// 150 (prev card) + 300 (centre) + 150 (next) + 12+12 card margins plus
+        /// the page's 2×24 horizontal padding. Below it, the side cards hide and
+        /// the centre card + controls carry the page instead of the row
+        /// overflowing horizontally.</summary>
+        public const double SideCardsMinWidth = 700;
+
+        /// <summary>Live answer consulted by <see cref="RefreshCarousel"/>;
+        /// updated on every size change so resizing is checked continuously,
+        /// not just at one breakpoint.</summary>
+        private bool _sideCardsAllowed = true;
+
+        /// <summary>Pure width rule (public so the regression test can pin it
+        /// without a live Window): show the side preview cards only when the
+        /// page is at least <see cref="SideCardsMinWidth"/> wide.</summary>
+        public static bool ShowSideCardsFor(double pageWidth) => pageWidth >= SideCardsMinWidth;
+
+        private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            bool allowed = ShowSideCardsFor(e.NewSize.Width);
+            if (allowed == _sideCardsAllowed)
+                return;
+            _sideCardsAllowed = allowed;
+            RefreshCarousel(); // queue state itself didn't change — re-evaluate visibility
+        }
+
         public NowPlayingPage()
         {
             InitializeComponent();
@@ -45,7 +71,10 @@ namespace YtMusicClient.Views
             RefreshFromState(); // pages are cached (NavigationCacheMode=Enabled): catch up on load
             RefreshCarousel();  // side preview cards need this too: queue changes alone won't fire while hidden
             if (App.Window is MainWindow mainWindow)
+            {
                 mainWindow.SetPlayerBarVisible(false); // this page IS the full player
+                mainWindow.SetNavCollapsed(true);      // …and its nav is the hamburger
+            }
         }
 
         private void NowPlayingPage_OnUnloaded(object sender, RoutedEventArgs e)
@@ -53,7 +82,10 @@ namespace YtMusicClient.Views
             // PropertyChanged stays subscribed: the page is cached and re-shown,
             // and the handlers are cheap when nothing is playing.
             if (App.Window is MainWindow mainWindow)
+            {
                 mainWindow.SetPlayerBarVisible(true);
+                mainWindow.SetNavCollapsed(false); // every leave path restores the sidebar
+            }
         }
 
         /// <summary>PlayerState changes: track/artwork, seek bar, times.</summary>
@@ -188,7 +220,7 @@ namespace YtMusicClient.Views
         {
             var prev = Queue.Previous;
             SetArt(CarouselPrevArt, prev?.ArtworkUrl);
-            CarouselPrev.Visibility = prev != null ? Visibility.Visible : Visibility.Collapsed;
+            CarouselPrev.Visibility = _sideCardsAllowed && prev != null ? Visibility.Visible : Visibility.Collapsed;
             if (prev != null)
             {
                 CarouselPrevTitle.Text = prev.Title ?? "";
@@ -197,7 +229,7 @@ namespace YtMusicClient.Views
 
             var next = Queue.Upcoming.Count > 0 ? Queue.Upcoming[0] : null;
             SetArt(CarouselNextArt, next?.ArtworkUrl);
-            CarouselNext.Visibility = next != null ? Visibility.Visible : Visibility.Collapsed;
+            CarouselNext.Visibility = _sideCardsAllowed && next != null ? Visibility.Visible : Visibility.Collapsed;
             if (next != null)
             {
                 CarouselNextTitle.Text = next.Title ?? "";

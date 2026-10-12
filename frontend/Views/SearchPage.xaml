@@ -5,7 +5,9 @@
       Background="{ThemeResource AppBackgroundBrush}"
       NavigationCacheMode="Enabled">
 
-    <Grid Padding="32,24,32,96" RowSpacing="14" MaxWidth="960" HorizontalAlignment="Center">
+    <!-- Bottom padding 24 (was 96): the player row is the shell's own grid row
+     below this page — reserving for it here double-counted it. -->
+    <Grid Padding="32,24,32,24" RowSpacing="14" MaxWidth="960" HorizontalAlignment="Center">
         <!-- Results/chips appearing and disappearing reflow smoothly. -->
         <Grid.ChildrenTransitions>
             <TransitionCollection>

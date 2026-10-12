@@ -5,7 +5,9 @@
       Background="{ThemeResource AppBackgroundBrush}"
       NavigationCacheMode="Enabled">
 
-    <Grid Padding="32,24,32,96" RowSpacing="16">
+    <!-- Bottom padding 24 (was 96): the player row lives in the shell's grid
+     below this page — the old value double-reserved it. -->
+    <Grid Padding="32,24,32,24" RowSpacing="16">
         <!-- Switching library sections reflows smoothly instead of jumping. -->
         <Grid.ChildrenTransitions>
             <TransitionCollection>

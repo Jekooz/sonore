@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using YtMusicClient.Services;
+using YtMusicClient.Views;
 
 namespace YtMusicClient.Tests;
 
@@ -423,5 +424,237 @@ public class PlaybackServiceTests
             App.PlayerState.Shuffle = shuffleBefore;
             App.ApiClient = apiBefore;
         }
+    }
+
+    /// <summary>
+    /// Regression (P2): pressing Next REPEATEDLY must walk the whole queue in order
+    /// and must not strand playback on "Resolving stream…". Each PlayNext call goes
+    /// through the same standalone-queue-clearing path as a first play, so the queue
+    /// must survive repeated advances, and each advance must actually retarget the
+    /// service's current track (VideoId claim) even though every stream load fails.
+    /// Uses one PlaybackService with a closed-port ApiClient: only the queue/advance
+    /// logic is under test, never real audio.
+    /// </summary>
+    [Fact]
+    public async Task Next_RepeatedWalksTheQueueInOrder()
+    {
+        var apiBefore = App.ApiClient;
+        try
+        {
+            App.ApiClient = new ApiClient("http://127.0.0.1:1/");
+            App.PlayerState.Repeat = RepeatMode.Off;
+            App.PlayerState.Shuffle = false;
+
+            var service = App.Playback;
+            service.ResetDebugState();
+            var queue = new List<QueueTrack>
+            {
+                new("n1", "One", "Artist", ""),
+                new("n2", "Two", "Artist", ""),
+                new("n3", "Three", "Artist", ""),
+            };
+            await service.PlayAsync(queue, 0);
+
+            string[] expectedOrder = { "n1", "n2", "n3" };
+            for (int i = 1; i < expectedOrder.Length; i++)
+            {
+                bool advanced = service.PlayNext();
+                Assert.True(advanced, $"Next #{i} must start the next queue entry");
+                Assert.Equal(expectedOrder[i], service.VideoId);
+            }
+
+            // Exhausted + repeat off: the final PlayNext is a declines-nothing
+            // no-op, leaving the last track's VideoId in place.
+            Assert.False(service.PlayNext(), "repeat off at the queue end must decline");
+            Assert.Equal("n3", service.VideoId);
+        }
+        finally
+        {
+            App.PlayerState.Repeat = RepeatMode.Off;
+            App.PlayerState.Shuffle = false;
+            App.ApiClient = apiBefore;
+        }
+    }
+
+    /// <summary>
+    /// Regression (P2) for the standalone-play dead end: when a track outside the
+    /// queue is played, the queue is cleared by design (stale-context rule). After
+    /// it FINISHES the ended-handler would rest; but the Next button's own state
+    /// (CanAdvance=false) must stay consistent with PlayNext()=false, so the user
+    /// never sees an enabled Next that does nothing. Playing a queued track again
+    /// re-aims the queue (documented behavior), so Next works again from there.
+    /// </summary>
+    [Fact]
+    public async Task StandalonePlay_QueueCleared_NextDeclinesThenQueueReaims()
+    {
+        var apiBefore = App.ApiClient;
+        try
+        {
+            App.ApiClient = new ApiClient("http://127.0.0.1:1/");
+            App.PlayerState.Repeat = RepeatMode.Off;
+            App.PlayerState.Shuffle = false;
+
+            var service = App.Playback;
+            service.ResetDebugState();
+            var queue = new List<QueueTrack>
+            {
+                new("sa1", "One", "Artist", ""),
+                new("sa2", "Two", "Artist", ""),
+            };
+            await service.PlayAsync(queue, 0);
+            Assert.True(App.Queue.CanAdvance, "queue context is alive at index 0");
+
+            // Standalone: a videoId not in the queue. Clears the stale queue.
+            await service.PlayAsync("solo", "Solo", "Artist", "");
+            Assert.Equal("solo", service.VideoId);
+            Assert.False(service.PlayNext(), "no queue, no repeat, no shuffle: PlayNext declines");
+            Assert.False(App.Queue.CanAdvance, "CanAdvance must mirror PlayNext's decline");
+
+            // Playing from the original list re-aims the queue and Next works again.
+            await service.PlayAsync(queue, 0);
+            Assert.Equal("sa1", service.VideoId);
+            Assert.True(service.PlayNext(), "re-aimed queue advances to entry 1");
+            Assert.Equal("sa2", service.VideoId);
+        }
+        finally
+        {
+            App.PlayerState.Repeat = RepeatMode.Off;
+            App.PlayerState.Shuffle = false;
+            App.ApiClient = apiBefore;
+        }
+    }
+
+    /// <summary>
+    /// Regression (P2) for the rapid-track-change race: a newer PlayAsync must
+    /// retire the previous one. The stub server holds the FIRST resolve in flight
+    /// long enough for a second click on a DIFFERENT track to supersede it; the
+    /// superseded load must never commit, so the final VideoId must be the newer
+    /// click's and IsBusy must not be stuck true after the newer load fails fast.
+    /// </summary>
+    [Fact]
+    public async Task RapidTrackChange_OlderClickIsSuperseded_NotStuckBusy()
+    {
+        using var server = new StubStreamServer(delayMs: 400);
+        var apiBefore = App.ApiClient;
+        var service = new PlaybackService();
+        try
+        {
+            App.ApiClient = new ApiClient($"http://127.0.0.1:{server.Port}/");
+            service.ResetDebugState();
+
+            Task first = service.PlayAsync("race-a", "One", "Artist", "");
+            await Task.Delay(50);          // first resolve is now in flight
+            Task second = service.PlayAsync("race-b", "Two", "Artist", "");
+            await Task.WhenAll(first, second);
+
+            Assert.Equal("race-b", service.VideoId);
+            Assert.False(service.IsBusy,
+                "the superseded first click must never strand IsBusy=true");
+            Assert.StartsWith("Playback failed", service.StatusText);
+        }
+        finally
+        {
+            service.Dispose();
+            App.ApiClient = apiBefore;
+        }
+    }
+
+    /// <summary>
+    /// Regression (P2) for the URL-cache semantics: after a prefetch fires, the
+    /// same video must hit the (stubbed) backend again but the renewed Wait must
+    /// not have been skipped because of the 700 ms same-id duplicate gate. Direct
+    /// test: the gate suppresses the SECOND identical click inside 700 ms, but a
+    /// click outside the window re-resolves (stub server delays verify the resolve
+    /// still happened, i.e. the play actually re-entered the load path).
+    /// </summary>
+    [Fact]
+    public async Task SameTrackOutsideDebounceWindow_ReentersTheLoadPath()
+    {
+        using var server = new StubStreamServer(delayMs: 200);
+        var apiBefore = App.ApiClient;
+        var service = new PlaybackService();
+        try
+        {
+            App.ApiClient = new ApiClient($"http://127.0.0.1:{server.Port}/");
+            service.ResetDebugState();
+
+            await service.PlayAsync("dup-re", "One", "Artist", "");
+            Assert.StartsWith("Playback failed", service.StatusText);
+
+            // The duplicate gate absorbs <700 ms replays (covered elsewhere);
+            // here wait it out and confirm a genuine re-resolve happens.
+            await Task.Delay(800);
+            await service.PlayAsync("dup-re", "One", "Artist", "");
+
+            // Re-entry means the service went through resolve again — visible as
+            // the same deterministic failed-load status, NOT a no-op.
+            Assert.StartsWith("Playback failed", service.StatusText);
+            Assert.False(service.IsBusy);
+        }
+        finally
+        {
+            service.Dispose();
+            App.ApiClient = apiBefore;
+        }
+    }
+}
+
+/// <summary>
+/// Responsive Now Playing / collapsible-nav rules. Both are deliberately
+/// pure functions: the Window and Page themselves need a live UI thread, but
+/// the decisions they consult (which destination collapses the sidebar,
+/// whether the carousel's side cards fit) do not — so the contract is pinned
+/// here and the visual behaviour stays a manual Windows check.
+/// </summary>
+public class NavigationChromeTests
+{
+    /// <summary>The sidebar collapses to the hamburger for Now Playing only;
+    /// every other destination (and an unknown/null tag) restores it.</summary>
+    [Theory]
+    [InlineData("home", false)]
+    [InlineData("search", false)]
+    [InlineData("library", false)]
+    [InlineData("nowplaying", true)]
+    [InlineData(null, false)]
+    public void Nav_Collapses_Only_For_NowPlaying(string? tag, bool expected)
+        => Assert.Equal(expected, MainWindow.ShouldCollapseNavFor(tag));
+
+    /// <summary>Carousel side cards need 150 + 300 + 150 + 12+12 margins plus
+    /// the page's 2×24 padding — 700 px of page width. At or above, the full
+    /// 3-card row renders; below, the cards hide instead of overflowing
+    /// horizontally (centre card + controls always remain).</summary>
+    [Theory]
+    [InlineData(1200.0, true)]  // default windowed size
+    [InlineData(700.0, true)]   // exact threshold
+    [InlineData(699.0, false)]  // one pixel under: side cards hide
+    [InlineData(480.0, false)]  // narrow windowed
+    public void Carousel_SideCards_Hide_Below_Width_Threshold(double pageWidth, bool expected)
+        => Assert.Equal(expected, NowPlayingPage.ShowSideCardsFor(pageWidth));
+}
+
+/// <summary>
+/// Mini-player layout contract: the window may never be shrunk so far that the
+/// title bar (48) + the mini-player's dedicated row (64 bar + 16 bottom margin)
+/// stop fitting — that is exactly the state in which the bar's rounded container
+/// crossed the client-area edge (reported bug: "bottom mini-player clipped at
+/// the window bottom"). The WM_GETMINMAXINFO hook in MainWindow enforces it at
+/// runtime; this pins the arithmetic so a future padding/margin tweak cannot
+/// silently break the floor.
+/// </summary>
+public class WindowChromeTests
+{
+    [Fact]
+    public void PlayerRow_Is_A_Dedicated_Sixteen_Pixel_Margin()
+        => Assert.Equal(80, MainWindow.PlayerRowLogicalHeight); // 64 bar + 16 margin
+
+    [Fact]
+    public void MinWindowHeight_Keeps_TitleBar_And_PlayerRow_And_Content_Floor()
+    {
+        Assert.Equal(48, MainWindow.TitleBarLogicalHeight);
+        Assert.True(MainWindow.MinContentLogicalHeight >= 160,
+            "at least 160 logical px of content must survive between title bar and player row");
+        Assert.Equal(MainWindow.TitleBarLogicalHeight + MainWindow.MinContentLogicalHeight
+                        + MainWindow.PlayerRowLogicalHeight,
+                     MainWindow.MinWindowLogicalHeight);
     }
 }

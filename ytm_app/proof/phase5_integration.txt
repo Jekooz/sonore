@@ -1,0 +1,168 @@
+Phase 5 — Batch 2: Real-Session Integration
+Date: 2026-10-13
+Status: Batch 2 complete (Step 5). NO COMMITS, NO PUSHES.
+
+This machine already holds a real stored session, so the automated suite ran in
+the SIGNED-IN path (verified by detection, see below). It also asserts the
+signed-out path, which is what a clean machine would take.
+
+====================================================================
+1. CHANGED FILES AND REASONS
+====================================================================
+backend/main.py                                   (modified)
+  Port file path is now `YTM_PORT_FILE` or the shared default. Lets an isolated
+  instance (test, or a second copy) publish without touching
+  %TEMP%/ytmusic_sidecar_port.txt. Additive; default behaviour unchanged, so the
+  production discovery contract the app and the WinUI launcher rely on is intact.
+
+ytm_app/integration_test/sidecar_lifecycle_test.dart   (rewritten)
+  No longer deletes/reads the shared port file. Uses a unique temp dir, its own
+  port file + log, and a dedicated port (8199), passes YTM_PORT_FILE so the
+  backend publishes there, and asserts the shared port file is byte-identical
+  before and after. Cleanup runs in addTearDown even when an assertion fails.
+
+ytm_app/test/sidecar_launcher_test.dart           (modified)
+  +1 regression test: safe reuse when another instance is already live (the
+  launcher reuses it and never touches its port file), plus a stale-file case.
+  Brought the unit count from 189 to 190.
+
+ytm_app/integration_test/backend_api_test.dart    (new)
+  Real Python backend + real Flutter YtmApiClient/YtmRepository over HTTP, on an
+  isolated sidecar (port 8201, own temp port file/log). Read-only. Cleanup in
+  tearDownAll + addTearDown. See section 3.
+
+ytm_app/proof/phase5_integration.txt              (new, this file)
+
+No other production source changed. The sidecar launcher, data layer, auth
+controller and playback engine were read (Step 1 audit) and left as-is: no
+defect in them was demonstrated by the audit or the tests.
+
+====================================================================
+2. STEP 1 AUDIT — CONFIRMED ARCHITECTURE (checked, not assumed)
+====================================================================
+- Sidecar: ytm_app/lib/core/sidecar/{sidecar_launcher,sidecar_io,sidecar_providers,
+  sidecar_startup_gate}.dart. Injected spawner/port-file/probe/log/killer; real
+  dart:io wiring via createSidecarLauncher; default NoopSidecarLauncher so no
+  widget/golden test spawns a process.
+- Data: ytm_app/lib/data/{api_client,ytm_repository,models}.dart. ApiClient
+  discovers via the port file then falls back to 127.0.0.1:8000 (and
+  10.0.2.2:8000 on Android); a failed request drops the cached base URL and
+  re-discovers once (covers restart-on-a-different-port).
+- Auth: SignInController + /auth/browser/* and /auth/extension protocol;
+  backend validates a candidate against YouTube BEFORE storing, so a bad
+  hand-off cannot destroy a working session.
+- Playback: ytm_app/lib/audio/{playback_engine,playback_service}.dart.
+- Recorded-sidecar seam: unchanged (ytm_app/test/support/recorded_sidecar.dart).
+
+====================================================================
+3. BACKEND ROUTES ACTUALLY EXERCISED (real HTTP, real yt-dlp)
+====================================================================
+Route                       Where exercised                 Result
+GET  /health                backend_api_test health        200 {"ok":...}
+GET  /auth/status           isSignedIn / connection()      logged_in reflects
+                                                            the real session
+GET  /auth/browser/status   browserSignInState()           state == "idle"
+GET  /home                  repository.home()              parsed rows
+GET  /account               client.account()               accountName key
+GET  /search?q=thriller     repository.search()            results > 0, real
+                                                            artwork URLs present
+GET  /stream/{videoId}      client.streamUrl('dQw4w9WgXcQ') 200, real signed
+                                                            URL (shape-checked,
+                                                            never printed)
+GET  /stream/bad!!          client.streamUrl('bad!!')      400 -> YtmRequest-
+                                                            Exception(400)
+POST /auth/cookies          raw http.post (fake SID)       422, body does NOT
+                                                            echo the value
+POST /auth/extension        raw http.post (empty)          409 (no pending
+                                                            sign-in to receive)
+
+Queue operations are client-side (PlaybackService) and are covered by the
+existing unit suite (ytm_app/test/playback_service_test.dart, 190 total). A real
+forwarded stream URL — the input queue playback consumes — was resolved above.
+
+====================================================================
+4. AUTHENTICATION VERIFICATION LEVEL
+====================================================================
+Automated  : session state detection, propagation to connection(), the
+             signed-out mapping of /home and /account (asserted when signed
+             out), and the reject paths of the real validators (422 incomplete
+             cookies, 409 unsolicited extension). No real cookie was sent or
+             stored; the probe used a clearly fake value.
+MANUAL     : the interactive browser sign-in hand-off (POST /auth/browser/start
+             opens music.youtube.com in the default browser; the companion
+             extension then posts cookies). This cannot be automated without a
+             human in a real browser. NOT AUTOMATED.
+The suite did NOT fabricate a sign-in. It detected that this machine is already
+signed in and asserted the signed-in behaviour; it does not claim a fresh
+sign-in was performed.
+
+====================================================================
+5. ISOLATION AND CLEANUP EVIDENCE
+====================================================================
+- Each test spawns its own sidecar in a fresh %TEMP% dir (ytm_backend_api*,
+  ytm_restart*, ytm_sidecar_lifecycle*), on its own port, with its own port file
+  and log. YTM_PORT_FILE routes publication away from the shared file.
+- The shared port file is captured before and asserted byte-identical after, in
+  both integration tests.
+- Shutdown kills only the pid this test spawned (taskkill /T /F + verify gone).
+- Cleanup runs in addTearDown/tearDownAll, so a failed assertion still cleans up.
+- After the full run: `tasklist /FI "IMAGENAME eq python.exe"` -> "No tasks are
+  running which match the specified criteria."; `ls -d /tmp/ytm_*` -> 0 leftover
+  dirs.
+- No destructive cleanup command was run against unrelated Python processes.
+
+====================================================================
+6. COMMANDS, RESULTS, EXIT CODES
+====================================================================
+1. flutter analyze
+   -> "No issues found!"                                     EXIT=0
+2. flutter test --concurrency=1
+   -> "All tests passed! ... +190"                          EXIT=0
+3. bash tool/check_tokens.sh
+   -> "No design-token violations found."                   EXIT=0
+4. flutter test integration_test/sidecar_lifecycle_test.dart -d windows
+   -> "All tests passed!"                                   EXIT=0
+5. flutter test integration_test/playback_engine_test.dart -d windows
+   -> "All tests passed!"                                   EXIT=0
+6. flutter test integration_test/backend_api_test.dart -d windows   (NEW)
+   -> "All tests passed! ... +10"                           EXIT=0
+
+Exit codes captured with PIPESTATUS so output filtering could not mask a
+failure.
+
+Windows release build: not run. Only an additive env-var default was added to
+backend/main.py; no Flutter production source changed, so a new release binary
+is not warranted by these changes.
+
+====================================================================
+7. TESTS NOT RUN AND REASONS
+====================================================================
+- Android integration: no device/emulator available.
+- Interactive browser sign-in end-to-end: requires a human in a real browser
+  (section 4).
+- Web/extension cookie capture from a real browser profile: would record real
+  credentials; intentionally not performed.
+- Full Windows release packaging of the sidecar: out of scope for Batch 2.
+
+====================================================================
+8. REMAINING LIMITATIONS
+====================================================================
+- /stream resolution depends on yt-dlp and the network; if YouTube changes or
+  the network is unavailable the test fails loudly rather than silently passing.
+- The signed-in assertions ran against this machine's existing session; on a
+  clean machine the same code takes the signed-out branch, which is also
+  asserted, but has not been run on a clean machine here.
+- Sign-out (POST /auth/signout) and ratings (POST /ratings) are mutating and
+  were deliberately NOT called against the real account; they remain covered by
+  the recorded-sidecar unit tests.
+- The backend publish-port mechanism while already listening: with YTM_PORT
+  pinned (8199/8201) and YTM_PORT_FILE isolated, an isolated instance never
+  contends with a live app's port or file.
+
+====================================================================
+9. STOP CONDITION
+====================================================================
+Batch 2 stops here. No Lyrics, Equalizer or Settings work was started. Nothing
+was committed or pushed. Pre-existing working-tree changes (frontend/**, 
+tests/ServiceTests.cs, design.md, flutter_poc/, frontend/Views/Controls/
+SeekDragState.cs) are preserved and untouched.

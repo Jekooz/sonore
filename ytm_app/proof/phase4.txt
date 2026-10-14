@@ -1,0 +1,127 @@
+# Phase 4 — screens, menus and the real audio path: evidence and differences
+
+Scope: give Home, Search and Library a real data layer over the existing FastAPI
+sidecar; build the collection page and the shared item menus; drive the one
+PlaybackController with a real media_kit engine; and cover the product screens
+with widget tests and goldens.
+
+Standard used: the spec's "Done means" gates that `tool/check_tokens.sh`
+references, plus this milestone's own plan. **`PROJECT_CONTEXT.md` still carries
+the retired WinUI/.NET context and defines no Phase 4 checklist of its own**; the
+checkpoints below are the ones the milestone plan set, listed explicitly so each
+is either shown passing or marked unverified. The Phase 3 P-items are re-checked
+in §4.
+
+## 1. Evidence checklist
+
+| Checkpoint | Status | Command → result |
+|---|---|---|
+| 1a. `flutter analyze` clean | **verified** | `flutter analyze` → `No issues found!` `exit=0` (`analyze.txt`) |
+| 1b. Whole suite passes serially | **verified** | `flutter test --concurrency=1` → `All tests passed!` **173 passed**, `exit=0` (`test.txt`) |
+| 2. Banned-literal gate | **verified** | `bash tool/check_tokens.sh` → `No design-token violations found.` `exit=0` (`check_tokens.txt`) |
+| 3. Product-screen widget tests (Home/Search/Library/collection/menus, real repository + parsers + router + controller) | **verified** | `flutter test test/product_screens_test.dart` → `All tests passed!` 26 passed, `exit=0` |
+| 4. Product-screen goldens | **produced** | 4 new PNGs (`product_search_results_phone_390x844`, `product_library_songs_desktop_1280x800`, `product_album_desktop_1280x800`, `product_context_menu_desktop_1280x800`) |
+| 5. Goldens all match on a clean run | **verified** | `flutter test test/golden` → `All tests passed!` **21 passed**, `exit=0` (`goldens.txt`) |
+| 6. Real Windows build | **verified** | `flutter build windows --release` → `√ Built build\windows\x64\runner\Release\ytm_app.exe` `exit=0` (`build_windows.txt`) |
+| 7. Real Windows launch smoke test | **verified** | ran the release exe 10s → `process 1401 alive after 10s (no startup crash)`; log shows libmpv registered (`run_windows.txt`) |
+| 8. Real-engine integration test | **verified** | `flutter test integration_test/playback_engine_test.dart -d windows` → `All tests passed!` `exit=0` (`integration.txt`) |
+| 9. Android emulator or device | **not run** | no emulator/device started this session → **unverified** |
+| 10. Visual approval of goldens / real signed-in sidecar | **not run** | needs a human eye and a real Google session → **unverified**, see §3 |
+| 11. Differences listed, not silently changed | **this file**, §4 | — |
+
+## 2. What was built
+
+```
+lib/data/
+  api_client.dart            HTTP client for the sidecar; offline/signed-out/request errors kept distinct
+  models.dart                payload → MediaItem/SearchResults/Collection parsing
+  ytm_repository.dart        endpoints → models; connectionProvider/homeProvider/libraryProvider/collectionProvider
+lib/ui/
+  data_states.dart           ConnectionGate + DataStateView + OfflineState/SignedOutState/skeletons
+  media_rows.dart            MediaRow/MediaCard (now resolve artwork through the seam)
+  media_actions.dart         the shared item menu (play/like/go-to/copy-link) — only real actions
+lib/features/
+  home/ search/ library/     the three destinations over the repository
+  collection/collection_screen.dart   album/playlist/artist page + Play/Add to queue
+  shell/app_shell.dart       watches playbackServiceProvider, so the engine is live in the app
+lib/audio/
+  playback_service.dart      drives MediaKitPlaybackEngine from controller state (the Phase 4 engine wiring)
+test/
+  product_screens_test.dart  26 widget tests over the recorded sidecar
+  golden/product_screens_golden_test.dart   4 product goldens
+integration_test/
+  playback_engine_test.dart  the real native decoder over a self-written local WAV
+```
+
+## 3. Inspection performed (and what it did not cover)
+
+The integration test writes its own controlled source — a 440 Hz mono WAV of
+known length — and drives the shipped `MediaKitPlaybackEngine`: it asserts the
+position advances off zero, the decoded duration matches the tone's real length,
+the track reaches completion on its own, and no engine error is emitted. That is
+real decode through libmpv, not the fake engine the widget tests use.
+
+Not covered: **Android** was not run (no device). **Visual quality** of the
+goldens is not something I can see; the clean golden run proves they are
+deterministic and match what the code renders, not that they look right.
+**End-to-end against a real signed-in sidecar** was not exercised: the product
+tests and goldens run over the anonymized recordings in `test/fixtures/`, which
+is what makes them deterministic.
+
+## 4. Phase 3 differences (P1–P10), re-checked against this tree
+
+- **P1 — RESOLVED.** Home, Search and Library no longer render an empty state:
+  they are backed by `YtmRepository` over the sidecar and render real rows, real
+  grouped results and real segments. Proven by `product_screens_test.dart`.
+- **P2 — RESOLVED.** A real engine is attached: `playback_service.dart` drives
+  `MediaKitPlaybackEngine` from controller state, `main.dart` calls
+  `initialisePlaybackEngine()`, and `app_shell.dart` watches
+  `playbackServiceProvider`. The integration test proves the native decoder
+  actually plays.
+- **P3 — STILL OPEN (narrowed).** Lyrics and Equalizer screens are *not* built.
+  The Now Playing action row still carries only Like and Queue, both real. The
+  design's Phase 4 list includes Lyrics and EQ; they are deferred, and no
+  placeholder is shown for them.
+- **P4 — UNCHANGED.** Still no Hero flight between the mini player and Now
+  Playing (Now Playing is a shell branch with its own Navigator). Navigation is a
+  branch switch.
+- **P5 — UNCHANGED.** Spring motion is still approximated with
+  `Tokens.curveSpring` (`Curves.easeOutBack`); no `SpringSimulation`.
+- **P6 — RESOLVED / STRENGTHENED.** The artwork seam now covers the product
+  screens too: `MediaRow`, `MediaCard` and the collection header resolve through
+  `artworkResolverProvider` instead of fetching by URL, so no test or golden
+  touches the network. Previously only Now Playing/queue used the seam.
+- **P7 — RESOLVED.** The offline golden is no longer a hand-composed state: it is
+  the real Home screen over `offlineRepository()`. A matching real signed-out
+  golden was added (`state_signed_out_phone_390x844`).
+- **P8 — UNCHANGED.** The suite is still run with `--concurrency=1`; the default
+  parallel runner is not reliable on this machine (full `C:`). Serial run is
+  ~20s.
+- **P9 — UNCHANGED.** The sidebar is still the flat `Tokens.surface` panel, not
+  glass (the bottom bar is glass).
+- **P10 — UNCHANGED.** Now Playing keeps the navigation and hides the mini
+  player, as before.
+
+## 5. New differences introduced in Phase 4 (N-items)
+
+- **N1 — Lyrics, Equalizer and Settings screens are absent.** The design's Phase
+  4 list names them; only Home, Search, Library, the collection page and the item
+  menus were built. `AppSettings` exists as a provider (reduce-transparency /
+  reduce-motion) but has no screen. Deferred to Phase 5.
+- **N2 — The Flutter app does not spawn the sidecar.** `main.dart` does not start
+  the Python backend; it discovers an already-running sidecar via the published
+  port file (same contract as before, but the launch step is external). Running
+  the full app end-to-end therefore needs the backend started separately. This is
+  the largest gap for a self-contained "runnable checkpoint".
+- **N3 — Playlist editing, favorites/rename/delete are absent from the menus.**
+  The sidecar exposes no endpoint for them, so they are omitted rather than shown
+  as dead items (spec forbids placeholder actions).
+- **N4 — Two real bugs were found and fixed while making the product tests
+  pass**, both in the real code path, not the tests: (a) the collection page's
+  loading skeleton nested a `ListView` in a `Column` and threw "vertical viewport
+  was given unbounded height"; (b) `MediaRow`/`MediaCard`/the collection header
+  fetched artwork by URL, bypassing the documented artwork seam and reaching the
+  cache manager in tests. (b) is why P6 is now app-wide.
+- **N5 — Advanced search filters are not exposed.** The client always calls the
+  unfiltered `/search`; result grouping (Songs/Albums/Artists/Playlists) is
+  derived from `resultType`.

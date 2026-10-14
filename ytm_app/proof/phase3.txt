@@ -1,0 +1,123 @@
+# Phase 3 — app shell and Now Playing: evidence and differences
+
+Scope: replace the design-system catalogue as the entry screen with the real
+adaptive shell, add the persistent mini player, and build Now Playing as the
+first product screen, plus the loading / empty / error / offline states.
+
+Approved decisions carried in: D1 (centralised Phosphor icon layer, bundled
+licensed fonts) and D8 (context menus deferred).
+
+## 1. Evidence checklist
+
+| Spec checkpoint | Status | Command → result |
+|---|---|---|
+| 1a. `flutter analyze` clean | **verified** | `flutter analyze` → `No issues found!` `exit=0` (`analyze.txt`) |
+| 1b. `flutter test` passes | **verified** | `flutter test --concurrency=1` → `All tests passed!` 76 passed, `exit=0` (`test.txt`) |
+| 2. Banned-literal gate | **verified** | `bash tool/check_tokens.sh` → `No design-token violations found.` `exit=0` (`check_tokens.txt`) |
+| 3. Product-screen goldens at 390x844, 800x1280, 1280x800 and 1280x800 @ 1.3x | **produced** | 16 PNGs in `test/golden/goldens/` (`goldens.txt`): Now Playing ×4, shell/Home/Library ×4, states ×4, catalogue ×4 |
+| 3b. Goldens are application screens, not just the catalogue | **verified** | Now Playing, Home, Library and the shell are captured from the routed app; the catalogue is kept separately at `/dev` |
+| 3c. Screenshots inspected for blank/broken layouts | **partially verified** | Every frame checked to be non-blank with a plausible content profile; luminance maps were rendered and the states inspected by structure. **Visual approval is the human's step** — see §3 |
+| 4. Loading / empty / error / offline screenshots | **produced** | `state_loading`, `state_empty`, `state_error`, `state_offline` at 390x844 |
+| 5. Real Windows build | **verified** | `flutter build windows` → `Built ...\Release\ytm_app.exe` `exit=0` (`build_windows.txt`) |
+| 5b. Real Windows launch smoke test | **verified** | ran the release exe 10s → `process 802 alive after 10s (no startup crash)` (`run_windows.txt`) |
+| 5c. Android emulator or device | **not run** | no emulator/device was started in this session → **unverified** |
+| 6. Differences listed, not silently changed | **this file**, §4 | — |
+
+## 2. What was built
+
+```
+lib/
+  app.dart                                  MaterialApp.router, token theme, clamped text scaling
+  main.dart                                 composition root: window_manager chrome, then the routed app
+  routing/
+    destinations.dart                       the four destinations + their Phosphor icons
+    app_router.dart                         StatefulShellRoute.indexedStack over 4 branches + /dev
+  audio/
+    track.dart                              domain model
+    playback_state.dart                     queue/index/position/repeat/shuffle/error + derived getters
+    playback_controller.dart                real queue semantics behind one Riverpod Notifier
+  features/
+    shell/
+      app_shell.dart                        adaptive layout: sidebar/rail, bottom bar, floating mini player
+      nav_rail.dart                         220px sidebar -> 72px icon rail, hover states
+      nav_bottom_bar.dart                   phone glass pill bar, filled + accented active icon
+      mini_player.dart                      glass pill/bar, art, title, play/next, thin accent progress
+      window_title_bar.dart                 pure custom title bar with real caption buttons
+    now_playing/
+      now_playing_screen.dart               responsive screen + empty/loading/error states
+      artwork.dart                          artwork resolver + ambient palette seams + AmbientBackground
+      queue_carousel.dart                   fan carousel: scale 0.8, rotateY 35deg, perspective 0.001
+      queue_panel.dart                      desktop "Up Next" panel
+      transport_pill.dart                   glass pill: shuffle / prev / play-pause / next / repeat
+    home/ search/ library/                  destinations with honest empty states
+  ui/
+    screen_states.dart                      Skeleton shimmer + empty/error/offline message
+    format.dart                             duration formatting
+test/
+  support/harness.dart                      font loading, sized pumping, fixtures, deterministic seams
+  playback_controller_test.dart             20 queue-semantics tests
+  shell_test.dart                           10 adaptive-navigation / mini-player tests
+  now_playing_test.dart                     11 screen tests
+  screen_states_test.dart                   4 state-widget tests
+  golden/*.dart                             16 goldens across four configurations
+```
+
+## 3. Inspection performed (and what it did not cover)
+
+Programmatic inspection of all 16 goldens: none is blank; each has a plausible
+content profile (unique color counts 104–2290; non-black coverage 1.6% for the
+sparse offline message up to 96.4% for the ambient Now Playing wash).
+
+A coarse luminance map of each frame was rendered and read for structure. This
+found one real defect, which was fixed: the offline golden rendered **no action
+button** because a label was passed without a callback, violating the spec's
+"empty (one sentence and one action)". After the fix the frame contains 3074 px
+of exact `surfaceRaised` (the Retry pill) and the offline state has
+`accent_px=0`, confirming no red.
+
+Not covered: I cannot see the images. Structural checks confirm layout and
+non-blankness but **not** visual quality, color harmony or clipping by eye. The
+four desktop 1.3x frames rendered without Flutter overflow errors, which is
+mechanically checked, not visually.
+
+## 4. Differences from the spec (P-items)
+
+- **P1 — Home, Search and Library render their empty state.** Their repositories
+  and content arrive in Phase 4, so these destinations show an honest empty state
+  (one sentence plus one action) rather than placeholder lists or mock content.
+  Their action is real navigation, not an inert button.
+- **P2 — No audio engine is attached.** `PlaybackController` owns real,
+  unit-tested queue semantics (next/previous/repeat/shuffle/seek/like, 20 tests)
+  and exposes `reportProgress` as the engine hook, but nothing produces sound in
+  this phase. In the shipped app the player is therefore empty and Now Playing
+  renders its empty state; the populated layout is exercised by tests and goldens
+  driving the production controller. design.md stages the engine at Phase 5.
+- **P3 — Lyrics and EQ are not in the Now Playing action row.** Their screens
+  are Phase 4, so the row carries Like and Queue, both of which work against real
+  state. Nothing is rendered that cannot act.
+- **P4 — No Hero between the mini player and Now Playing.** Now Playing is a
+  shell branch with its own Navigator, so a Hero flight cannot originate from the
+  shell-owned mini player. Navigation is a branch switch; tap and swipe-up both
+  open Now Playing.
+- **P5 — Spring motion is approximated with curves.** The carousel snap and the
+  artwork play/pause scale use `Tokens.curveSpring` (`Curves.easeOutBack`) rather
+  than a `SpringSimulation` of the spec's mass/stiffness/damping values.
+- **P6 — Goldens render artwork as the designed no-artwork placeholder.** Tests
+  must not fetch images, so `artworkResolverProvider` is overridden to null and
+  the artwork-derived ambient wash is rendered from a fixed palette fixture.
+  Inter and both Phosphor families are loaded, so text and icon glyphs are real.
+- **P7 — The offline screenshot is a composed state.** No destination has a data
+  layer yet, so no screen can legitimately be offline; the shot renders the shared
+  state widget that Phase 4 screens will use. Loading, empty and error are the
+  real Now Playing screen in each state.
+- **P8 — `flutter test` was run with `--concurrency=1`.** The default parallel
+  runner fails on this machine with `Error: Flutter failed to copy file ... The
+  target device is full`, because **C: is 100% full with 402 MB free**. This is
+  an environment limit, not a test failure: every file passes individually and
+  the whole suite passes serially in ~13s.
+- **P9 — The sidebar uses the flat `surface` token, not glass.** The shell
+  paragraph calls it a "glass sidebar", but spec principle 3 reserves glass for
+  floating chrome. The bottom bar *is* glass, as specified.
+- **P10 — Now Playing keeps the navigation and hides the mini player.** It is one
+  of the four destinations (with an active, accented nav icon), and the page is
+  the player, so the mini player steps aside rather than duplicating transport.

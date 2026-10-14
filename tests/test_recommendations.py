@@ -401,6 +401,63 @@ def test_listening_event_persists_and_aggregates(client, monkeypatch, tmp_path):
     assert stats["artists"]["A"]["completed"] == 1
 
 
+def _record(client, video_id, title, artist, started_at, outcome="completed",
+            listened=100, duration=100):
+    resp = client.post("/listening/events", json={
+        "videoId": video_id, "title": title, "artist": artist,
+        "source": "library", "startedAt": started_at,
+        "listenedSeconds": listened, "durationSeconds": duration,
+        "outcome": outcome,
+    })
+    assert resp.status_code == 200, resp.text
+
+
+def test_listening_history_is_newest_first_and_one_row_per_track(client):
+    _record(client, VALID_ID, "First", "Artist A", 1_700_000_000)
+    _record(client, OTHER_ID, "Second", "Artist B", 1_700_000_100)
+    # Replaying the first one later must not create a second row.
+    _record(client, VALID_ID, "First", "Artist A", 1_700_000_200,
+            outcome="skipped", listened=20)
+
+    body = client.get("/listening/history").json()
+    assert body["count"] == 2
+    entries = body["entries"]
+    assert [e["videoId"] for e in entries] == [VALID_ID, OTHER_ID], \
+        "most recent first"
+    assert entries[0]["plays"] == 2
+    assert entries[0]["title"] == "First"
+    assert entries[0]["artist"] == "Artist A"
+    assert entries[0]["lastOutcome"] == "skipped"
+    assert entries[0]["lastAt"] == 1_700_000_200
+
+
+def test_listening_history_honours_its_limit(client):
+    for index in range(5):
+        _record(client, f"vid{index:08d}", f"T{index}", "A", 1_700_000_000 + index)
+
+    body = client.get("/listening/history", params={"limit": 2}).json()
+    assert body["count"] == 2
+    assert [e["title"] for e in body["entries"]] == ["T4", "T3"]
+
+    assert client.get("/listening/history", params={"limit": 0}).status_code == 422
+
+
+def test_listening_history_is_empty_before_anything_plays(client):
+    body = client.get("/listening/history").json()
+    assert body == {"entries": [], "count": 0}
+
+
+def test_listening_history_survives_a_restart(tmp_path):
+    store = listening_mod.ListeningStore(str(tmp_path / "history.json"))
+    store.record({"videoId": VALID_ID, "title": "T", "artist": "A",
+                  "outcome": "completed", "startedAt": 1_700_000_000})
+
+    reopened = listening_mod.ListeningStore(str(tmp_path / "history.json"))
+    rows = reopened.recent_plays()
+    assert [r["videoId"] for r in rows] == [VALID_ID]
+    assert rows[0]["title"] == "T"
+
+
 @pytest.mark.parametrize("body,field", [
     ({**{"videoId": VALID_ID, "outcome": "completed"}, "outcome": "meh"}, "outcome"),
     ({**{"videoId": VALID_ID, "outcome": "completed"}, "videoId": "x"}, "videoId"),

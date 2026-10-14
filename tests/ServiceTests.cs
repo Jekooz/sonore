@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Xunit;
 using YtMusicClient.Services;
 using YtMusicClient.Views;
+using YtMusicClient.Views.Controls;
 
 namespace YtMusicClient.Tests;
 
@@ -656,5 +657,177 @@ public class WindowChromeTests
         Assert.Equal(MainWindow.TitleBarLogicalHeight + MainWindow.MinContentLogicalHeight
                         + MainWindow.PlayerRowLogicalHeight,
                      MainWindow.MinWindowLogicalHeight);
+    }
+}
+
+/// <summary>
+/// Seek interaction contract (P3 Issue 1). <see cref="SeekDragState"/> is the
+/// exact state machine the live seek bar runs — extracted UI-free precisely so
+/// these cases are testable without a XAML thread:
+///
+/// Regression: the old control read its preview AFTER releasing pointer
+/// capture; the synchronous PointerCaptureLost had already reset it, so every
+/// click/drag committed SeekRequested(-1), NAudio threw "Position cannot be
+/// less than 0", and no user seek ever reached the audio (8 occurrences in the
+/// shipped playback log).
+/// </summary>
+public class SeekInteractionTests
+{
+    // ---------------- release policy ----------------
+
+    [Fact]
+    public void ReleaseTarget_IsClampedToTrackBounds()
+    {
+        Assert.Equal(120, SeekDragState.ResolveReleaseTarget(300, 120));
+        Assert.Equal(0, SeekDragState.ResolveReleaseTarget(300, -5));      // never negative
+        Assert.Equal(300, SeekDragState.ResolveReleaseTarget(300, 9999));  // never past the end
+    }
+
+    [Fact]
+    public void ReleaseTarget_UnknownDuration_DoesNotCommit()
+    {
+        Assert.True(double.IsNaN(SeekDragState.ResolveReleaseTarget(0, 42)),
+            "a click while the stream is still starting must not seek");
+        Assert.True(double.IsNaN(SeekDragState.ResolveReleaseTarget(double.NaN, 42)));
+    }
+
+    [Fact]
+    public void ReleaseTarget_NonFinitePreview_DoesNotCommit()
+    {
+        Assert.True(double.IsNaN(SeekDragState.ResolveReleaseTarget(300, double.NaN)));
+        Assert.True(double.IsNaN(SeekDragState.ResolveReleaseTarget(300, double.PositiveInfinity)));
+    }
+
+    // ---------------- drag state machine ----------------
+
+    [Fact]
+    public void Press_RefusesWhileDurationUnknown()
+    {
+        var s = new SeekDragState();
+        s.SetDuration(0);
+        Assert.False(s.Press());
+        Assert.False(s.IsDragging);
+        Assert.True(double.IsNaN(s.Release()), "nothing may be committed without a drag");
+    }
+
+    [Fact]
+    public void Drag_CommitsThePreviewOnRelease()
+    {
+        var s = new SeekDragState();
+        s.SetDuration(200);
+        Assert.True(s.Press());
+        s.Move(0.25);
+        Assert.Equal(50, s.PreviewSeconds, 3);
+        double target = s.Release();
+        Assert.Equal(50, target, 3);
+        Assert.False(s.IsDragging);
+        Assert.Equal(SeekDragState.IdlePreview, s.PreviewSeconds);
+    }
+
+    [Fact]
+    public void Ticks_DoNotFightTheDrag_AndResumeAfterRelease()
+    {
+        var s = new SeekDragState();
+        s.SetDuration(300);
+        s.ApplyTick(10);
+        Assert.Equal(10, s.PositionSeconds, 3);
+
+        Assert.True(s.Press());
+        s.Move(0.8);            // preview at 240 s
+        s.ApplyTick(11);        // periodic playback tick mid-drag — must be ignored
+        Assert.Equal(240, s.PreviewSeconds, 3);
+        Assert.Equal(10, s.PositionSeconds, 3);
+
+        double target = s.Release();
+        Assert.Equal(240, target, 3);
+
+        s.ApplyTick(12);        // idle again: the timer resumes driving the position
+        Assert.Equal(12, s.PositionSeconds, 3);
+    }
+
+    [Fact]
+    public void Cancel_DiscardsTheDrag_WithoutCommitting()
+    {
+        var s = new SeekDragState();
+        s.SetDuration(300);
+        Assert.True(s.Press());
+        s.Move(0.9);
+        s.Cancel();             // alt-tab / pointer-cancel path
+        Assert.False(s.IsDragging);
+        Assert.True(double.IsNaN(s.Release()), "a cancelled drag must never commit");
+        Assert.Equal(SeekDragState.IdlePreview, s.PreviewSeconds);
+    }
+
+    [Fact]
+    public void Ticks_AreClampedToTheTrack()
+    {
+        var s = new SeekDragState();
+        s.SetDuration(100);
+        s.ApplyTick(500);
+        Assert.Equal(100, s.PositionSeconds);
+        s.ApplyTick(-3);
+        Assert.Equal(0, s.PositionSeconds);
+    }
+
+    // ---------------- service-level clamp ----------------
+
+    [Fact]
+    public void ServiceSeek_IsClampedToValidBounds()
+    {
+        Assert.Equal(TimeSpan.Zero,
+            PlaybackService.ClampSeek(TimeSpan.FromSeconds(-4), TimeSpan.FromSeconds(200)));
+        Assert.Equal(TimeSpan.FromSeconds(200),
+            PlaybackService.ClampSeek(TimeSpan.FromSeconds(999), TimeSpan.FromSeconds(200)));
+        Assert.Equal(TimeSpan.FromSeconds(33),
+            PlaybackService.ClampSeek(TimeSpan.FromSeconds(33), TimeSpan.FromSeconds(200)));
+        // Unknown duration: lower bound only (no upper bound to compute against).
+        Assert.Equal(TimeSpan.FromSeconds(33),
+            PlaybackService.ClampSeek(TimeSpan.FromSeconds(33), TimeSpan.Zero));
+        Assert.Equal(TimeSpan.Zero,
+            PlaybackService.ClampSeek(TimeSpan.FromSeconds(-1), TimeSpan.Zero));
+    }
+}
+
+/// <summary>
+/// Keyboard shortcut contract (P3 Issue 2): playback shortcuts must yield to
+/// the control that owns keyboard focus — most importantly a TextBox, so Space
+/// (and the arrow chords) never hijack typing in the search field.
+/// </summary>
+public class KeyboardShortcutGuardTests
+{
+    [Fact]
+    public void Shortcuts_AreAllowed_WhenNothingOwnsFocus()
+        => Assert.True(MainWindow.CanAcceptKeyboardShortcutFor(null));
+
+    [Fact]
+    public void Shortcuts_AreAllowed_ForOrdinaryContentFocus()
+        => Assert.True(MainWindow.CanAcceptKeyboardShortcutFor(new object()));
+
+    [Fact]
+    public void Shortcuts_AreDeclined_WhileATextBoxHasFocus()
+    {
+        // The real element type the guard checks; constructing it needs the
+        // WinUI runtime, so the creation runs on a dedicated STA thread.
+        object box = RunSta(() => new TextBox());
+        Assert.False(MainWindow.CanAcceptKeyboardShortcutFor(box),
+            "Space/arrows must belong to the user while they type (search field)");
+    }
+
+    /// <summary>WinUI elements can only be constructed on an STA thread.</summary>
+    private static object RunSta(Func<object> factory)
+    {
+        object result = null;
+        Exception error = null;
+        var thread = new Thread(() =>
+        {
+            try { result = factory(); }
+            catch (Exception ex) { error = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (error != null)
+            throw new Xunit.Sdk.XunitException("element construction failed: " + error.Message);
+        return result;
     }
 }

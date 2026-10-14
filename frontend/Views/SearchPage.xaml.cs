@@ -79,6 +79,22 @@ namespace YtMusicClient.Views
             // chips never jump when focus moves).
         }
 
+        /// <summary>Ctrl+L target: put the caret in the real search box. The page
+        /// is cached, so it is usually already loaded; the Loaded fallback covers
+        /// the first open where focus could not land yet.</summary>
+        public void FocusSearchInput()
+        {
+            if (SearchBox.Focus(FocusState.Programmatic))
+                return;
+            Loaded += FocusSearchInputOnce;
+        }
+
+        private void FocusSearchInputOnce(object sender, RoutedEventArgs e)
+        {
+            Loaded -= FocusSearchInputOnce;
+            SearchBox.Focus(FocusState.Programmatic);
+        }
+
         /// <summary>
         /// Result click. Song/video results carry a videoId and play straight away,
         /// with the visible (filtered) results as the queue. Album/playlist/artist

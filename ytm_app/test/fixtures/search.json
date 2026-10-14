@@ -1,0 +1,586 @@
+[
+ {
+  "category": "Top result",
+  "resultType": "song",
+  "videoId": "0b413e68da6",
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "title": "Title 741",
+  "artists": [
+   {
+    "name": "Artist 846",
+    "id": "UCeca608e3a846340c"
+   }
+  ],
+  "duration": "5:58",
+  "duration_seconds": 358,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/73437-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/43767-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ]
+ },
+ {
+  "category": "More from YouTube",
+  "resultType": "video",
+  "title": "Title 354",
+  "videoId": "b6d73c1cfed",
+  "videoType": "MUSIC_VIDEO_TYPE_UGC",
+  "isAvailable": true,
+  "duration": "6:41",
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 491",
+    "id": "UC6ead7d6c05169584"
+   }
+  ],
+  "views": "Plays 520",
+  "duration_seconds": 401,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/78765-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": "More from YouTube",
+  "resultType": "video",
+  "title": "Title 570",
+  "videoId": "3fd65e4ff48",
+  "videoType": "MUSIC_VIDEO_TYPE_OMV",
+  "isAvailable": true,
+  "duration": "4:29",
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 843",
+    "id": "UC311b1d4d1d672575"
+   }
+  ],
+  "views": "Plays 657",
+  "duration_seconds": 269,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/4554-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": "More from YouTube",
+  "resultType": "video",
+  "title": "Title 177",
+  "videoId": "0ca07804fe7",
+  "videoType": "MUSIC_VIDEO_TYPE_UGC",
+  "isAvailable": true,
+  "duration": "10:38",
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 476",
+    "id": "UC6b7ec865cf5bf210"
+   }
+  ],
+  "views": "Plays 132",
+  "duration_seconds": 638,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/51361-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "song",
+  "title": "Title 741",
+  "album": null,
+  "inLibrary": false,
+  "pinnedToListenAgain": false,
+  "videoId": "b95d707eec2",
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "isAvailable": true,
+  "duration": null,
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 119",
+    "id": null
+   },
+   {
+    "name": "Artist 572",
+    "id": null
+   },
+   {
+    "name": "Artist 386",
+    "id": "UC92cda690e5d49404"
+   }
+  ],
+  "views": "Plays 314",
+  "isExplicit": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/70466-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/318-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "song",
+  "title": "Title 581",
+  "album": null,
+  "inLibrary": false,
+  "pinnedToListenAgain": false,
+  "videoId": "82434d762a4",
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "isAvailable": true,
+  "duration": null,
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 846",
+    "id": "UCeca608e3a846340c"
+   }
+  ],
+  "views": "Plays 586",
+  "isExplicit": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/97314-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/96164-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "song",
+  "title": "Title 654",
+  "album": null,
+  "inLibrary": false,
+  "pinnedToListenAgain": false,
+  "videoId": "4505e4bc69a",
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "isAvailable": true,
+  "duration": null,
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 906",
+    "id": "UCaf5003e510879e29"
+   }
+  ],
+  "views": "Plays 351",
+  "isExplicit": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/89535-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/33600-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "song",
+  "title": "Title 741",
+  "album": null,
+  "inLibrary": false,
+  "pinnedToListenAgain": false,
+  "videoId": "94df5e201c7",
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "isAvailable": true,
+  "duration": null,
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 260",
+    "id": "UCf1db0ee08a24ce5c"
+   }
+  ],
+  "views": "Plays 131",
+  "isExplicit": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/144-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/71021-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "song",
+  "title": "Title 741",
+  "album": null,
+  "inLibrary": false,
+  "pinnedToListenAgain": false,
+  "videoId": "73c74696b3b",
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "isAvailable": true,
+  "duration": null,
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 527",
+    "id": null
+   },
+   {
+    "name": "Artist 415",
+    "id": null
+   },
+   {
+    "name": "Artist 215",
+    "id": null
+   },
+   {
+    "name": "Artist 710",
+    "id": null
+   }
+  ],
+  "views": "Plays 264",
+  "isExplicit": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/57433-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/3567-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "album",
+  "title": "Title 741",
+  "type": "Single",
+  "playlistId": "OLAK5uy_9c3f969d7fb3f2aa",
+  "duration": null,
+  "year": "2026",
+  "artists": [
+   {
+    "name": "Artist 543",
+    "id": "UC9c010ac59a93da4a"
+   }
+  ],
+  "browseId": "MPREb_81538f713bbf8b8d",
+  "isExplicit": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/93540-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/2105-120.jpg",
+    "width": 120,
+    "height": 120
+   },
+   {
+    "url": "https://example.invalid/art/71819-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/25322-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "album",
+  "title": "Title 632",
+  "type": "Album",
+  "playlistId": "OLAK5uy_137831ca5802ad6c",
+  "duration": null,
+  "year": "2023",
+  "artists": [
+   {
+    "name": "Artist 757",
+    "id": "UCabb0defaa488074b"
+   }
+  ],
+  "browseId": "MPREb_ffa68af20bd2873a",
+  "isExplicit": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/47955-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/79952-120.jpg",
+    "width": 120,
+    "height": 120
+   },
+   {
+    "url": "https://example.invalid/art/59877-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/38393-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "album",
+  "title": "Title 727",
+  "type": "EP",
+  "playlistId": "OLAK5uy_ecbf69b3f979b34f",
+  "duration": null,
+  "year": "2022",
+  "artists": [
+   {
+    "name": "Artist 719",
+    "id": "UC5c13ddefdec58f77"
+   }
+  ],
+  "browseId": "MPREb_2f4eee603a58c3e0",
+  "isExplicit": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/74387-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/94665-120.jpg",
+    "width": 120,
+    "height": 120
+   },
+   {
+    "url": "https://example.invalid/art/71515-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/13504-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "artist",
+  "artist": "Artist 846",
+  "shuffleId": "RDAO01d5ffd306e1c1e8",
+  "radioId": "RDEM45f04372c9ab3621",
+  "browseId": "UCeca608e3a846340c",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/43589-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/4724-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "episode",
+  "title": "Title 162",
+  "videoId": "45639b746cd",
+  "videoType": "MUSIC_VIDEO_TYPE_PODCAST_EPISODE",
+  "isAvailable": true,
+  "live": false,
+  "date": "Date 730",
+  "podcast": {
+   "id": "MPSPPLf60903b8d0d7ecfc",
+   "name": "Show 761"
+  },
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/14801-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "episode",
+  "title": "Title 601",
+  "videoId": "f928958ec96",
+  "videoType": "MUSIC_VIDEO_TYPE_PODCAST_EPISODE",
+  "isAvailable": true,
+  "live": false,
+  "date": "Date 433",
+  "podcast": {
+   "id": "MPSPPLf60903b8d0d7ecfc",
+   "name": "Show 761"
+  },
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/21058-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "episode",
+  "title": "Title 133",
+  "videoId": "a1dabadff6e",
+  "videoType": "MUSIC_VIDEO_TYPE_PODCAST_EPISODE",
+  "isAvailable": true,
+  "live": false,
+  "date": "Date 663",
+  "podcast": {
+   "id": "MPSPPL2f20387e8830d042",
+   "name": "Show 560"
+  },
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/27168-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "video",
+  "title": "Title 741",
+  "videoId": "1f51f281ea3",
+  "videoType": "MUSIC_VIDEO_TYPE_OMV",
+  "isAvailable": true,
+  "duration": null,
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 347",
+    "id": "UC96cb0f0e423d5b20"
+   }
+  ],
+  "views": "Plays 872",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/49684-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "video",
+  "title": "Title 715",
+  "videoId": "74b3419b201",
+  "videoType": "MUSIC_VIDEO_TYPE_UGC",
+  "isAvailable": true,
+  "duration": null,
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 968",
+    "id": "UCe163f52efa6d8953"
+   }
+  ],
+  "views": "Plays 393",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/86328-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "video",
+  "title": "Title 322",
+  "videoId": "92def15c871",
+  "videoType": "MUSIC_VIDEO_TYPE_UGC",
+  "isAvailable": true,
+  "duration": null,
+  "year": null,
+  "artists": [
+   {
+    "name": "Artist 755",
+    "id": "UCee55deb9aa823ba4"
+   }
+  ],
+  "views": "Plays 159",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/47950-400.jpg",
+    "width": 400,
+    "height": 225
+   }
+  ]
+ },
+ {
+  "category": null,
+  "resultType": "playlist",
+  "title": "Title 831",
+  "itemCount": null,
+  "author": "Curator 872",
+  "browseId": "VLPL3ce149706f072da7",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/79214-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/96716-576.jpg",
+    "width": 576,
+    "height": 576
+   },
+   {
+    "url": "https://example.invalid/art/99516-1200.jpg",
+    "width": 1200,
+    "height": 1200
+   }
+  ]
+ }
+]

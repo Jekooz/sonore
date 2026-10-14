@@ -1,0 +1,15 @@
+Showing outdated packages.
+[*] indicates versions that are not the latest available.
+
+Package Name              Current  Upgradable  Resolvable  Latest  
+
+direct dependencies: all up-to-date.
+
+dev_dependencies: all up-to-date.
+
+transitive dependencies: 
+material_color_utilities  *0.13.0  *0.13.0     *0.13.0     0.13.1  
+screen_retriever          *0.2.2   *0.2.2      *0.2.2      0.3.0   
+test_api                  *0.7.12  *0.7.12     *0.7.12     0.7.15  
+xml                       *7.0.1   *7.0.1      *7.0.1      7.1.0   
+all dependencies are up-to-date.

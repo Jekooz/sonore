@@ -9,6 +9,7 @@
           PointerPressed="Root_PointerPressed"
           PointerMoved="Root_PointerMoved"
           PointerReleased="Root_PointerReleased"
+          PointerCanceled="Root_PointerCaptureLost"
           PointerCaptureLost="Root_PointerCaptureLost">
 
         <Border Height="4" CornerRadius="2"

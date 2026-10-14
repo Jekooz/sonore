@@ -1,0 +1,9 @@
+00:00 +0: loading C:/Users/jaini/OneDrive/Documents/ytm client v1/ytm-client/ytm_app/integration_test/playback_engine_test.dart
+Building Windows application...                                    35.9s
+√ Built build\windows\x64\runner\Debug\ytm_app.exe
+00:00 +0: (setUpAll)
+00:00 +0: the real engine decodes a local file and plays to the end
+00:00 +0: (setUpAll)
+media_kit: NativeReferenceHolder: Allocated 2214684543088
+00:01 +1: (tearDownAll)
+00:01 +1: All tests passed!

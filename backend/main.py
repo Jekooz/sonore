@@ -23,6 +23,7 @@ Endpoints:
                                 re-ranked with the local listening history)
   POST /listening/events        one aggregated playback event per track
   POST /ratings                 like / dislike / remove rating (rate_song)
+  GET  /lyrics/{video_id}       real lyrics, timestamped when YouTube supplies them
 """
 
 import http.client
@@ -44,6 +45,7 @@ from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel, Field
 from typing import Literal
+from ytmusicapi import YTMusic
 
 from services.browser_auth import (
     WAIT_TIMEOUT_SECONDS,
@@ -63,7 +65,14 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ytmusic-backend")
 
-PORT_FILE = os.path.join(tempfile.gettempdir(), "ytmusic_sidecar_port.txt")
+# The published port file. Defaults to %TEMP%/ytmusic_sidecar_port.txt, the
+# production discovery contract the app (and the old WinUI sidecar launcher)
+# read. YTM_PORT_FILE overrides the path so an isolated instance -- a test, or a
+# second copy on the same machine -- can publish without touching the shared
+# file and without disturbing a live app.
+PORT_FILE = os.environ.get("YTM_PORT_FILE") or os.path.join(
+    tempfile.gettempdir(), "ytmusic_sidecar_port.txt"
+)
 
 # The port this process is actually listening on. Set in __main__ before
 # uvicorn.run so the extension can be told where to call back; the request URL
@@ -789,6 +798,19 @@ def listening_events(event: ListeningEventIn):
     return JSONResponse(content={"recorded": True, "events": total})
 
 
+@app.get("/listening/history")
+def listening_history(limit: int = Query(30, ge=1, le=100)):
+    """
+    The most recent distinct tracks this app played, newest first.
+
+    This is the app's own record (the same store the ranker reads), not a
+    claim about the account's YouTube Music history, and it holds no session
+    data — only video ids, titles, artists and playback numbers.
+    """
+    entries = listening_store.recent_plays(limit)
+    return JSONResponse(content={"entries": entries, "count": len(entries)})
+
+
 @app.post("/ratings")
 def ratings(payload: RatingIn):
     """
@@ -928,6 +950,124 @@ def stream(video_id: str):
     if not _VIDEO_ID_RE.fullmatch(video_id):
         raise HTTPException(status_code=400, detail="Invalid video id.")
     return JSONResponse(content={"videoId": video_id, "url": _resolve_stream(video_id)})
+
+
+# ---------------- lyrics ----------------
+#
+# Two real upstream calls: the watch playlist yields this track's lyrics browse
+# id, which ytmusicapi's get_lyrics resolves -- with timestamps whenever YouTube
+# supplies them. Nothing is ever invented when it does not: an untimed response
+# is returned as plain text and the client renders static lyrics.
+_LYRICS_CACHE: dict[str, tuple[float, dict]] = {}
+_LYRICS_CACHE_MAX = 64
+_LYRICS_TTL_SECONDS = 60 * 60
+_lyrics_lock = threading.Lock()
+
+
+def _lyrics_cached(video_id: str) -> dict | None:
+    with _lyrics_lock:
+        entry = _LYRICS_CACHE.get(video_id)
+        if entry is None:
+            return None
+        expires, payload = entry
+        if expires < time.time():
+            _LYRICS_CACHE.pop(video_id, None)
+            return None
+        return payload
+
+
+def _lyrics_store(video_id: str, payload: dict) -> None:
+    with _lyrics_lock:
+        if len(_LYRICS_CACHE) >= _LYRICS_CACHE_MAX:
+            _LYRICS_CACHE.clear()
+        _LYRICS_CACHE[video_id] = (time.time() + _LYRICS_TTL_SECONDS, payload)
+
+
+# get_lyrics(timestamps=True) is served on YouTube's mobile endpoints and is
+# rejected (HTTP 400) when the logged-in account context rides along with it.
+# Lyrics are public data, so the timed lookup goes through a throwaway
+# anonymous client; the stored session is never read, written or cleared, and
+# as_mobile() mutates the client it is called on, so fetches are serialised.
+_lyrics_fetch_lock = threading.Lock()
+
+
+def _fetch_lyrics(video_id: str) -> dict:
+    """Resolve real lyrics for a video id. Returns {"available": False} when
+    YouTube Music has none, which is an answer, not an error."""
+    watch = _data("get_watch_playlist", videoId=video_id, limit=1)
+    browse_id = watch.get("lyrics") if isinstance(watch, dict) else None
+    if not browse_id or not isinstance(browse_id, str):
+        return {"available": False}
+
+    payload = None
+    with _lyrics_fetch_lock:
+        try:
+            payload = YTMusic().get_lyrics(browse_id, timestamps=True)
+        except Exception as e:
+            # Not a failure worth surfacing: fall through to the untimed lookup.
+            logger.info("Timed lyrics unavailable for %s (%s)", video_id, type(e).__name__)
+
+    synced = isinstance(payload, dict) and payload.get("hasTimestamps") is True
+    if not synced:
+        # Static lyrics. Never invent timings when the provider supplies none.
+        payload = _data("get_lyrics", browseId=browse_id, timestamps=False)
+
+    if not payload or not isinstance(payload, dict):
+        return {"available": False}
+
+    raw = payload.get("lyrics")
+    source = payload.get("source") if isinstance(payload.get("source"), str) else None
+
+    if synced:
+        lines = []
+        for line in raw:
+            text = (getattr(line, "text", None) or "").strip()
+            if not text:
+                continue
+            lines.append(
+                {
+                    "text": text,
+                    "startMs": int(getattr(line, "start_time", 0) or 0),
+                    "endMs": int(getattr(line, "end_time", 0) or 0),
+                }
+            )
+        if not lines:
+            return {"available": False}
+        return {"available": True, "synced": True, "lines": lines, "source": source}
+
+    if isinstance(raw, str) and raw.strip():
+        lines = [
+            {"text": text}
+            for text in (part.strip() for part in raw.splitlines())
+            if text
+        ]
+        if not lines:
+            return {"available": False}
+        return {"available": True, "synced": False, "lines": lines, "source": source}
+
+    return {"available": False}
+
+
+@app.get("/lyrics/{video_id}")
+def lyrics(video_id: str):
+    """Real lyrics for the current track.
+
+    200  {available: true, synced, lines, source}  -- real lyrics
+    404  YouTube Music has no lyrics for this track (an answer, not a failure)
+    400  malformed video id
+    """
+    _validate_video_id(video_id)
+    cached = _lyrics_cached(video_id)
+    if cached is None:
+        cached = _fetch_lyrics(video_id)
+        if cached.get("available"):
+            _lyrics_store(video_id, cached)
+    if not cached.get("available"):
+        raise HTTPException(
+            status_code=404,
+            detail="No lyrics are available for this track.",
+        )
+    return JSONResponse(content={"videoId": video_id, **cached})
 
 
 def _port_is_free(port: int) -> bool:

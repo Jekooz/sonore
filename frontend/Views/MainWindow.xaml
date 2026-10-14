@@ -10,6 +10,18 @@
             <KeyboardAccelerator x:Name="SeekForwardAccel" Key="Right" Modifiers="None" IsEnabled="True" Invoked="SeekForwardAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
             <KeyboardAccelerator x:Name="VolumeUpAccel" Key="Up" Modifiers="None" IsEnabled="True" Invoked="VolumeUpAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
             <KeyboardAccelerator x:Name="VolumeDownAccel" Key="Down" Modifiers="None" IsEnabled="True" Invoked="VolumeDownAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <!-- Baseline shortcut set: each chord is its own accelerator (WinUI
+                 matches the exact modifier set), so plain Left/Right/Up/Down keep
+                 their seek/volume meaning, one key press can only fire one
+                 accelerator, and the handlers below stay the single call site
+                 for each playback/volume command. -->
+            <KeyboardAccelerator x:Name="NextAccel" Key="Right" Modifiers="Control" IsEnabled="True" Invoked="NextAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="PrevAccel" Key="Left" Modifiers="Control" IsEnabled="True" Invoked="PrevAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="VolumeUpCtrlAccel" Key="Up" Modifiers="Control" IsEnabled="True" Invoked="VolumeUpAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="VolumeDownCtrlAccel" Key="Down" Modifiers="Control" IsEnabled="True" Invoked="VolumeDownAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="MuteAccel" Key="M" Modifiers="Control,Shift" IsEnabled="True" Invoked="MuteAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="FocusSearchAccel" Key="L" Modifiers="Control" IsEnabled="True" Invoked="FocusSearchAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
+            <KeyboardAccelerator x:Name="EscapeAccel" Key="Escape" IsEnabled="True" Invoked="EscapeAccel_Invoked" ScopeOwner="{x:Bind RootGrid}" />
         </Grid.KeyboardAccelerators>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -60,6 +72,31 @@
 
             <!-- Theme button & Account Chip -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="0,0,140,0">
+                <!-- Smallest Help surface in the app: the shortcut reference for
+                     every keyboard command, next to the other window controls. -->
+                <Button x:Name="ShortcutsButton"
+                        Style="{StaticResource IconButtonStyle}"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Keyboard shortcuts"
+                        ToolTipService.ToolTip="Keyboard shortcuts">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Spacing="5" MinWidth="260">
+                                <TextBlock Text="Keyboard shortcuts" Style="{StaticResource SectionHeaderText}" Margin="0,0,0,4" />
+                                <TextBlock Text="Space — Play / pause" Style="{StaticResource MutedText}" />
+                                <TextBlock Text="Ctrl + → — Next track" Style="{StaticResource MutedText}" />
+                                <TextBlock Text="Ctrl + ← — Previous track" Style="{StaticResource MutedText}" />
+                                <TextBlock Text="Ctrl + ↑ / ↓ — Volume up / down" Style="{StaticResource MutedText}" />
+                                <TextBlock Text="Ctrl + Shift + M — Mute / unmute" Style="{StaticResource MutedText}" />
+                                <TextBlock Text="Ctrl + L — Search" Style="{StaticResource MutedText}" />
+                                <TextBlock Text="Esc — Close menu or overlay" Style="{StaticResource MutedText}" />
+                                <TextBlock Text="← / → — Seek ±5 s   ·   ↑ / ↓ — Volume ±5 %" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                    <TextBlock Text="?" FontWeight="Bold" FontSize="14" />
+                </Button>
+
                 <Button x:Name="ThemeButton"
                         Style="{StaticResource IconButtonStyle}"
                         VerticalAlignment="Center"
@@ -349,6 +386,7 @@
                                           IsEnabled="{x:Bind Player.CanSeek, Mode=OneWay}"
                                           SeekRequested="BarSeekBar_SeekRequested"
                                           PreviewChanged="BarSeekBar_PreviewChanged"
+                                          ToolTipService.ToolTip="Click or drag to seek (← / → = ±5 s)"
                                           AutomationProperties.Name="Seek bar" />
                 <TextBlock x:Name="BarDurationText" Grid.Column="2" Text="–:––"
                            Style="{StaticResource MutedText}" VerticalAlignment="Center" MinWidth="46"
@@ -359,6 +397,7 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <Button x:Name="BarPrevButton" Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Previous"
+                        ToolTipService.ToolTip="Previous track (Ctrl+←)"
                         IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
                         Click="BarPrevButton_Click">
                     <FontIcon Glyph="&#xE892;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
@@ -367,6 +406,7 @@
                         Width="44" Height="44" CornerRadius="22"
                         Style="{StaticResource AccentButtonStyle}"
                         AutomationProperties.Name="Play or pause"
+                        ToolTipService.ToolTip="Play / pause (Space)"
                         IsEnabled="{x:Bind Player.CanToggle, Mode=OneWay}"
                         Click="BarPlayButton_Click">
                     <TextBlock x:Name="BarPlayGlyph"
@@ -375,6 +415,7 @@
                 </Button>
                 <Button x:Name="BarNextButton" Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Next"
+                        ToolTipService.ToolTip="Next track (Ctrl+→)"
                         IsEnabled="{x:Bind Queue.CanAdvance, Mode=OneWay}"
                         Click="BarNextButton_Click">
                     <FontIcon Glyph="&#xE893;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
@@ -385,6 +426,7 @@
             <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
                 <Button x:Name="BarMuteButton" Style="{StaticResource IconButtonStyle}"
                         AutomationProperties.Name="Mute"
+                        ToolTipService.ToolTip="Mute / unmute (Ctrl+Shift+M)"
                         Click="BarMuteButton_Click">
                     <FontIcon x:Name="BarMuteGlyph"
                               Glyph="&#xE767;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
@@ -393,6 +435,7 @@
                         Width="90" Minimum="0" Maximum="100" StepFrequency="1"
                         Value="{x:Bind Player.VolumePercent, Mode=TwoWay}"
                         VerticalAlignment="Center"
+                        ToolTipService.ToolTip="Volume (Ctrl+↑ / Ctrl+↓)"
                         AutomationProperties.Name="Volume"
                         ValueChanged="BarVolumeSlider_ValueChanged">
                     <!-- Accent comes from the token, not a second copy of the hex.

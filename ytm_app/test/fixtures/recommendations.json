@@ -1,0 +1,395 @@
+{
+ "seed": "245dfce2778",
+ "tracks": [
+  {
+   "videoId": "63795d9f914",
+   "title": "Title 256",
+   "artists": [
+    {
+     "name": "Artist 846",
+     "id": "UCeca608e3a846340c"
+    }
+   ],
+   "album": {
+    "name": "Album 911",
+    "id": "MPREb_3b7303c6bf7e3bc5"
+   },
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/74390-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/67223-120.jpg",
+     "width": 120,
+     "height": 120
+    },
+    {
+     "url": "https://example.invalid/art/21678-180.jpg",
+     "width": 180,
+     "height": 180
+    },
+    {
+     "url": "https://example.invalid/art/13303-226.jpg",
+     "width": 226,
+     "height": 226
+    },
+    {
+     "url": "https://example.invalid/art/80455-302.jpg",
+     "width": 302,
+     "height": 302
+    },
+    {
+     "url": "https://example.invalid/art/53527-544.jpg",
+     "width": 544,
+     "height": 544
+    }
+   ],
+   "duration": "4:49",
+   "durationSeconds": 289,
+   "inLibrary": true,
+   "source": "radio"
+  },
+  {
+   "videoId": "6cf9caf65d3",
+   "title": "Title 913",
+   "artists": [
+    {
+     "name": "Artist 337",
+     "id": "UCa522db0a69d4a94e"
+    }
+   ],
+   "album": {
+    "name": "Album 183",
+    "id": "MPREb_3d5e0e1984ff88ac"
+   },
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/95284-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/99984-120.jpg",
+     "width": 120,
+     "height": 120
+    },
+    {
+     "url": "https://example.invalid/art/44560-180.jpg",
+     "width": 180,
+     "height": 180
+    },
+    {
+     "url": "https://example.invalid/art/36541-226.jpg",
+     "width": 226,
+     "height": 226
+    },
+    {
+     "url": "https://example.invalid/art/2100-302.jpg",
+     "width": 302,
+     "height": 302
+    },
+    {
+     "url": "https://example.invalid/art/12399-544.jpg",
+     "width": 544,
+     "height": 544
+    }
+   ],
+   "duration": "3:32",
+   "durationSeconds": 212,
+   "inLibrary": false,
+   "source": "radio"
+  },
+  {
+   "videoId": "ff6f327ff46",
+   "title": "Title 117",
+   "artists": [
+    {
+     "name": "Artist 165",
+     "id": "UC0f45ca8959c9b8c1"
+    },
+    {
+     "name": "Artist 254",
+     "id": "UC12a75e37747da765"
+    },
+    {
+     "name": "Artist 182",
+     "id": "UCfaf529d2f6c2d974"
+    }
+   ],
+   "album": {
+    "name": "Album 763",
+    "id": "MPREb_ad07393b0f347aa9"
+   },
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/13582-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/83240-120.jpg",
+     "width": 120,
+     "height": 120
+    },
+    {
+     "url": "https://example.invalid/art/58592-180.jpg",
+     "width": 180,
+     "height": 180
+    },
+    {
+     "url": "https://example.invalid/art/87880-226.jpg",
+     "width": 226,
+     "height": 226
+    },
+    {
+     "url": "https://example.invalid/art/50395-302.jpg",
+     "width": 302,
+     "height": 302
+    },
+    {
+     "url": "https://example.invalid/art/85363-544.jpg",
+     "width": 544,
+     "height": 544
+    }
+   ],
+   "duration": "3:18",
+   "durationSeconds": 198,
+   "inLibrary": false,
+   "source": "radio"
+  },
+  {
+   "videoId": "a7287d6bc45",
+   "title": "Title 520",
+   "artists": [
+    {
+     "name": "Artist 475",
+     "id": "UC9f1a8c8b68c59d84"
+    }
+   ],
+   "album": {
+    "name": "Title 520",
+    "id": "MPREb_25ddf8fedbea1fc3"
+   },
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/42271-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/98753-120.jpg",
+     "width": 120,
+     "height": 120
+    },
+    {
+     "url": "https://example.invalid/art/85004-180.jpg",
+     "width": 180,
+     "height": 180
+    },
+    {
+     "url": "https://example.invalid/art/23943-226.jpg",
+     "width": 226,
+     "height": 226
+    },
+    {
+     "url": "https://example.invalid/art/61268-302.jpg",
+     "width": 302,
+     "height": 302
+    },
+    {
+     "url": "https://example.invalid/art/77836-544.jpg",
+     "width": 544,
+     "height": 544
+    }
+   ],
+   "duration": "4:37",
+   "durationSeconds": 277,
+   "inLibrary": false,
+   "source": "radio"
+  },
+  {
+   "videoId": "c3c7ae5f177",
+   "title": "Title 898",
+   "artists": [
+    {
+     "name": "Artist 821",
+     "id": "UC24099444bc179d50"
+    }
+   ],
+   "album": {
+    "name": "Album 201",
+    "id": "MPREb_908028a188994b99"
+   },
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/31564-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/32975-120.jpg",
+     "width": 120,
+     "height": 120
+    },
+    {
+     "url": "https://example.invalid/art/34656-180.jpg",
+     "width": 180,
+     "height": 180
+    },
+    {
+     "url": "https://example.invalid/art/28775-226.jpg",
+     "width": 226,
+     "height": 226
+    },
+    {
+     "url": "https://example.invalid/art/86911-302.jpg",
+     "width": 302,
+     "height": 302
+    },
+    {
+     "url": "https://example.invalid/art/53766-544.jpg",
+     "width": 544,
+     "height": 544
+    }
+   ],
+   "duration": "4:43",
+   "durationSeconds": 283,
+   "inLibrary": false,
+   "source": "radio"
+  },
+  {
+   "videoId": "cd6683bf1bc",
+   "title": "Title 752",
+   "artists": [
+    {
+     "name": "Artist 846",
+     "id": "UCeca608e3a846340c"
+    }
+   ],
+   "album": {
+    "name": "Album 273",
+    "id": "MPREb_204905cb6753b647"
+   },
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/25473-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/7153-120.jpg",
+     "width": 120,
+     "height": 120
+    }
+   ],
+   "duration": null,
+   "durationSeconds": null,
+   "inLibrary": null,
+   "source": "related"
+  },
+  {
+   "videoId": "7214e128a26",
+   "title": "Title 965",
+   "artists": [
+    {
+     "name": "Artist 846",
+     "id": "UCeca608e3a846340c"
+    }
+   ],
+   "album": {
+    "name": "Album 719",
+    "id": "MPREb_cbc0174b20be57b6"
+   },
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/59067-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/13623-120.jpg",
+     "width": 120,
+     "height": 120
+    },
+    {
+     "url": "https://example.invalid/art/37207-180.jpg",
+     "width": 180,
+     "height": 180
+    },
+    {
+     "url": "https://example.invalid/art/51368-226.jpg",
+     "width": 226,
+     "height": 226
+    },
+    {
+     "url": "https://example.invalid/art/44119-302.jpg",
+     "width": 302,
+     "height": 302
+    },
+    {
+     "url": "https://example.invalid/art/30410-544.jpg",
+     "width": 544,
+     "height": 544
+    }
+   ],
+   "duration": "4:00",
+   "durationSeconds": 240,
+   "inLibrary": false,
+   "source": "radio"
+  },
+  {
+   "videoId": "bfa0efd4901",
+   "title": "Title 521",
+   "artists": [
+    {
+     "name": "Artist 827",
+     "id": "UCfb4045cba266068c"
+    }
+   ],
+   "album": {
+    "name": "Album 404",
+    "id": "MPREb_9dc04481b91cc130"
+   },
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/249-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/1687-120.jpg",
+     "width": 120,
+     "height": 120
+    },
+    {
+     "url": "https://example.invalid/art/1197-180.jpg",
+     "width": 180,
+     "height": 180
+    },
+    {
+     "url": "https://example.invalid/art/28602-226.jpg",
+     "width": 226,
+     "height": 226
+    },
+    {
+     "url": "https://example.invalid/art/82234-302.jpg",
+     "width": 302,
+     "height": 302
+    },
+    {
+     "url": "https://example.invalid/art/33411-544.jpg",
+     "width": 544,
+     "height": 544
+    }
+   ],
+   "duration": "5:01",
+   "durationSeconds": 301,
+   "inLibrary": false,
+   "source": "radio"
+  }
+ ],
+ "count": 8,
+ "source": "recommendations"
+}

@@ -1,0 +1,225 @@
+{
+ "kind": "artist",
+ "title": "Artist 750",
+ "subtitle": "Subtitle 202",
+ "thumbnails": [
+  {
+   "url": "https://example.invalid/art/24595-540.jpg",
+   "width": 540,
+   "height": 225
+  },
+  {
+   "url": "https://example.invalid/art/13239-816.jpg",
+   "width": 816,
+   "height": 340
+  },
+  {
+   "url": "https://example.invalid/art/27269-1440.jpg",
+   "width": 1440,
+   "height": 600
+  },
+  {
+   "url": "https://example.invalid/art/3677-1500.jpg",
+   "width": 1500,
+   "height": 625
+  }
+ ],
+ "trackCount": 5,
+ "tracks": [
+  {
+   "videoId": "f41dcb536ec",
+   "title": "Title 892",
+   "artists": [
+    {
+     "name": "Artist 540",
+     "id": "UC9f11ce76265a1089"
+    },
+    {
+     "name": "Artist 750",
+     "id": "UC2b89fa6ad7225f9b"
+    },
+    {
+     "name": "Artist 452",
+     "id": "UCb641e7835b4a33ff"
+    }
+   ],
+   "album": {
+    "name": "Album 591",
+    "id": "MPREb_e7e8c20cb0c08a26"
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/65958-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/23821-120.jpg",
+     "width": 120,
+     "height": 120
+    }
+   ],
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": null,
+   "communityVoteStatus": null,
+   "creditsBrowseId": "99f3f9a5d64"
+  },
+  {
+   "videoId": "8878215431a",
+   "title": "Title 210",
+   "artists": [
+    {
+     "name": "Artist 750",
+     "id": "UC2b89fa6ad7225f9b"
+    }
+   ],
+   "album": {
+    "name": "Album 487",
+    "id": "MPREb_35c9d6750af9f2c0"
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/98964-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/36441-120.jpg",
+     "width": 120,
+     "height": 120
+    }
+   ],
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": null,
+   "communityVoteStatus": null,
+   "creditsBrowseId": "cca865d331d"
+  },
+  {
+   "videoId": "346a14bb9a3",
+   "title": "Title 641",
+   "artists": [
+    {
+     "name": "Artist 750",
+     "id": "UC2b89fa6ad7225f9b"
+    },
+    {
+     "name": "Artist 540",
+     "id": "UC9f11ce76265a1089"
+    }
+   ],
+   "album": {
+    "name": "Album 705",
+    "id": "MPREb_c9b1ce15899b440a"
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/32131-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/16332-120.jpg",
+     "width": 120,
+     "height": 120
+    }
+   ],
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": null,
+   "communityVoteStatus": null,
+   "creditsBrowseId": "69e1f2394c7"
+  },
+  {
+   "videoId": "de909c21e55",
+   "title": "Title 954",
+   "artists": [
+    {
+     "name": "Artist 750",
+     "id": "UC2b89fa6ad7225f9b"
+    },
+    {
+     "name": "Artist 950",
+     "id": "UC7a9afc5e5cb96c41"
+    }
+   ],
+   "album": {
+    "name": "Title 954",
+    "id": "MPREb_8ca662344dc66b0c"
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/99061-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/90623-120.jpg",
+     "width": 120,
+     "height": 120
+    }
+   ],
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": null,
+   "communityVoteStatus": null,
+   "creditsBrowseId": "7cac3f6d658"
+  },
+  {
+   "videoId": "58255fc4109",
+   "title": "Title 368",
+   "artists": [
+    {
+     "name": "Artist 806",
+     "id": "UC67942d20d1990bf2"
+    },
+    {
+     "name": "Artist 750",
+     "id": "UC2b89fa6ad7225f9b"
+    }
+   ],
+   "album": {
+    "name": "Title 368",
+    "id": "MPREb_30f4bb7cb0dac99d"
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": [
+    {
+     "url": "https://example.invalid/art/82286-60.jpg",
+     "width": 60,
+     "height": 60
+    },
+    {
+     "url": "https://example.invalid/art/10094-120.jpg",
+     "width": 120,
+     "height": 120
+    }
+   ],
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": null,
+   "communityVoteStatus": null,
+   "creditsBrowseId": "e77427ab278"
+  }
+ ]
+}

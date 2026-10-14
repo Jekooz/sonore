@@ -184,15 +184,28 @@ namespace YtMusicClient.Services
             }
         }
 
-        /// <summary>Jump within the track; MF seeks block, so this runs off-thread.</summary>
+        /// <summary>Serializes off-thread seeks: rapid repeated drags queue up
+        /// instead of racing CurrentTime on the same reader. Not disposed with
+        /// the engine — queued tasks may still pass through it during teardown.
+        /// </summary>
+        private readonly SemaphoreSlim _seekGate = new(1, 1);
+
+        /// <summary>Jump within the track; MF seeks block, so this runs off-thread.
+        /// The target is clamped defensively (never negative, never past the end)
+        /// so a bad request can never throw out of the reader mid-playback.</summary>
         public void Seek(TimeSpan position)
         {
             StreamMediaFoundationReader reader;
             lock (_gate) reader = _reader;
             if (reader == null) return;
 
-            Task.Run(() =>
+            if (position < TimeSpan.Zero) position = TimeSpan.Zero;
+            var duration = Duration;
+            if (duration > TimeSpan.Zero && position > duration) position = duration;
+
+            _ = Task.Run(async () =>
             {
+                await _seekGate.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     reader.CurrentTime = position;
@@ -201,6 +214,10 @@ namespace YtMusicClient.Services
                 catch (Exception ex)
                 {
                     Failed?.Invoke(this, ex);
+                }
+                finally
+                {
+                    _seekGate.Release();
                 }
             });
         }

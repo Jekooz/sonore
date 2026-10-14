@@ -1,0 +1,47 @@
+# Golden screenshots (Phase 4)
+
+-rw-r--r-- 1 Jainil 197609  95040 Oct 13 16:31 test/golden/goldens/now_playing_desktop_1280x800.png
+-rw-r--r-- 1 Jainil 197609 102152 Oct 13 16:31 test/golden/goldens/now_playing_desktop_1280x800_scale1_3.png
+-rw-r--r-- 1 Jainil 197609  53138 Oct 13 16:31 test/golden/goldens/now_playing_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  87750 Oct 13 16:31 test/golden/goldens/now_playing_tablet_800x1280.png
+-rw-r--r-- 1 Jainil 197609  49181 Oct 13 16:31 test/golden/goldens/product_album_desktop_1280x800.png
+-rw-r--r-- 1 Jainil 197609  71261 Oct 13 16:31 test/golden/goldens/product_context_menu_desktop_1280x800.png
+-rw-r--r-- 1 Jainil 197609  58868 Oct 13 16:31 test/golden/goldens/product_library_songs_desktop_1280x800.png
+-rw-r--r-- 1 Jainil 197609  48876 Oct 13 16:31 test/golden/goldens/product_search_results_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  52667 Oct 13 16:31 test/golden/goldens/shell_home_desktop_1280x800.png
+-rw-r--r-- 1 Jainil 197609  34610 Oct 13 16:31 test/golden/goldens/shell_home_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  62998 Oct 13 16:31 test/golden/goldens/shell_library_tablet_800x1280.png
+-rw-r--r-- 1 Jainil 197609  20143 Oct 13 16:31 test/golden/goldens/shell_now_playing_empty_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  55881 Oct 13 16:31 test/golden/goldens/specimen_desktop_1280x800.png
+-rw-r--r-- 1 Jainil 197609  58594 Oct 13 16:31 test/golden/goldens/specimen_desktop_1280x800_scale1_3.png
+-rw-r--r-- 1 Jainil 197609  42769 Oct 13 16:31 test/golden/goldens/specimen_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  63643 Oct 13 16:31 test/golden/goldens/specimen_tablet_800x1280.png
+-rw-r--r-- 1 Jainil 197609  20143 Oct 13 16:31 test/golden/goldens/state_empty_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  17366 Oct 13 16:31 test/golden/goldens/state_error_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  20312 Oct 13 16:31 test/golden/goldens/state_loading_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  21505 Oct 13 16:31 test/golden/goldens/state_offline_phone_390x844.png
+-rw-r--r-- 1 Jainil 197609  22084 Oct 13 16:31 test/golden/goldens/state_signed_out_phone_390x844.png
+
+# Content check (Pillow): every frame rendered and is not blank.
+# (unique_colors is high enough to be a real render; non_black excludes the bg token.)
+now_playing_desktop_1280x800.png                   size=(1280, 800) unique_colors=  1915 non_black= 88.4%
+now_playing_desktop_1280x800_scale1_3.png          size=(1280, 800) unique_colors=  1798 non_black= 88.4%
+now_playing_phone_390x844.png                      size=(390, 844) unique_colors=  2290 non_black= 96.4%
+now_playing_tablet_800x1280.png                    size=(800, 1280) unique_colors=  1676 non_black= 86.6%
+product_album_desktop_1280x800.png                 size=(1280, 800) unique_colors=   245 non_black= 22.4%
+product_context_menu_desktop_1280x800.png          size=(1280, 800) unique_colors=   363 non_black= 28.7%
+product_library_songs_desktop_1280x800.png         size=(1280, 800) unique_colors=   274 non_black= 21.4%
+product_search_results_phone_390x844.png           size=(390, 844) unique_colors=   409 non_black= 21.9%
+shell_home_desktop_1280x800.png                    size=(1280, 800) unique_colors=   122 non_black= 44.9%
+shell_home_phone_390x844.png                       size=(390, 844) unique_colors=   256 non_black= 40.7%
+shell_library_tablet_800x1280.png                  size=(800, 1280) unique_colors=   456 non_black= 17.5%
+shell_now_playing_empty_phone_390x844.png          size=(390, 844) unique_colors=   221 non_black=  9.0%
+specimen_desktop_1280x800.png                      size=(1280, 800) unique_colors=   373 non_black= 17.7%
+specimen_desktop_1280x800_scale1_3.png             size=(1280, 800) unique_colors=   272 non_black= 17.5%
+specimen_phone_390x844.png                         size=(390, 844) unique_colors=   302 non_black= 19.4%
+specimen_tablet_800x1280.png                       size=(800, 1280) unique_colors=   403 non_black= 16.7%
+state_empty_phone_390x844.png                      size=(390, 844) unique_colors=   221 non_black=  9.0%
+state_error_phone_390x844.png                      size=(390, 844) unique_colors=   236 non_black=  8.1%
+state_loading_phone_390x844.png                    size=(390, 844) unique_colors=   207 non_black= 39.6%
+state_offline_phone_390x844.png                    size=(390, 844) unique_colors=   274 non_black=  9.0%
+state_signed_out_phone_390x844.png                 size=(390, 844) unique_colors=   281 non_black=  8.9%

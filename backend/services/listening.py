@@ -39,6 +39,7 @@ logger = logging.getLogger("ytmusic-backend")
 
 MAX_EVENTS = 1000
 MAX_RECENT = 10          # distinct recent videos handed to the ranker
+MAX_HISTORY_LIMIT = 100  # most rows GET /listening/history will return
 VALID_OUTCOMES = ("completed", "skipped", "stopped")
 
 # Bounded so a bad client cannot bloat the store.
@@ -172,6 +173,48 @@ class ListeningStore:
         with self._lock:
             self._data = {"version": 1, "events": [], "ratings": {}}
             self._persist()
+
+    def recent_plays(self, limit: int = 30) -> list[dict]:
+        """
+        The most recent distinct plays, newest first — what the app's History
+        list shows.
+
+        One row per video, carrying the metadata its newest event recorded
+        (title, artist, outcome, when), so the client can list and replay them
+        without a second provider call. Only this app's own events are here:
+        nothing is fetched from or attributed to the service.
+        """
+        limit = max(1, min(int(limit), MAX_HISTORY_LIMIT))
+        with self._lock:
+            events = list(self._load()["events"])
+
+        rows: dict[str, dict] = {}
+        for ev in events:  # oldest first, so the newest event wins below
+            vid = ev.get("videoId")
+            if not vid:
+                continue
+            row = rows.get(vid)
+            if row is None:
+                rows[vid] = row = {
+                    "videoId": vid,
+                    "title": "",
+                    "artist": "",
+                    "plays": 0,
+                    "lastAt": 0.0,
+                    "lastOutcome": "",
+                }
+            row["plays"] += 1
+            started = float(ev.get("startedAt") or 0)
+            if started >= row["lastAt"]:
+                row["lastAt"] = started
+                row["lastOutcome"] = ev.get("outcome") or ""
+                if ev.get("title"):
+                    row["title"] = ev["title"]
+                if ev.get("artist"):
+                    row["artist"] = ev["artist"]
+
+        ordered = sorted(rows.values(), key=lambda r: r["lastAt"], reverse=True)
+        return ordered[:limit]
 
     def stats(self) -> dict:
         """

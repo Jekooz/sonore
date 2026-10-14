@@ -251,6 +251,12 @@ namespace YtMusicClient.Views
             => App.Playback.Next?.Invoke();
 
         private void BarMuteButton_Click(object sender, RoutedEventArgs e)
+            => ToggleMute();
+
+        /// <summary>Mute toggle — the one implementation behind the bar button
+        /// and the Ctrl+Shift+M accelerator, so both always agree on the volume
+        /// model (0 or the last non-zero level, clamped by PlayerState).</summary>
+        private void ToggleMute()
         {
             bool muted = App.PlayerState.VolumePercent > 0;
             App.PlayerState.VolumePercent = muted ? 0 : _volumeBeforeMute;
@@ -273,8 +279,17 @@ namespace YtMusicClient.Views
         /// those elements own keyboard focus and their own accelerators/shortcuts.
         /// </summary>
         private bool CanAcceptKeyboardShortcut()
+            => CanAcceptKeyboardShortcutFor(FocusManager.GetFocusedElement());
+
+        /// <summary>
+        /// Focus rule for playback shortcuts (pure, public static so the
+        /// regression tests can pin the text-input conflict without a live
+        /// Window): declined while the user types in a TextBox, scrubs a Slider,
+        /// or has a button focused — those controls own Space/arrows for
+        /// themselves. null focus = nothing owns the key = allowed.
+        /// </summary>
+        public static bool CanAcceptKeyboardShortcutFor(object focused)
         {
-            var focused = FocusManager.GetFocusedElement();
             if (focused == null)
                 return true;
 
@@ -357,6 +372,84 @@ namespace YtMusicClient.Views
             var vol = App.PlayerState.VolumePercent;
             App.PlayerState.VolumePercent = Math.Max(0, vol - 5);
             args.Handled = true;
+        }
+
+        // ---------------- baseline shortcut set ----------------
+        // Every handler below funnels into the same service call as the matching
+        // on-screen button (single source of truth) and reports Handled exactly
+        // once, so nothing can double-fire through bubbling.
+
+        private void NextAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (!CanAcceptKeyboardShortcut())
+            {
+                args.Handled = false;
+                return;
+            }
+
+            // Same path as the bar's Next button: PlayNext declines (returns
+            // false, invents nothing) when the queue is exhausted.
+            App.Playback.Next?.Invoke();
+            args.Handled = true;
+        }
+
+        private void PrevAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (!CanAcceptKeyboardShortcut())
+            {
+                args.Handled = false;
+                return;
+            }
+
+            // Same path as the bar's Previous button (history-based; restarts
+            // the current track after 3 s, walks back otherwise).
+            App.Playback.PreviousByHistory?.Invoke();
+            args.Handled = true;
+        }
+
+        private void MuteAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (!CanAcceptKeyboardShortcut())
+            {
+                args.Handled = false;
+                return;
+            }
+
+            ToggleMute();
+            args.Handled = true;
+        }
+
+        /// <summary>Ctrl+L: navigate through the existing tab flow (Checked →
+        /// NavigateToTab, no second navigation system), then focus the real
+        /// search box. Deliberately NOT text-entry-guarded: focusing search is
+        /// the point of the shortcut, and it is harmless while typing elsewhere.
+        /// </summary>
+        private void FocusSearchAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            SearchTab.IsChecked = true; // raises Checked → NavigateToTab only when it changes
+            _ = DispatcherQueue.TryEnqueue(() =>
+            {
+                if (ContentFrame?.Content is SearchPage page)
+                    page.FocusSearchInput();
+            });
+            args.Handled = true;
+        }
+
+        /// <summary>Escape: close the sign-in overlay when it is up. An open
+        /// flyout (hamburger menu, chip menus) lives in its own popup focus scope
+        /// and closes itself on Escape before this window-scope accelerator can
+        /// see the key. Handled=false leaves everything else alone — Escape never
+        /// exits the app and never touches playback.</summary>
+        private void EscapeAccel_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            if (BrowserSignInOverlay != null && BrowserSignInOverlay.Visibility == Visibility.Visible)
+            {
+                _ = CancelSignInAsync();
+                args.Handled = true;
+                return;
+            }
+
+            args.Handled = false;
         }
 
         /// <summary>

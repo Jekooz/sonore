@@ -1,0 +1,390 @@
+[
+ {
+  "videoId": "245dfce2778",
+  "title": "Title 396",
+  "artists": [
+   {
+    "name": "Artist 553",
+    "id": "UC7571ccf9646c146a"
+   }
+  ],
+  "album": {
+   "name": "Album 842",
+   "id": "MPREb_cad373898166747b"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/21690-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/6278-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "4:22",
+  "duration_seconds": 262,
+  "creditsBrowseId": "b9bab43aeb3"
+ },
+ {
+  "videoId": "34a92cbac8f",
+  "title": "Title 525",
+  "artists": [
+   {
+    "name": "Artist 599",
+    "id": "UC523a993b86b4ebdc"
+   },
+   {
+    "name": "Artist 914",
+    "id": null
+   }
+  ],
+  "album": {
+   "name": "Title 525",
+   "id": "MPREb_d1c868e4bf3f88b2"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/87805-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/57672-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "4:03",
+  "duration_seconds": 243,
+  "creditsBrowseId": "fe7f778e07d"
+ },
+ {
+  "videoId": "c5cd3a7ac3d",
+  "title": "Title 189",
+  "artists": [
+   {
+    "name": "Artist 128",
+    "id": "UCe274002e2164b6f1"
+   }
+  ],
+  "album": {
+   "name": "Title 189",
+   "id": "MPREb_215f502176033d66"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/67135-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/22774-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "4:07",
+  "duration_seconds": 247
+ },
+ {
+  "videoId": "00860e53add",
+  "title": "Title 541",
+  "artists": [
+   {
+    "name": "Artist 261",
+    "id": "UCe274002e2164b6f1"
+   }
+  ],
+  "album": {
+   "name": "Album 950",
+   "id": "MPREb_5dc342a4b7726a72"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/63867-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/98191-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "4:18",
+  "duration_seconds": 258,
+  "creditsBrowseId": "874b4fb45dc"
+ },
+ {
+  "videoId": "577453f5b5a",
+  "title": "Title 302",
+  "artists": [
+   {
+    "name": "Artist 744",
+    "id": "UC5275386193416ad3"
+   }
+  ],
+  "album": {
+   "name": "Title 302",
+   "id": "MPREb_6ddda4d2134d2473"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/97763-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/99345-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "3:16",
+  "duration_seconds": 196,
+  "creditsBrowseId": "ffdf81fb6e4"
+ },
+ {
+  "videoId": "0d48b1d707a",
+  "title": "Title 184",
+  "artists": [
+   {
+    "name": "Artist 744",
+    "id": "UC5275386193416ad3"
+   }
+  ],
+  "album": {
+   "name": "Title 184",
+   "id": "MPREb_7fadee56f93b9416"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/73412-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/61036-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "3:28",
+  "duration_seconds": 208,
+  "creditsBrowseId": "6198c18a910"
+ },
+ {
+  "videoId": "5a054ff41a4",
+  "title": "Title 551",
+  "artists": [
+   {
+    "name": "Artist 261",
+    "id": "UCe274002e2164b6f1"
+   }
+  ],
+  "album": {
+   "name": "Album 691",
+   "id": "MPREb_1fd855674cc74966"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/149-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/96977-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "1:38",
+  "duration_seconds": 98,
+  "creditsBrowseId": "0d83811f90b"
+ },
+ {
+  "videoId": "0ed3606bde1",
+  "title": "Title 284",
+  "artists": [
+   {
+    "name": "Artist 911",
+    "id": "UC8eb751ce79528b25"
+   }
+  ],
+  "album": {
+   "name": "Title 284",
+   "id": "MPREb_faf2aefbc74f2890"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/61840-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/14332-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "2:48",
+  "duration_seconds": 168
+ },
+ {
+  "videoId": "8f69f1dc714",
+  "title": "Title 397",
+  "artists": [
+   {
+    "name": "Artist 673",
+    "id": "UC19859b5f68f46462"
+   },
+   {
+    "name": "Artist 582",
+    "id": "UC2637812a0d288302"
+   },
+   {
+    "name": "Artist 776",
+    "id": "UCa1517858567ee667"
+   },
+   {
+    "name": "Artist 464",
+    "id": "UCf44de4af8c4f69d6"
+   }
+  ],
+  "album": {
+   "name": "Album 636",
+   "id": "MPREb_36a3887b537c41cd"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/23954-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/1956-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": true,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "3:06",
+  "duration_seconds": 186,
+  "creditsBrowseId": "d754649c086"
+ },
+ {
+  "videoId": "d2a8161cb62",
+  "title": "Title 696",
+  "artists": [
+   {
+    "name": "Artist 267",
+    "id": "UC18f86bcbc04ca352"
+   },
+   {
+    "name": "Artist 984",
+    "id": "UCd1bd76e9031941cb"
+   }
+  ],
+  "album": {
+   "name": "Title 696",
+   "id": "MPREb_d1d607cedcb14b5d"
+  },
+  "likeStatus": "LIKE",
+  "inLibrary": true,
+  "pinnedToListenAgain": false,
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/58370-60.jpg",
+    "width": 60,
+    "height": 60
+   },
+   {
+    "url": "https://example.invalid/art/95418-120.jpg",
+    "width": 120,
+    "height": 120
+   }
+  ],
+  "isAvailable": true,
+  "isExplicit": false,
+  "videoType": "MUSIC_VIDEO_TYPE_ATV",
+  "views": null,
+  "communityVoteStatus": null,
+  "duration": "3:13",
+  "duration_seconds": 193,
+  "creditsBrowseId": "2a6c1376685"
+ }
+]

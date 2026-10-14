@@ -1,0 +1,557 @@
+{
+ "kind": "album",
+ "title": "Title 189",
+ "subtitle": "Subtitle 943",
+ "thumbnails": [
+  {
+   "url": "https://example.invalid/art/32105-60.jpg",
+   "width": 60,
+   "height": 60
+  },
+  {
+   "url": "https://example.invalid/art/67989-120.jpg",
+   "width": 120,
+   "height": 120
+  },
+  {
+   "url": "https://example.invalid/art/32764-226.jpg",
+   "width": 226,
+   "height": 226
+  },
+  {
+   "url": "https://example.invalid/art/32041-544.jpg",
+   "width": 544,
+   "height": 544
+  }
+ ],
+ "trackCount": 17,
+ "tracks": [
+  {
+   "videoId": "2611a3fe24b",
+   "title": "Title 989",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 353",
+   "communityVoteStatus": null,
+   "trackNumber": 1,
+   "duration": "2:07",
+   "duration_seconds": 127,
+   "creditsBrowseId": "140958ff675"
+  },
+  {
+   "videoId": "977c9f786b3",
+   "title": "Title 835",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 975",
+   "communityVoteStatus": null,
+   "trackNumber": 2,
+   "duration": "1:27",
+   "duration_seconds": 87,
+   "creditsBrowseId": "88fc90dba78"
+  },
+  {
+   "videoId": "2714bf67206",
+   "title": "Title 398",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "LIKE",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 696",
+   "communityVoteStatus": null,
+   "trackNumber": 3,
+   "duration": "2:50",
+   "duration_seconds": 170,
+   "creditsBrowseId": "e58fbb013b5"
+  },
+  {
+   "videoId": "45446ee2021",
+   "title": "Title 775",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "LIKE",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 724",
+   "communityVoteStatus": null,
+   "trackNumber": 4,
+   "duration": "3:50",
+   "duration_seconds": 230,
+   "creditsBrowseId": "8e9b7db996c"
+  },
+  {
+   "videoId": "c85cfb06711",
+   "title": "Title 838",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 728",
+   "communityVoteStatus": null,
+   "trackNumber": 5,
+   "duration": "1:49",
+   "duration_seconds": 109,
+   "creditsBrowseId": "c9546667eeb"
+  },
+  {
+   "videoId": "af557eaed2f",
+   "title": "Title 572",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 411",
+   "communityVoteStatus": null,
+   "trackNumber": 6,
+   "duration": "2:00",
+   "duration_seconds": 120,
+   "creditsBrowseId": "02478066b46"
+  },
+  {
+   "videoId": "0c74d7e0074",
+   "title": "Title 477",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 112",
+   "communityVoteStatus": null,
+   "trackNumber": 7,
+   "duration": "2:35",
+   "duration_seconds": 155,
+   "creditsBrowseId": "37fd7a6db95"
+  },
+  {
+   "videoId": "88cb2f87b2b",
+   "title": "Title 547",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 246",
+   "communityVoteStatus": null,
+   "trackNumber": 8,
+   "duration": "2:47",
+   "duration_seconds": 167,
+   "creditsBrowseId": "1c9b40d4ea4"
+  },
+  {
+   "videoId": "b16bd30e518",
+   "title": "Title 791",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "LIKE",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 515",
+   "communityVoteStatus": null,
+   "trackNumber": 9,
+   "duration": "2:28",
+   "duration_seconds": 148,
+   "creditsBrowseId": "25376f726bd"
+  },
+  {
+   "videoId": "864354c5227",
+   "title": "Title 422",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 648",
+   "communityVoteStatus": null,
+   "trackNumber": 10,
+   "duration": "1:52",
+   "duration_seconds": 112,
+   "creditsBrowseId": "57df3443434"
+  },
+  {
+   "videoId": "22a18a49b0d",
+   "title": "Title 826",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": true,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 819",
+   "communityVoteStatus": null,
+   "trackNumber": 11,
+   "duration": "2:08",
+   "duration_seconds": 128,
+   "creditsBrowseId": "d7fc8463d7f"
+  },
+  {
+   "videoId": "27aafe60a34",
+   "title": "Title 331",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 819",
+   "communityVoteStatus": null,
+   "trackNumber": 12,
+   "duration": "2:11",
+   "duration_seconds": 131,
+   "creditsBrowseId": "28c5c69f6d3"
+  },
+  {
+   "videoId": "5c6c61ef690",
+   "title": "Title 304",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 286",
+   "communityVoteStatus": null,
+   "trackNumber": 14,
+   "duration": "3:02",
+   "duration_seconds": 182,
+   "creditsBrowseId": "414f2fa2739"
+  },
+  {
+   "videoId": "2df8b7c1553",
+   "title": "Title 597",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 146",
+   "communityVoteStatus": null,
+   "trackNumber": 15,
+   "duration": "1:46",
+   "duration_seconds": 106,
+   "creditsBrowseId": "13bb47e4a42"
+  },
+  {
+   "videoId": "1b5ccc60411",
+   "title": "Title 365",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 106",
+   "communityVoteStatus": null,
+   "trackNumber": 16,
+   "duration": "2:04",
+   "duration_seconds": 124,
+   "creditsBrowseId": "6e525d709ba"
+  },
+  {
+   "videoId": "1aded43f360",
+   "title": "Title 702",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 812",
+   "communityVoteStatus": null,
+   "trackNumber": 17,
+   "duration": "3:07",
+   "duration_seconds": 187,
+   "creditsBrowseId": "323a4fa499f"
+  },
+  {
+   "videoId": "ae61aee6c7f",
+   "title": "Title 395",
+   "artists": [
+    {
+     "name": "Artist 225",
+     "id": "UCedd2bda85150b15f"
+    },
+    {
+     "name": "Artist 714",
+     "id": "UC78ecc22d76e8c94f"
+    }
+   ],
+   "album": {
+    "name": "Title 189",
+    "id": null
+   },
+   "likeStatus": "INDIFFERENT",
+   "inLibrary": false,
+   "pinnedToListenAgain": false,
+   "thumbnails": null,
+   "isAvailable": true,
+   "isExplicit": false,
+   "videoType": "MUSIC_VIDEO_TYPE_ATV",
+   "views": "Plays 819",
+   "communityVoteStatus": null,
+   "trackNumber": 18,
+   "duration": "3:01",
+   "duration_seconds": 181,
+   "creditsBrowseId": "7561b8b2eff"
+  }
+ ]
+}

@@ -390,9 +390,27 @@ namespace YtMusicClient.Services
         {
             if (!HasTrack || _finished)
                 return;
-            Log($"seek {position.TotalSeconds:F0}s");
-            _engine.Seek(position);
+            var clamped = ClampSeek(position, Duration);
+            Log($"seek {clamped.TotalSeconds:F0}s");
+            _engine.Seek(clamped);
             NotifyState();
+        }
+
+        /// <summary>
+        /// Seek policy (pure, pinned by the regression tests): never negative,
+        /// and never past the track end when the duration is known. An unknown
+        /// duration (0) only applies the lower bound — there is no upper bound to
+        /// compute against yet, and the control already refuses to commit in
+        /// that state.
+        /// </summary>
+        public static TimeSpan ClampSeek(TimeSpan position, TimeSpan duration)
+        {
+            double seconds = position.TotalSeconds;
+            if (seconds < 0)
+                seconds = 0;
+            if (duration > TimeSpan.Zero && seconds > duration.TotalSeconds)
+                seconds = duration.TotalSeconds;
+            return TimeSpan.FromSeconds(seconds);
         }
 
         /// <summary>

@@ -223,6 +223,7 @@
 
                         <Button Style="{StaticResource IconButtonStyle}"
                                 AutomationProperties.Name="Previous track"
+                                ToolTipService.ToolTip="Previous track (Ctrl+←)"
                                 IsEnabled="{x:Bind Player.HasTrack, Mode=OneWay}"
                                 Click="PrevButton_Click">
                             <FontIcon Glyph="&#xE892;" FontSize="22"
@@ -233,6 +234,7 @@
                                 CornerRadius="28"
                                 Style="{StaticResource AccentButtonStyle}"
                                 AutomationProperties.Name="Play or pause"
+                                ToolTipService.ToolTip="Play / pause (Space)"
                                 IsEnabled="{x:Bind Player.CanToggle, Mode=OneWay}"
                                 Click="PlayPause_Click">
                             <TextBlock x:Name="PlayPauseGlyph"
@@ -245,6 +247,7 @@
 
                         <Button Style="{StaticResource IconButtonStyle}"
                                 AutomationProperties.Name="Next track"
+                                ToolTipService.ToolTip="Next track (Ctrl+→)"
                                 IsEnabled="{x:Bind Queue.CanAdvance, Mode=OneWay}"
                                 Click="NextButton_Click">
                             <FontIcon Glyph="&#xE893;" FontSize="22"
@@ -282,6 +285,7 @@
                                                   IsEnabled="{x:Bind Player.CanSeek, Mode=OneWay}"
                                                   SeekRequested="SeekBar_SeekRequested"
                                                   PreviewChanged="SeekBar_PreviewChanged"
+                                                  ToolTipService.ToolTip="Click or drag to seek (← / → = ±5 s)"
                                                   AutomationProperties.Name="Seek bar" />
 
                         <TextBlock x:Name="DurationText"
@@ -317,6 +321,7 @@
 
                         <Button Style="{StaticResource IconButtonStyle}"
                                 AutomationProperties.Name="Mute or unmute"
+                                ToolTipService.ToolTip="Mute / unmute (Ctrl+Shift+M)"
                                 Click="PageMuteButton_Click">
                             <FontIcon x:Name="PageMuteGlyph" Glyph="&#xE767;" FontSize="18"
                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />

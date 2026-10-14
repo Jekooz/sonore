@@ -1,0 +1,200 @@
+[
+ {
+  "title": "Title 816",
+  "playlistId": "LM",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/35400-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/85452-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": false,
+  "description": "Description 133",
+  "author": ""
+ },
+ {
+  "title": "Title 568",
+  "playlistId": "PLba175c7224ca75e2",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/68515-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/24419-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": true,
+  "description": "Description 318",
+  "count": "27",
+  "author": "Name 546"
+ },
+ {
+  "title": "Title 477",
+  "playlistId": "PLb548e46258812d40",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/56663-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/72866-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": true,
+  "description": "Description 179",
+  "count": "51",
+  "author": "Name 546"
+ },
+ {
+  "title": "Title 412",
+  "playlistId": "PLfc6addeebcda70b6",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/57667-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/30030-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": false,
+  "description": "Description 772",
+  "count": "26",
+  "author": "Curator 773"
+ },
+ {
+  "title": "Title 506",
+  "playlistId": "PL79f0e9512de1a750",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/59607-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/55213-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": true,
+  "description": "Description 498",
+  "count": "25",
+  "author": "Name 546"
+ },
+ {
+  "title": "Title 748",
+  "playlistId": "PL0edf09f4767b4780",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/1189-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/49603-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": true,
+  "description": "Description 873",
+  "count": "49",
+  "author": "Name 546"
+ },
+ {
+  "title": "Title 375",
+  "playlistId": "df59735e1f2",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/50464-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/44752-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": false,
+  "description": "Description 907",
+  "author": ""
+ },
+ {
+  "title": "Title 401",
+  "playlistId": "PL84084bb59409fd2c",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/9751-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/43376-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": false,
+  "description": "Description 362",
+  "count": "71",
+  "author": "Curator 926"
+ },
+ {
+  "title": "Title 614",
+  "playlistId": "PLb0be8142a004da94",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/44479-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/26349-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": false,
+  "description": "Description 603",
+  "count": "66",
+  "author": "Curator 257"
+ },
+ {
+  "title": "Title 163",
+  "playlistId": "PL829952546d56b0a1",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/10884-192.jpg",
+    "width": 192,
+    "height": 192
+   },
+   {
+    "url": "https://example.invalid/art/22365-576.jpg",
+    "width": 576,
+    "height": 576
+   }
+  ],
+  "owned": false,
+  "description": "Description 131",
+  "count": "131",
+  "author": "Curator 758"
+ }
+]

@@ -1,0 +1,926 @@
+[
+ {
+  "title": "Title 994",
+  "contents": [
+   {
+    "title": "Title 654",
+    "artists": [
+     {
+      "id": "UC5275386193416ad3",
+      "name": "Artist 744"
+     }
+    ],
+    "browseId": "MPREb_568a7b24564e0b7b",
+    "audioPlaylistId": "OLAK5uy_9906e87229a48113",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/61178-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/89870-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "EP"
+   },
+   {
+    "title": "Title 654",
+    "artists": [
+     {
+      "id": "UC5275386193416ad3",
+      "name": "Artist 744"
+     }
+    ],
+    "browseId": "MPREb_568a7b24564e0b7b",
+    "audioPlaylistId": "OLAK5uy_9906e87229a48113",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/61178-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/89870-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "EP"
+   },
+   {
+    "title": "Title 869",
+    "playlistId": "PL37ef27d8ec1ca601",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/86106-400.jpg",
+      "width": 400,
+      "height": 225
+     },
+     {
+      "url": "https://example.invalid/art/85491-800.jpg",
+      "width": 800,
+      "height": 450
+     }
+    ],
+    "owned": false,
+    "description": "Description 991"
+   },
+   {
+    "title": "Title 383",
+    "browseId": "UCfb6967974807a68c",
+    "subscribers": "Listeners 907",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/89614-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/90358-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ]
+   },
+   {
+    "title": "Title 830",
+    "videoId": "80f6372eb7a",
+    "playlistId": "RDAM90ececd4ec6b86ea",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/54594-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/80185-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 986",
+      "id": "UCbe44b3fb5b9b5338"
+     },
+     {
+      "name": "Artist 922",
+      "id": "UC4c0f2a34cc7d5443"
+     }
+    ]
+   },
+   {
+    "title": "Title 396",
+    "videoId": "245dfce2778",
+    "playlistId": "RDAM84a9d60e3bb2635f",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/74889-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/4482-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 553",
+      "id": "UC7571ccf9646c146a"
+     }
+    ]
+   },
+   {
+    "title": "Artist 553",
+    "browseId": "UC7571ccf9646c146a",
+    "subscribers": "Listeners 608",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/27990-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/16260-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ]
+   },
+   {
+    "title": "Title 477",
+    "playlistId": "PLb548e46258812d40",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/56663-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/72866-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": true,
+    "description": "Description 179",
+    "count": "51",
+    "author": [
+     {
+      "name": "Name 546",
+      "id": "UC3c0f78cac76069db"
+     }
+    ]
+   },
+   {
+    "title": "Title 324",
+    "videoId": "745c85a3aa9",
+    "playlistId": "RDAM904b1e6f0e6cf4da",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/69665-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/94609-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 337",
+      "id": "UC0409a945810a55c0"
+     }
+    ]
+   },
+   {
+    "title": "Title 537",
+    "videoId": "f40946b5a79",
+    "playlistId": "RDAMcceea2004c010ce3",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/52616-400.jpg",
+      "width": 400,
+      "height": 225
+     },
+     {
+      "url": "https://example.invalid/art/52454-800.jpg",
+      "width": 800,
+      "height": 450
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 459",
+      "id": "UC466e92299e5b6b9b"
+     },
+     {
+      "name": "Artist 986",
+      "id": "UCbe44b3fb5b9b5338"
+     }
+    ],
+    "views": "Plays 999"
+   },
+   {
+    "title": "Title 698",
+    "artists": [
+     {
+      "id": "UC299ce7d17bde308b",
+      "name": "Artist 396"
+     }
+    ],
+    "browseId": "MPREb_27603b5ac3a4459a",
+    "audioPlaylistId": "OLAK5uy_a254dc0c7f26f0ad",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/73234-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/7943-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "Album"
+   },
+   {
+    "title": "Title 538",
+    "videoId": "b48f1870ee3",
+    "playlistId": "RDAMe9c28f39ce6c237c",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/69235-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/59760-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 408",
+      "id": "UCc63b2747bd4f7da4"
+     }
+    ]
+   },
+   {
+    "title": "Title 419",
+    "videoId": "b0b501eda24",
+    "playlistId": "RDAMd4e2c86b8767e098",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/96318-400.jpg",
+      "width": 400,
+      "height": 225
+     },
+     {
+      "url": "https://example.invalid/art/2456-640.jpg",
+      "width": 640,
+      "height": 360
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 874",
+      "id": "UCd28ab5cf30f5d8a5"
+     }
+    ],
+    "views": "Plays 387"
+   },
+   {
+    "title": "Title 816",
+    "playlistId": "LM",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/35400-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/85452-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 133"
+   },
+   {
+    "title": "Title 606",
+    "videoId": "4ba29305bb2",
+    "playlistId": "RDAM3c18d967e904db2e",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/54081-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/77089-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 769",
+      "id": "UC0ef2098117e9f0ad"
+     },
+     {
+      "name": "Artist 654",
+      "id": "UC90472bfb0d078d52"
+     }
+    ]
+   },
+   {
+    "title": "Title 439",
+    "videoId": "d7224c0026c",
+    "playlistId": "RDAMec938b2c7f609823",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/41640-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/6540-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 877",
+      "id": "UC0b202415dc647b4c"
+     }
+    ]
+   },
+   {
+    "title": "Title 748",
+    "playlistId": "PL0edf09f4767b4780",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/1189-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/49603-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": true,
+    "description": "Description 873",
+    "count": "49",
+    "author": [
+     {
+      "name": "Name 546",
+      "id": "UC3c0f78cac76069db"
+     }
+    ]
+   },
+   {
+    "title": "Title 568",
+    "playlistId": "PLba175c7224ca75e2",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/68515-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/24419-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": true,
+    "description": "Description 318",
+    "count": "27",
+    "author": [
+     {
+      "name": "Name 546",
+      "id": "UC3c0f78cac76069db"
+     }
+    ]
+   },
+   {
+    "title": "Title 315",
+    "videoId": "dc34848fb8f",
+    "playlistId": "RDAM32cba50262c9053f",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/84626-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/99783-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "artists": [
+     {
+      "name": "Artist 444",
+      "id": "UCbe44b3fb5b9b5338"
+     },
+     {
+      "name": "Artist 290",
+      "id": "UC6c226ccbfdb9d26c"
+     },
+     {
+      "name": "Artist 492",
+      "id": "UC45309dbc3f39c1f7"
+     }
+    ]
+   },
+   {
+    "title": "Title 615",
+    "playlistId": "21de26420e4",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/79462-200.jpg",
+      "width": 200,
+      "height": 200
+     },
+     {
+      "url": "https://example.invalid/art/98762-600.jpg",
+      "width": 600,
+      "height": 600
+     }
+    ],
+    "owned": false,
+    "description": "Description 452"
+   }
+  ]
+ },
+ {
+  "title": "Title 949",
+  "contents": [
+   {
+    "title": "Title 741",
+    "artists": [
+     {
+      "id": "UCeca608e3a846340c",
+      "name": "Artist 846"
+     }
+    ],
+    "browseId": "MPREb_174a2d12f3b628f0",
+    "audioPlaylistId": "OLAK5uy_f5c9208c528280f7",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/13643-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/25771-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "Album"
+   },
+   {
+    "title": "Title 688",
+    "artists": [
+     {
+      "id": "UC0409a945810a55c0",
+      "name": "Artist 337"
+     }
+    ],
+    "browseId": "MPREb_6965287b9780d21d",
+    "audioPlaylistId": "OLAK5uy_df7d846e92293177",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/69665-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/94609-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "Album"
+   },
+   {
+    "title": "Title 419",
+    "artists": [
+     {
+      "id": "UCe274002e2164b6f1",
+      "name": "Artist 894"
+     }
+    ],
+    "browseId": "MPREb_84392f23023965b3",
+    "audioPlaylistId": "OLAK5uy_d3e18e1fc991f43a",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/18900-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/60278-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "Album"
+   },
+   {
+    "title": "Title 417",
+    "artists": [
+     {
+      "id": "UC9b3600011eb5c0f2",
+      "name": "Artist 809"
+     }
+    ],
+    "browseId": "MPREb_ea5fca2983fae6da",
+    "audioPlaylistId": "OLAK5uy_5da2240b6e03e927",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/65235-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/38167-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": true,
+    "type": "Album"
+   },
+   {
+    "title": "Title 918",
+    "artists": [
+     {
+      "id": "UC9b3600011eb5c0f2",
+      "name": "Artist 809"
+     }
+    ],
+    "browseId": "MPREb_02dfc32a6d3fa8e9",
+    "audioPlaylistId": "OLAK5uy_a5d69c7837d7e7da",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/47518-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/34086-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": true,
+    "type": "Album"
+   },
+   {
+    "title": "Title 394",
+    "artists": [
+     {
+      "id": "UCee8b4902cd85e6bd",
+      "name": "Artist 214"
+     }
+    ],
+    "browseId": "MPREb_f338cd42842fb5c5",
+    "audioPlaylistId": "OLAK5uy_f05a89d7aec75c67",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/41227-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/8780-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "Album"
+   },
+   {
+    "title": "Title 412",
+    "artists": [
+     {
+      "id": "UC90472bfb0d078d52",
+      "name": "Artist 887"
+     },
+     {
+      "id": "UC32f5c43199263a17",
+      "name": "Artist 787"
+     }
+    ],
+    "browseId": "MPREb_dd5a5330de40d73e",
+    "audioPlaylistId": "OLAK5uy_87d81f3fd8cef9de",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/66044-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/23233-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "Album"
+   },
+   {
+    "title": "Title 459",
+    "artists": [
+     {
+      "id": "UC08d1d5f750f4c4a0",
+      "name": "Artist 458"
+     }
+    ],
+    "browseId": "MPREb_bbea80d04e00bc0d",
+    "audioPlaylistId": "OLAK5uy_020e37ebbc46635f",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/24511-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/59631-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "Album"
+   },
+   {
+    "title": "Title 254",
+    "artists": [
+     {
+      "id": "UC057b9fa6d4d0065f",
+      "name": "Artist 715"
+     },
+     {
+      "id": "UC37deca41c8a6fc2a",
+      "name": "Artist 236"
+     },
+     {
+      "id": "UC2405805d58f4a661",
+      "name": "Artist 506"
+     }
+    ],
+    "browseId": "MPREb_d1609d411295361a",
+    "audioPlaylistId": "OLAK5uy_82a6b0e5a5a71e19",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/51778-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/83368-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": false,
+    "type": "Album"
+   },
+   {
+    "title": "Title 636",
+    "artists": [
+     {
+      "id": "UC08d1d5f750f4c4a0",
+      "name": "Artist 458"
+     }
+    ],
+    "browseId": "MPREb_6932e517e3954a2a",
+    "audioPlaylistId": "OLAK5uy_a72e774fbdeec4b8",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/96564-226.jpg",
+      "width": 226,
+      "height": 226
+     },
+     {
+      "url": "https://example.invalid/art/29501-544.jpg",
+      "width": 544,
+      "height": 544
+     }
+    ],
+    "isExplicit": true,
+    "type": "Album"
+   }
+  ]
+ },
+ {
+  "title": "Title 635",
+  "contents": [
+   {
+    "title": "Title 807",
+    "playlistId": "PL7b3914682bc0e1a1",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/25579-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/71225-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 659"
+   },
+   {
+    "title": "Title 265",
+    "playlistId": "PL85fba4bdb65cfebe",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/32734-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/18417-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 388"
+   },
+   {
+    "title": "Title 807",
+    "playlistId": "PL903502bebd8ad5ba",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/32260-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/81528-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 676"
+   },
+   {
+    "title": "Title 391",
+    "playlistId": "PLbf584ea24467a8b8",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/89921-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/2223-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 695"
+   },
+   {
+    "title": "Title 129",
+    "playlistId": "PL0ad1e0fb6bd3bc68",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/90457-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/20722-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 638"
+   },
+   {
+    "title": "Title 211",
+    "playlistId": "PLfb849d5f08fe17f0",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/96871-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/89694-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 814"
+   },
+   {
+    "title": "Title 644",
+    "playlistId": "PLe9d0a1cfb1124687",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/36757-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/55547-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 336"
+   },
+   {
+    "title": "Title 119",
+    "playlistId": "PL67380b8979bbff60",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/90276-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/90273-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 279"
+   },
+   {
+    "title": "Title 555",
+    "playlistId": "PLf0096e53b90573ae",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/82193-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/55743-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 527"
+   },
+   {
+    "title": "Title 978",
+    "playlistId": "PL0c2bd7a61003563c",
+    "thumbnails": [
+     {
+      "url": "https://example.invalid/art/21607-192.jpg",
+      "width": 192,
+      "height": 192
+     },
+     {
+      "url": "https://example.invalid/art/2949-576.jpg",
+      "width": 576,
+      "height": 576
+     }
+    ],
+    "owned": false,
+    "description": "Description 425"
+   }
+  ]
+ }
+]

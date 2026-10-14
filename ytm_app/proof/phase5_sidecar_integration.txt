@@ -1,0 +1,6 @@
+00:00 +0: loading C:/Users/jaini/OneDrive/Documents/ytm client v1/ytm-client/ytm_app/integration_test/sidecar_lifecycle_test.dart
+Building Windows application...                                    16.2s
+√ Built build\windows\x64\runner\Debug\ytm_app.exe
+00:00 +0: starts the real sidecar, becomes healthy, and stops cleanly
+00:04 +1: (tearDownAll)
+00:04 +1: All tests passed!

@@ -1,0 +1,233 @@
+Phase 5 — Batch 3: Settings and persisted preferences
+Date: 2026-10-14
+Status: complete and verified in this tree. NO COMMITS, NO PUSHES.
+
+====================================================================
+1. WHAT WAS FOUND, AND WHAT THIS SESSION DID
+====================================================================
+The Batch 3 production and test code was already in the working tree,
+written on 2026-10-13 between 17:25 and 18:55 (i.e. after Batch 2's
+proof at 17:24). Nothing was proven: there was no proof file, and the
+tree was broken in six independent ways.
+
+This session changed no feature scope. It repaired what was broken,
+proved the feature set against the real code path, and recorded the
+evidence below. All fixes are in the files the defects were in.
+
+====================================================================
+2. DEFECTS FOUND AND FIXED
+====================================================================
+D1. `flutter analyze`: 13 errors — `Override` is not a type.
+    Riverpod 3.4.3 (pubspec.lock) no longer exports `Override` from
+    `package:riverpod/riverpod.dart`; it is exported only through
+    `package:riverpod/misc.dart`. Proved before fixing, with a minimal
+    probe: importing from `riverpod.dart` or `flutter_riverpod.dart`
+    fails, importing `riverpod/misc.dart show Override` compiles.
+    test/support/harness.dart
+    test/lyrics_screen_test.dart
+
+D2. `flutter analyze`: undefined name `Skeleton` — the lyrics widget
+    test never imported the widget's library.
+    test/lyrics_screen_test.dart           (+ lib/ui/screen_states.dart)
+
+D3. `tool/check_tokens.sh`: 1 violation —
+    `BorderRadius.circular(Tokens.rSmall)` at
+    lib/features/lyrics/lyrics_screen.dart:335. Radii belong to the
+    theme, so the value moved there as `Tokens.rSmallBorder` (the same
+    rSmall radius, for widgets that take a BorderRadius rather than an
+    OutlinedBorder) and the screen uses the token.
+    lib/theme/tokens.dart
+    lib/features/lyrics/lyrics_screen.dart
+
+D4. Lyrics data layer failed 4/4 with `YtmOfflineException` from
+    api_client.dart:154. The test's MockClient answered every path —
+    including the discovery probe `GET /health` — with the lyrics body,
+    so `_isHealthy` (which requires a body containing `"ok"`) never
+    matched and discovery concluded the sidecar was down. The mock now
+    routes `/health` to the same payload shape as
+    test/fixtures/health.json.
+    test/lyrics_screen_test.dart
+
+D5. Context menu: 5 tests plus the context-menu golden could not find
+    "Play now". Batch 3 added a Settings action to the shell's nav rail
+    (desktop) and bottom bar (phone) drawn with `AppIcons.dotsThree`.
+    It precedes the content in tree order, so
+    `find.byIcon(AppIcons.dotsThree).first` tapped Settings, not the
+    row's overflow. The tests now scope the tap to the first row's own
+    overflow button; the product code was not changed.
+    test/product_screens_test.dart           (firstRowOverflow helper, 5 sites)
+    test/golden/product_screens_golden_test.dart
+
+D6. "No lyrics for this track." was unreachable, and the loading
+    skeleton test observed data instead of loading.
+    (a) lib/ui/data_states.dart decided `current == null -> error`
+        before consulting `isEmpty`. For `DataStateView<LyricsResult?>`
+        a null value IS a legitimate answer ("the service has no
+        lyrics"), so the empty state was dead code and the screen showed
+        "Something went wrong loading this." instead. The check is now
+        `value.hasValue` — "the provider never produced a value" is a
+        different thing from "the provider answered null".
+    (b) The skeleton test used a 30-second `Future.delayed` while
+        `pumpAndSettle` pumps through the skeleton's own shimmer
+        animation, so the widget-test clock ran past the delay and the
+        data arrived. A never-completing Completer plus `settle: false`
+        keeps the screen in loading deterministically.
+    lib/ui/data_states.dart
+    test/lyrics_screen_test.dart
+
+No production file outside these was touched. The setters, the store,
+the equalizer, the settings screen and the lyrics screen were read and
+left as they are: no defect in them was demonstrated.
+
+====================================================================
+3. WHAT BATCH 3 DELIVERS (verified by the suite below)
+====================================================================
+Settings screen (lib/features/settings/settings_screen.dart), grouped
+sections as design.md section I asks, every control wired to the real
+store:
+  Appearance   reduce transparency, reduce motion, text scale, theme note
+  Lyrics       follow playback
+  Audio        equalizer summary + link to the EQ screen
+  Diagnostics  live connection + local-runtime state, re-check action
+  Account      sign-in state, sign out (behind a confirmation)
+  Privacy      where the session lives, stated plainly
+  About        version, licences
+  Footer       Reset preferences, behind a confirmation
+
+Persistence (lib/core/app_settings.dart, settings_persistence.dart):
+`shared_preferences` store, read before the first frame in main.dart so
+the app opens on the stored preferences, per-write save status surfaced
+as a banner, and a reset that returns every field to its default.
+Equalizer shape is persisted on every change and re-applied to the
+engine at startup (playback_service._applyPersistedEqualizer).
+
+Lyrics (features/lyrics/): timed lyrics follow playback and each timed
+line is a seek target; untimed lyrics render as static text and are not
+offered as seek targets; empty, offline, signed-out and failed states
+each say their own thing.
+
+====================================================================
+4. COMMANDS RUN, WITH EXIT CODES AND REAL OUTPUT
+====================================================================
+1. flutter analyze
+   -> "Analyzing ytm_app... No issues found! (ran in 148.1s)"
+   EXIT=0   (before the fixes: "14 issues found")
+
+2. bash tool/check_tokens.sh
+   -> "No design-token violations found."
+   EXIT=0   (before: 1 violation, listed above)
+
+3. flutter test
+   -> "00:26 +238: All tests passed!"
+   EXIT=0   (before the fixes: 210 passed / 28 failed)
+
+4. flutter build windows --release
+   -> "Building Windows application... 149.1s
+       Built build\windows\x64\runner\Release\ytm_app.exe"
+   EXIT=0
+
+5. Release run smoke (built exe, launched from Git Bash)
+   -> log: "[IMPORTANT:flutter/shell/platform/embedder/
+       embedder_surface_gl_impeller.cc(126)] Using the Impeller
+       rendering backend (OpenGLESSDF).
+       package:media_kit_libs_windows_audio registered."
+   -> "ytm_app.exe  7416  Console  1  1,57,508 K"  (still running
+      ~2 minutes after launch; no startup crash)
+   -> app terminated by PID after the check; the sidecar it spawned
+      (python.exe 1768, backend/main.py, created 12:51:30 — the moment
+      of the launch) was terminated with it. Verified no python is left.
+
+6. Integration suites, each run on its own (see limitation L5):
+   a. flutter test integration_test/sidecar_lifecycle_test.dart -d windows
+      -> "starts an isolated real sidecar, becomes healthy, and stops
+          cleanly without touching the shared port file" + "All tests
+          passed!"                     EXIT=0
+   b. flutter test integration_test/playback_engine_test.dart -d windows
+      -> "All tests passed!"           EXIT=0
+   c. flutter test integration_test/backend_api_test.dart -d windows
+      -> "00:36 +10: All tests passed!" EXIT=0
+
+   Exit codes were read with PIPESTATUS so output filtering could not
+   mask a failure; the raw logs were inspected for the failing cases.
+
+====================================================================
+5. GOLDEN REGENERATION — WHY IT IS NOT A BLIND BLESSING
+====================================================================
+17 goldens no longer matched because Batch 3 changed the shell
+(nav-rail / bottom-bar Settings action) and the Now Playing screen. The
+old images were copied out, the goldens regenerated
+(`flutter test --update-goldens`, all 238 tests pass), and old vs new
+compared pixel by pixel with Pillow before accepting them:
+
+  golden                                     changed   where
+  specimen ×4 (phone/tablet/desktop/scale)   identical design system untouched
+  product_album_desktop                      0.04%     bbox 36,746-127,762
+  product_context_menu_desktop               0.04%     (nav rail Settings row)
+  product_library_songs_desktop              0.04%
+  shell_home_desktop                         0.04%
+  product_search_results_phone               0.90%     bbox y 780-822
+  shell_home_phone                           0.86%     (bottom-bar Settings item)
+  shell_now_playing_empty_phone              0.85%
+  state_empty_phone                          0.85%
+  state_error_phone                          0.85%
+  state_loading_phone                        0.85%
+  state_offline_phone                        0.86%
+  state_signed_out_phone                     0.86%
+  shell_library_tablet                       0.00%     bbox 40,1231-56,1234
+  now_playing_desktop_1280x800               2.17%     screen reflow
+  now_playing_desktop_1280x800_scale1_3      0.87%
+  now_playing_tablet_800x1280               11.76%
+  now_playing_phone_390x844                 36.54%
+
+The three desktop product screens and the desktop shell differ in one
+91x16 region at the bottom-left corner only: the nav rail's new Settings
+row. Every phone golden differs in a 42 px strip at the bottom: the
+bottom bar's new Settings item. The specimen goldens — the design-system
+catalogue — are byte-identical, which is the check that no token or
+primitive moved.
+
+The Now Playing diffs are larger because that screen's layout reflowed,
+so the before/after comparison alone cannot prove the screen is right.
+The contents were therefore read off the live widget tree during the
+phone golden (temporary print, removed again):
+
+  Falling For You / Nova · Nightfall / 1:24 / 3:58 /
+  Like / Queue / Lyrics / EQ / Home / Search / Library / Now Playing
+
+which is the real queue fixture rendered by the real screen, not an
+error or an empty state. No golden was updated to hide a broken screen.
+
+====================================================================
+6. DIFFERENCES FROM design.md SECTION I (deliberate, not stubs)
+====================================================================
+The Settings screen states each of these in the UI itself:
+- No autoplay switch, no output-device picker, no theme switch: the
+  audio engine exposes none of them and v1 ships dark-only, so a control
+  for any of them would be decorative (project non-negotiable: no mock
+  or inert in-scope controls).
+- No Cache & storage section and no Keyboard-shortcuts page: neither
+  behaviour exists yet in the Flutter app ($5 phases own them), so
+  sections for them would be empty promises.
+These are recorded here as differences, not as unfinished work.
+
+====================================================================
+7. NOT VERIFIED HERE, AND WHY
+====================================================================
+L1. Android: no device or emulator on this machine. Nothing in this
+    batch was run on Android.
+L2. Real browser sign-in: needs a human approving it in a real browser.
+L3. shared_preferences end-to-end through the GUI: the store is covered
+    by settings_test.dart (write, reopen, corrupt value, reset) with
+    SharedPreferences.setMockInitialValues. The packaged app was built
+    and launched, but "change a setting, quit, reopen, setting is still
+    there" needs a human clicking in the window — I cannot drive the
+    GUI, so that single step is untested.
+L4. The run smoke proves the app starts and stays alive; it does not
+    prove audio playback (no track was played, no speakers verified).
+L5. `flutter test integration_test -d windows` (all three files in one
+    invocation) fails to relaunch the app between files: "Error waiting
+    for a debug connection: The log reader stopped unexpectedly". Each
+    file passes on its own; run them one at a time.
+L6. Nothing was committed or pushed. The pre-existing working-tree
+    changes outside ytm_app (frontend/**, tests/ServiceTests.cs,
+    design.md, flutter_poc/) were read only and left untouched.

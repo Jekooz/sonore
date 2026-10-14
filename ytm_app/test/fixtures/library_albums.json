@@ -1,0 +1,260 @@
+[
+ {
+  "browseId": "MPREb_89455a9a25e08791",
+  "playlistId": "OLAK5uy_a5e83d5a4ecd45a9",
+  "title": "Title 189",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/32764-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/32041-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 225",
+    "id": "UCedd2bda85150b15f"
+   },
+   {
+    "name": "Artist 714",
+    "id": "UC78ecc22d76e8c94f"
+   }
+  ],
+  "year": "2026"
+ },
+ {
+  "browseId": "MPREb_10443c519059769f",
+  "playlistId": "OLAK5uy_4659bd762713658d",
+  "title": "Title 630",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/3139-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/87280-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 319",
+    "id": "UCa76827dc6bf56a43"
+   },
+   {
+    "name": "Artist 392",
+    "id": "UCfa3c40eee1b8d254"
+   }
+  ],
+  "year": "2026"
+ },
+ {
+  "browseId": "MPREb_27603b5ac3a4459a",
+  "playlistId": "OLAK5uy_a254dc0c7f26f0ad",
+  "title": "Title 698",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/73234-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/7943-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 396",
+    "id": "UC299ce7d17bde308b"
+   }
+  ],
+  "year": "2019"
+ },
+ {
+  "browseId": "MPREb_12eca3d7b1fcf94d",
+  "playlistId": "OLAK5uy_3960a30a2a12d686",
+  "title": "Title 793",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/65162-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/56706-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 414",
+    "id": "UC7a9afc5e5cb96c41"
+   }
+  ],
+  "year": "2022"
+ },
+ {
+  "browseId": "MPREb_ea5fca2983fae6da",
+  "playlistId": "OLAK5uy_5da2240b6e03e927",
+  "title": "Title 417",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/65235-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/38167-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 809",
+    "id": "UC9b3600011eb5c0f2"
+   }
+  ],
+  "year": "2020"
+ },
+ {
+  "browseId": "MPREb_2ff5ac3ead14677a",
+  "playlistId": "OLAK5uy_91025ae095800b69",
+  "title": "Title 918",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/55978-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/99890-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Single",
+  "artists": [
+   {
+    "name": "Artist 809",
+    "id": "UC9b3600011eb5c0f2"
+   }
+  ],
+  "year": "2022"
+ },
+ {
+  "browseId": "MPREb_eba43a63ecbc8c13",
+  "playlistId": "OLAK5uy_c9d395823247dda9",
+  "title": "Title 740",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/1693-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/23269-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 414",
+    "id": "UC7a9afc5e5cb96c41"
+   }
+  ],
+  "year": "2021"
+ },
+ {
+  "browseId": "MPREb_3919b69c5022821c",
+  "playlistId": "OLAK5uy_370bc9c36e81cf94",
+  "title": "Title 941",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/24007-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/68381-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 685",
+    "id": "UC32b2263ee48c1b01"
+   }
+  ],
+  "year": "2022"
+ },
+ {
+  "browseId": "MPREb_96b54966d4f868e2",
+  "playlistId": "OLAK5uy_4a9e99ea11df77cc",
+  "title": "Title 749",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/59809-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/5402-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 809",
+    "id": "UC9b3600011eb5c0f2"
+   }
+  ],
+  "year": "2019"
+ },
+ {
+  "browseId": "MPREb_87510b35259e8e7d",
+  "playlistId": "OLAK5uy_91636a43e0921fb8",
+  "title": "Title 703",
+  "thumbnails": [
+   {
+    "url": "https://example.invalid/art/23268-226.jpg",
+    "width": 226,
+    "height": 226
+   },
+   {
+    "url": "https://example.invalid/art/81974-544.jpg",
+    "width": 544,
+    "height": 544
+   }
+  ],
+  "type": "Album",
+  "artists": [
+   {
+    "name": "Artist 745",
+    "id": "UCd57098a7291c6416"
+   }
+  ],
+  "year": "2018"
+ }
+]

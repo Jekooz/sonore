@@ -10,3 +10,13 @@ __pycache__/
 # pairing token. Must never be committed.
 browser-extension/sidecar.json
 browser-extension/sidecar.json.tmp
+
+# ---- Local design workspace (Figma exports / mock drafts) -----------------
+# The authoritative design spec (design.pdf / design.png) and the self-contained
+# mock draft are personal working files; keep them out of the repository.
+design.png
+design.pdf
+YTM Client UI.html
+
+# Temporary extraction folders used while auditing design exports
+.audit_design_extract/

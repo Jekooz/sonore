@@ -19,17 +19,29 @@ class NavBottomBar extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onSelect,
+    this.settingsActive = false,
     this.onOpenSettings,
   });
 
-  final int currentIndex;
+  /// Index of the highlighted destination, or null when a Settings page is on
+  /// screen and no destination should be highlighted.
+  final int? currentIndex;
   final ValueChanged<int> onSelect;
+
+  /// True while the page on screen is Settings or the Equalizer, which is what
+  /// the Settings item stands for.
+  final bool settingsActive;
 
   /// Opens Settings in the reader's current destination.
   final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
+    // The highlight follows the route: on Settings and the Equalizer the
+    // Settings action is the active one, so the destination behind it is not
+    // left lit.
+    final int? highlighted = settingsActive ? null : currentIndex;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Tokens.pageMarginPhone,
@@ -48,7 +60,7 @@ class NavBottomBar extends StatelessWidget {
                   child: _NavBarItem(
                     destination: destination,
                     selected: AppDestination.values.indexOf(destination) ==
-                        currentIndex,
+                        highlighted,
                     onTap: () =>
                         onSelect(AppDestination.values.indexOf(destination)),
                   ),
@@ -61,6 +73,7 @@ class NavBottomBar extends StatelessWidget {
                 _NavAction(
                   icon: AppIcons.dotsThree,
                   label: 'Settings',
+                  selected: settingsActive,
                   onTap: onOpenSettings!,
                 ),
               ],
@@ -77,16 +90,21 @@ class _NavAction extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.selected = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
 
+  /// True while this action's own page is the one on screen.
+  final bool selected;
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
+      selected: selected,
       label: label,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -98,7 +116,7 @@ class _NavAction extends StatelessWidget {
             child: Icon(
               icon,
               size: Tokens.iconSize,
-              color: Tokens.textSecondary,
+              color: selected ? Tokens.accent : Tokens.textSecondary,
             ),
           ),
         ),

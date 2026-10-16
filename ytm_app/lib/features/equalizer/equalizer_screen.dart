@@ -101,14 +101,19 @@ class _EqualizerControls extends ConsumerWidget {
           const SizedBox(height: Tokens.s16),
           Text('Preset', style: Tokens.sectionHeader),
           const SizedBox(height: Tokens.s8),
+          // A wrapped chip row: chips keep their own width, a second run starts
+          // at the same left edge as the first, and the selected one is stated
+          // both visually and to assistive technology.
           Wrap(
+            alignment: WrapAlignment.start,
+            crossAxisAlignment: WrapCrossAlignment.start,
             spacing: Tokens.s8,
             runSpacing: Tokens.s8,
             children: <Widget>[
               for (final EqualizerPreset preset in equalizerPresets)
-                PillButton(
+                _PresetChip(
                   label: preset.name,
-                  isActive: state.config.presetName == preset.name,
+                  selected: state.config.presetName == preset.name,
                   onPressed: state.isApplying
                       ? null
                       : () => controller.setPreset(preset),
@@ -117,6 +122,13 @@ class _EqualizerControls extends ConsumerWidget {
           ),
           const SizedBox(height: Tokens.s24),
           Text('Bands', style: Tokens.sectionHeader),
+          const SizedBox(height: Tokens.s4),
+          // The range every band moves over, stated once: the readouts below are
+          // dB values, and this is the scale they are read against.
+          Text(
+            '±${equalizerMaxGainDb.round()} dB per band',
+            style: Tokens.caption,
+          ),
           const SizedBox(height: Tokens.s8),
           SizedBox(
             height: 220,
@@ -178,6 +190,34 @@ class _EqualizerControls extends ConsumerWidget {
   }
 }
 
+/// One preset chip.
+///
+/// The selected flag is exposed to assistive technology as well as painted, so
+/// which preset is in use is never a color-only signal.
+class _PresetChip extends StatelessWidget {
+  const _PresetChip({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      child: PillButton(
+        label: label,
+        isActive: selected,
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
 /// One frequency band: a vertical slider with a readable label and a gain
 /// readout, so it works with a mouse, a keyboard and a screen reader.
 class _BandControl extends StatelessWidget {
@@ -197,18 +237,26 @@ class _BandControl extends StatelessWidget {
       ? '${frequencyHz ~/ 1000}k'
       : '$frequencyHz';
 
+  /// This band's gain with its sign and its unit. A bare number leaves the
+  /// reader to guess the unit and whether it is a boost or a cut.
+  String get _gainLabel {
+    final int db = gainDb.round();
+    return '${db > 0 ? '+' : ''}$db dB';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
       container: true,
       label: '$_frequencyLabel hertz band',
-      value: '${gainDb.round()} decibels',
+      value: _gainLabel,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
           Text(
-            gainDb == 0 ? '0' : '${gainDb.round()}',
+            _gainLabel,
             style: Tokens.caption,
+            textAlign: TextAlign.center,
           ),
           Expanded(
             child: RotatedBox(
@@ -225,7 +273,7 @@ class _BandControl extends StatelessWidget {
               ),
             ),
           ),
-          Text(_frequencyLabel, style: Tokens.caption),
+          Text(_frequencyLabel, style: Tokens.caption, textAlign: TextAlign.center),
         ],
       ),
     );

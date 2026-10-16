@@ -351,6 +351,35 @@ void main() {
       expect(liked, isNotEmpty);
       expect(liked.every((MediaItem item) => item.isPlayable), isTrue);
     });
+
+    test('an owned playlist names its owner and its track count', () async {
+      final List<MediaItem> playlists =
+          await repositoryOver(recordedSidecar())
+              .library(LibrarySegment.playlists);
+      final Map<String, dynamic> owned = (
+              jsonDecode(fixture('library_playlists.json')) as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .firstWhere((Map<String, dynamic> row) =>
+              ((row['author'] as String?) ?? '').isNotEmpty);
+
+      final MediaItem parsed = playlists
+          .firstWhere((MediaItem item) => item.title == owned['title']);
+
+      expect(parsed.subtitle, '${owned['author']} · ${owned['count']} tracks');
+    });
+
+    test('a playlist with no owner and no count has an empty credit line',
+        () async {
+      // "Liked Music" is authored by nobody and the service states no count for
+      // it; an empty line is the honest answer, not a made-up one.
+      final List<MediaItem> playlists =
+          await repositoryOver(recordedSidecar())
+              .library(LibrarySegment.playlists);
+      final MediaItem liked = playlists
+          .firstWhere((MediaItem item) => item.collection?.id == 'LM');
+
+      expect(liked.subtitle, isEmpty);
+    });
   });
 
   group('collections', () {
@@ -744,6 +773,106 @@ void main() {
         }),
         isNull,
       );
+    });
+
+    test('a credit field is read in every shape, never stringified', () {
+      // The three shapes the real payloads use for the same field: a bare
+      // string, one {name} object, and a list of objects (a Home rail playlist
+      // card) — plus a list of bare strings.
+      MediaItem? parse(dynamic owner) => mediaItemFrom(<String, dynamic>{
+        'title': 'Owner shapes',
+        'browseId': 'VLPL123',
+        'author': ?owner,
+      });
+
+      expect(parse('Someone')!.subtitle, 'Someone');
+      expect(parse(<String, dynamic>{'name': 'Someone'})!.subtitle, 'Someone');
+      expect(
+        parse(<dynamic>[
+          <String, dynamic>{'name': 'Someone', 'id': 'UC1'},
+          <String, dynamic>{'name': 'Somebody', 'id': 'UC2'},
+        ])!.subtitle,
+        'Someone, Somebody',
+      );
+      expect(parse(<dynamic>['Someone', 'Somebody'])!.subtitle,
+          'Someone, Somebody');
+      expect(parse(null)!.subtitle, isEmpty);
+      // A shape this field does not have contributes nothing rather than a
+      // stringified Dart value.
+      expect(parse(27)!.subtitle, isEmpty);
+      expect(parse(<String, dynamic>{'id': 'UC1'})!.subtitle, isEmpty);
+    });
+
+    test('a Home rail playlist card names its owner and count', () async {
+      // The recorded Home payload really does state a playlist card's owner as
+      // a list of objects — the shape that used to reach the UI as
+      // "[{name: …}]".
+      expect(fixture('home.json'), contains('"author": ['));
+
+      final Map<String, dynamic> owned =
+          (jsonDecode(fixture('home.json')) as List<dynamic>)
+              .expand((dynamic rail) =>
+                  (rail as Map<String, dynamic>)['contents'] as List<dynamic>)
+              .whereType<Map<String, dynamic>>()
+              .firstWhere((Map<String, dynamic> card) {
+        final dynamic author = card['author'];
+        return author is List<dynamic> && author.isNotEmpty;
+      });
+      final String owner =
+          ((owned['author'] as List<dynamic>).first as Map<String, dynamic>)['name']
+              as String;
+
+      final List<HomeRow> rows = await repositoryOver(recordedSidecar()).home();
+      final MediaItem card = rows
+          .expand((HomeRow row) => row.items)
+          .firstWhere((MediaItem item) => item.title == owned['title']);
+
+      expect(card.collection?.kind, CollectionKind.playlist);
+      expect(card.subtitle, isNot(contains('{')));
+      expect(card.subtitle, isNot(contains('[')));
+      expect(card.subtitle, isNot(contains('name:')));
+      expect(card.subtitle, '$owner · ${owned['count']} tracks');
+    });
+
+    test('a playlist card with no owner and no count shows no credit line',
+        () async {
+      // Nine of the recorded Home cards state neither (\"Liked Music\" and the
+      // auto-generated mixes); an empty line is what they get.
+      final List<HomeRow> rows = await repositoryOver(recordedSidecar()).home();
+      final MediaItem bare = rows
+          .expand((HomeRow row) => row.items)
+          .firstWhere((MediaItem item) =>
+              item.collection?.kind == CollectionKind.playlist &&
+              item.subtitle.isEmpty);
+
+      expect(bare.title, isNotEmpty);
+    });
+
+    test('no subtitle from the real payloads is a stringified object',
+        () async {
+      final YtmRepository repo = repositoryOver(recordedSidecar());
+      final List<MediaItem> items = <MediaItem>[
+        for (final HomeRow row in await repo.home()) ...row.items,
+      ];
+      for (final LibrarySegment segment in LibrarySegment.values) {
+        items.addAll(await repo.library(segment));
+      }
+      final SearchResults results = await repo.search('thriller');
+      items.addAll(<MediaItem>[
+        ...results.songs,
+        ...results.albums,
+        ...results.artists,
+        ...results.playlists,
+      ]);
+
+      expect(items, isNotEmpty);
+      for (final MediaItem item in items) {
+        expect(
+          item.subtitle,
+          isNot(matches(RegExp(r'[\[\{].*[\]\}]'))),
+          reason: 'subtitle of "${item.title}"',
+        );
+      }
     });
 
     test('a duration string parses when duration_seconds is absent', () {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ytm_app/core/app_settings.dart';
 import 'package:ytm_app/features/shell/window_title_bar.dart';
+import 'package:ytm_app/theme/tokens.dart';
 
 import '../support/harness.dart';
 
@@ -63,6 +65,13 @@ void main() {
         initialLocation: '/now-playing',
         queue: testQueue(),
         titleBar: const WindowTitleBar(title: 'YT Music Client'),
+        // The app now boots at the standard scale, so the ceiling has to be
+        // asked for explicitly — this golden is the maximum-scale board.
+        extraOverrides: [
+          initialAppSettingsProvider.overrideWithValue(
+            const AppSettings(textScale: Tokens.textScaleCap),
+          ),
+        ],
       ),
       size: kDesktop,
       textScale: kAccessibleTextScale,

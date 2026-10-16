@@ -270,12 +270,45 @@ def test_new_attempt_rotates_the_token(client, monkeypatch):
 # ----------------------------------------------------------------- malformed
 
 
-@pytest.mark.parametrize("body", [{}, {"cookies": {}}, {"cookies": "not-a-dict"}, {"cookies": []}])
+@pytest.mark.parametrize("body", [{}, {"cookies": "not-a-dict"}, {"cookies": []}])
 def test_malformed_body_rejected_with_a_valid_token(client, body):
     token = start_sign_in(client)
     resp = client.post("/auth/extension", json=body, headers={"X-Ytm-Token": token})
     assert resp.status_code == 400, resp.text
     assert "cookies" in resp.json()["detail"].lower()
+
+
+def test_empty_jar_reports_the_unsigned_in_browser_and_ends_the_attempt(client, monkeypatch):
+    """The extension in a browser with no YouTube Music session sends {}.
+
+    Measured live, through the real extension in a real Chromium: that request
+    was answered with a body-format complaint ("Body must contain a 'cookies'
+    object.") and, because the 400 was raised outside the handler that fails the
+    attempt, the app kept waiting out its full three minutes -- the sign-in
+    looked hung while the popup blamed the request. An empty jar is a delivered
+    jar, just not a signed-in one, so it goes through the shared validation:
+    422 naming the real problem, and an attempt that stops waiting.
+    """
+    token = start_sign_in(client)
+    store_calls = []
+    monkeypatch.setattr(
+        main.ytmusic_service, "store_session",
+        lambda c: store_calls.append(c) or {"signed_in": True},
+    )
+
+    resp = client.post(
+        "/auth/extension", json={"cookies": {}}, headers={"X-Ytm-Token": token}
+    )
+
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert "none of the required session cookies" in detail.lower()
+    assert "sign in to music.youtube.com" in detail.lower()
+    assert store_calls == [], "an empty jar must never reach storage"
+
+    state = wait_for_session_to_settle(client)
+    assert state["state"] == "failed", "the app must stop waiting and report it"
+    assert state["error"] == detail, "the status the UI polls carries the reason"
 
 
 def test_malformed_body_without_a_token_is_rejected_before_parsing(client):

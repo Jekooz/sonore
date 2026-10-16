@@ -439,8 +439,18 @@ def auth_extension(payload: dict, request: Request):
         logger.warning("Rejected extension hand-off: %s", rejection)
         raise HTTPException(status_code=401, detail=rejection)
 
+    # A present-but-EMPTY jar is not a malformed body. The extension always
+    # sends {"cookies": {...}}, and it is empty exactly when the browser it is
+    # loaded in has no YouTube Music session -- the common real case, because
+    # the app opens whatever the default browser is. Measured live against the
+    # installed build: this used to answer the popup with "Body must contain a
+    # 'cookies' object." and, since the 400 was raised outside the handler
+    # below, the app then waited out its full three minutes with nothing on
+    # screen. Routing it through the shared validation says what is actually
+    # wrong (no session cookies present) and fails the attempt, so the UI
+    # reports it at once instead of appearing to hang.
     cookies = payload.get("cookies")
-    if not isinstance(cookies, dict) or not cookies:
+    if not isinstance(cookies, dict):
         raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
 
     try:

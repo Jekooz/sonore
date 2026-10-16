@@ -1,3 +1,0 @@
-[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)] Using the Impeller rendering backend (OpenGLESSDF).
-package:media_kit_libs_windows_audio registered.
-process 1401 alive after 10s (no startup crash)

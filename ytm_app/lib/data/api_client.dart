@@ -282,6 +282,22 @@ class YtmApiClient {
   Future<List<dynamic>> library(String segment) async =>
       _asList(await _getJson('/library/$segment'));
 
+  /// GET /library/subscriptions -> the artist channels the account follows.
+  Future<List<dynamic>> subscriptions() async =>
+      _asList(await _getJson('/library/subscriptions'));
+
+  /// POST /library/subscriptions — follow or unfollow one artist.
+  ///
+  /// A real account change, not a local flag: the sidecar calls ytmusicapi's
+  /// `subscribe_artist` / `unsubscribe_artists`, so the subscription lands on
+  /// the user's YouTube Music account (and the Follow button can read it back).
+  Future<void> setArtistSubscribed(String artistId, bool subscribed) async {
+    await _postJson('/library/subscriptions', <String, dynamic>{
+      'artistId': artistId,
+      'subscribed': subscribed,
+    });
+  }
+
   /// GET /search?q=&filter= — real ytmusicapi search. Without [filter] the
   /// result list is mixed and every row carries its own `resultType`.
   Future<List<dynamic>> search(String query, {String? filter}) async {

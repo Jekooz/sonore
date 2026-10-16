@@ -84,6 +84,7 @@ class MediaItem {
     this.artworkUrl,
     this.track,
     this.collection,
+    this.artistId,
   });
 
   final MediaKind kind;
@@ -97,6 +98,13 @@ class MediaItem {
   /// Set when the item opens a collection page.
   final CollectionRef? collection;
 
+  /// The primary artist's channel id, when the row carries one.
+  ///
+  /// The Home hero subscribes to this ("Follow"); a row the service sent
+  /// without an artist id — a playlist, a podcast, an artist-less song — leaves
+  /// it null, and the hero shows no Follow for it rather than a dead control.
+  final String? artistId;
+
   bool get isPlayable => track != null;
 
   @override
@@ -107,11 +115,26 @@ class MediaItem {
       other.subtitle == subtitle &&
       other.artworkUrl == artworkUrl &&
       other.track == track &&
-      other.collection == collection;
+      other.collection == collection &&
+      other.artistId == artistId;
 
   @override
   int get hashCode =>
-      Object.hash(kind, title, subtitle, artworkUrl, track, collection);
+      Object.hash(kind, title, subtitle, artworkUrl, track, collection, artistId);
+}
+
+/// The key two of the service's artist id forms share.
+///
+/// A song credit or an album's artist carries a channel id (`UC…`); a library
+/// artist row carries `MPLAUC…`. Stripping the leading `MPLAUC` / `UC` leaves the
+/// same body for the same artist, which is what lets the Home hero match a
+/// featured release's artist against the subscribed list the sidecar returns.
+/// Anything that carries neither prefix is its own key.
+String artistChannelKey(String id) {
+  final String trimmed = id.trim();
+  if (trimmed.startsWith('MPLAUC')) return trimmed.substring('MPLAUC'.length);
+  if (trimmed.startsWith('UC')) return trimmed.substring('UC'.length);
+  return trimmed;
 }
 
 /// One Home rail. Rows the sidecar returns empty are dropped before this is
@@ -222,6 +245,7 @@ MediaItem? mediaItemFrom(Map<String, dynamic> json) {
       title: title,
       subtitle: _defaultSubtitle(json, artists),
       artworkUrl: artworkUrl,
+      artistId: _firstArtistId(json),
       track: Track(
         id: videoId,
         title: title,
@@ -241,7 +265,8 @@ MediaItem? mediaItemFrom(Map<String, dynamic> json) {
   if (collection == null) return null;
 
   // An artist card's credit line is the subscriber count; an album's is the
-  // type (Album/Single/EP) and its performers; a playlist's is its author.
+  // type (Album/Single/EP) and its performers; a playlist's is its owner and
+  // its track count.
   final String subtitle = switch (collection.kind) {
     // An artist row's *name* is in `artist`, so its credit line is the
     // subscriber count — repeating the name there would say nothing.
@@ -250,13 +275,15 @@ MediaItem? mediaItemFrom(Map<String, dynamic> json) {
         ?typeLabel,
         if (artists.isNotEmpty) artists,
       ].join(' · '),
-    // A playlist row often has no author ("Liked Music" is authored by nobody
-    // and described as "Auto playlist"), so fall back to its description.
-    CollectionKind.playlist => artists.isNotEmpty
-        ? artists
-        : (_nonEmpty(json['description']) ??
-            _nonEmpty(json['itemCount']) ??
-            ''),
+    // The owner and the count, each parsed from whatever shape the service
+    // used, and nothing at all when neither is there: a row whose credit line
+    // is not a string must render empty rather than put `[{name: …}]` — or a
+    // mojibake description — on screen. "Liked Music" is authored by nobody
+    // and legitimately has neither.
+    CollectionKind.playlist => <String>[
+        if (artists.isNotEmpty) artists,
+        ?_trackCountLabel(json),
+      ].join(' · '),
   };
 
   final MediaKind kind = switch (collection.kind) {
@@ -271,6 +298,13 @@ MediaItem? mediaItemFrom(Map<String, dynamic> json) {
     subtitle: subtitle,
     artworkUrl: artworkUrl,
     collection: collection,
+    // An artist row *is* the artist; an album names its artist, which is who
+    // the hero subscribes to; a playlist names an owner, not an artist.
+    artistId: switch (collection.kind) {
+      CollectionKind.artist => collection.id,
+      CollectionKind.album => _firstArtistId(json),
+      CollectionKind.playlist => null,
+    },
   );
 }
 
@@ -336,29 +370,52 @@ String _titleOf(Map<String, dynamic> json) =>
 /// `artists[]`, playlists use `author`, and podcast episodes name their show
 /// under `podcast`. An artist row has no separate credit line — its name is the
 /// title — so this returns empty for one rather than echoing the name.
+///
+/// The shape of a credit field is not stable either: a library playlist states
+/// its owner as a bare string while the same playlist on a Home rail states it
+/// as a list of `{name, id}` objects. Both are read as names through [_names];
+/// a credit field is never stringified into the subtitle.
 String _performers(Map<String, dynamic> json) {
-  final dynamic artists = json['artists'];
-  if (artists is List<dynamic> && artists.isNotEmpty) {
-    final List<String> names = <String>[];
-    for (final dynamic entry in artists) {
-      if (entry is Map<String, dynamic>) {
-        final String? name = _nonEmpty(entry['name']);
-        if (name != null) names.add(name);
-      } else if (entry is String && entry.trim().isNotEmpty) {
-        names.add(entry.trim());
-      }
-    }
-    if (names.isNotEmpty) return names.join(', ');
-  }
+  final String artists = _names(json['artists']);
+  if (artists.isNotEmpty) return artists;
 
-  final String? author = _nonEmpty(json['author']);
-  if (author != null) return author;
+  for (final String key in const <String>['author', 'authors', 'owner']) {
+    final String owner = _names(json[key]);
+    if (owner.isNotEmpty) return owner;
+  }
 
   final dynamic podcast = json['podcast'];
   if (podcast is Map<String, dynamic>) {
     return _nonEmpty(podcast['name']) ?? '';
   }
   return '';
+}
+
+/// The names in one credit field, whichever shape the service used: a bare
+/// string, a single `{name}` object, or a list of strings and `{name}` objects.
+/// Anything else contributes nothing, so an unexpected shape can never reach
+/// the screen as `[{name: Home, id: …}]`.
+String _names(dynamic value) {
+  if (value is String) return _nonEmpty(value) ?? '';
+  if (value is Map<String, dynamic>) return _nonEmpty(value['name']) ?? '';
+  if (value is List<dynamic>) {
+    final List<String> names = <String>[];
+    for (final dynamic entry in value) {
+      final String name = _names(entry);
+      if (name.isNotEmpty) names.add(name);
+    }
+    return names.join(', ');
+  }
+  return '';
+}
+
+/// A playlist's track count as its own line ("27 tracks"), or null when the
+/// service did not state one. `count` is what the library list sends and
+/// `itemCount` is what search sends; both are strings in the real payloads.
+String? _trackCountLabel(Map<String, dynamic> json) {
+  final String? count =
+      _nonEmpty(json['count']) ?? _nonEmpty(json['itemCount']);
+  return count == null ? null : '$count tracks';
 }
 
 String _defaultSubtitle(Map<String, dynamic> json, String artists) {
@@ -429,9 +486,14 @@ bool isLiked(Map<String, dynamic> json) {
 }
 
 String? _nonEmpty(dynamic value) {
-  if (value == null) return null;
-  final String text = value.toString().trim();
-  return text.isEmpty ? null : text;
+  if (value is String) return value.trim().isEmpty ? null : value.trim();
+  if (value is num || value is bool) return value.toString();
+  // A Map or a List here means the service sent a shape this field does not
+  // have — a credit list where a name was expected. `toString()` would render
+  // `[{name: Home, id: …}]` in the UI, which is how a stringified object
+  // reached a card subtitle; callers that understand a list read it explicitly
+  // through [_names].
+  return null;
 }
 
 // ----------------------------- lyrics -----------------------------

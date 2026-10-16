@@ -16,7 +16,10 @@ void main() {
 
       expect(settings.reduceTransparency, isFalse);
       expect(settings.reduceMotion, isFalse);
-      expect(settings.textScale, Tokens.textScaleCap);
+      // The standard scale, not the ceiling: a fresh install must not boot at
+      // maximum text size.
+      expect(settings.textScale, Tokens.textScaleDefault);
+      expect(settings.textScale, lessThan(Tokens.textScaleCap));
       expect(settings.lyricsAutoFollow, isTrue);
       expect(settings.equalizer, const EqualizerConfig.flat());
     });
@@ -58,11 +61,13 @@ void main() {
       });
 
       expect(settings.reduceTransparency, isFalse);
-      expect(settings.textScale, Tokens.textScaleCap);
+      expect(settings.textScale, Tokens.textScaleDefault);
       expect(settings.lyricsAutoFollow, isTrue);
     });
 
     test('an out-of-range stored scale is clamped on load', () {
+      // A stored value above the ceiling is the user asking for more text than
+      // the app allows, so it clamps to the ceiling — not to the default.
       final AppSettings settings = AppSettings.fromJson(
         <String, Object?>{'textScale': 42.0},
       );
@@ -88,7 +93,7 @@ void main() {
       final AppSettings settings =
           AppSettings.fromJson(<String, Object?>{'textScale': double.nan});
       expect(settings.textScale, isNot(isNaN));
-      expect(settings.textScale, Tokens.textScaleCap);
+      expect(settings.textScale, Tokens.textScaleDefault);
     });
   });
 
@@ -172,6 +177,18 @@ void main() {
       expect(loaded.autoplay, isFalse);
     });
 
+    test('a chosen text scale survives a save and a reopen', () async {
+      // The default moved down to the standard scale; the user's own choice is
+      // still the value that comes back.
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+
+      final SettingsStore store = await SharedPreferencesSettingsStore.open();
+      await store.save(const AppSettings(textScale: Tokens.textScaleCap));
+
+      final SettingsStore reopened = await SharedPreferencesSettingsStore.open();
+      expect((await reopened.load()).textScale, Tokens.textScaleCap);
+    });
+
     test('an unset store loads defaults', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
 
@@ -191,7 +208,7 @@ void main() {
       final SettingsStore store = await SharedPreferencesSettingsStore.open();
       final AppSettings loaded = await store.load();
 
-      expect(loaded.textScale, Tokens.textScaleCap);
+      expect(loaded.textScale, Tokens.textScaleDefault);
       expect(loaded.reduceMotion, isFalse);
       expect(loaded.equalizer.gains, const EqualizerConfig.flat().gains);
       expect(loaded.repeatMode, RepeatMode.off);

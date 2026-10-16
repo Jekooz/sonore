@@ -7,6 +7,14 @@ import 'package:flutter/material.dart';
 /// `lib/theme/`, and a grep for hex colors, `Icons.`, `BackdropFilter` and
 /// numeric font sizes outside `lib/theme/` and `GlassSurface` must return
 /// nothing. Screens and widgets read the values below; they never invent them.
+///
+/// Batch 1 note: the dark palette values below were re-verified against the
+/// exported Figma spec (design.pdf, "Resonance for Windows"). Three color
+/// deltas were extracted from the vector fills — secondary text #A0A0A8,
+/// muted text #686870, and the glass tint at white 8% — replacing values
+/// taken from the earlier mock draft. The opaque glass fallback is #242427,
+/// confirmed by the materials board ("Solid raised #242427, no backdrop
+/// blur").
 class Tokens {
   Tokens._();
 
@@ -21,14 +29,17 @@ class Tokens {
   /// Pressed rows, disabled fills.
   static const Color surfaceRaised = Color(0xFF1C1C21);
 
-  /// Top bar, bottom nav (white 6%).
-  static const Color glass = Color(0x0FFFFFFF);
+  /// Top bar, bottom nav, mini player, Follow glass (white 8%). Extracted
+  /// from the Figma fills; the previous 6% came from the older mock draft.
+  static const Color glass = Color(0x14FFFFFF);
 
   /// Mini player, transport pill, sheets (white 10%).
   static const Color glassStrong = Color(0x1AFFFFFF);
 
-  /// Reduce-transparency / dropped-frames fallback: surfaceRaised at 92%.
-  static const Color glassFallback = Color(0xEB1C1C21);
+  /// Reduce-transparency / dropped-frames fallback. The materials board pins
+  /// this to solid #242427 with no backdrop blur — layout and contrast must
+  /// not change when the fallback engages.
+  static const Color glassFallback = Color(0xFF242427);
 
   /// Hairlines on glass (white 10%).
   static const Color border = Color(0x1AFFFFFF);
@@ -42,11 +53,14 @@ class Tokens {
   /// Titles, active labels.
   static const Color text = Color(0xFFFFFFFF);
 
-  /// Subtitles, metadata (passes 4.5:1).
-  static const Color textSecondary = Color(0xFFA6A6A6);
+  /// Subtitles, metadata (passes 4.5:1 on the true-black background).
+  /// #A0A0A8 was extracted from the most common non-white text fill in the
+  /// Figma export.
+  static const Color textSecondary = Color(0xFFA0A0A8);
 
-  /// Durations, hints, large text only.
-  static const Color textMuted = Color(0xFF7A7A7A);
+  /// Durations, hints, large text only. #686870 from the Figma fills; the
+  /// earlier #7A7A7A came from the mock draft.
+  static const Color textMuted = Color(0xFF686870);
 
   /// Overlays behind modal content (black 90%).
   static const Color scrim = Color(0xE6000000);
@@ -73,6 +87,14 @@ class Tokens {
   /// Text scales with the system setting up to 1.3x.
   static const double textScaleCap = 1.3;
   static const double textScaleMin = 1.0;
+
+  /// The on-by-default text scale: the standard scale, not the ceiling.
+  ///
+  /// 1.3 is what the app *allows*, not what it chooses — starting a fresh
+  /// install at the maximum scale made every screen look cramped before the
+  /// user had asked for it. A stored choice still wins ([AppSettings] persists
+  /// it), so upgrading keeps whatever the user picked.
+  static const double textScaleDefault = 1.0;
 
   static const TextStyle pageTitle = TextStyle(
     fontFamily: fontFamily,
@@ -218,7 +240,7 @@ class Tokens {
   /// an icon rail and, on phones, the bottom bar.
   static const double breakpointDesktop = 900;
 
-  static const double sidebarWidth = 220;
+  static const double sidebarWidth = 200;
   static const double sidebarRailWidth = 72;
   static const double miniPlayerHeight = 64;
   static const double listRowHeight = 64;
@@ -238,12 +260,25 @@ class Tokens {
   static const double breakpointPhone = 600;
 
   /// The app draws its own Windows title bar, so this is its height and the
-  /// hit width of each caption button.
-  static const double titleBarHeight = 40;
+  /// hit width of each caption button. The Figma frames draw a 36 px bar with
+  /// a 46x36 caption hit area.
+  static const double titleBarHeight = 36;
   static const double captionButtonWidth = 46;
 
   /// Glass bottom bar on phones.
   static const double navBarHeight = 64;
+
+  /// The floating glass top tab bar (wide layouts, i.e. at and above
+  /// [breakpointPhone]): its own height, the widest it grows before it stops
+  /// stretching, and the strip it floats over so content is never hidden behind
+  /// it. Only a pill is drawn in that strip; the rest is the page background.
+  static const double tabBarHeight = 56;
+  static const double tabBarMaxWidth = 760;
+  static const double shellTopInset = 72;
+
+  /// Widest the centered mini player pill grows. The pill is pinned to the
+  /// bottom centre of wide layouts rather than spanning the window.
+  static const double miniPlayerMaxWidth = 560;
 
   /// Now Playing queue panel on desktop.
   static const double queuePanelWidth = 320;
@@ -273,6 +308,12 @@ class Tokens {
   static const double ambientBlur = 90;
   static const double ambientOpacity = 0.55;
   static const int ambientColorCount = 3;
+
+  /// How strongly the Home hero's art-derived tint reads inside the banner.
+  ///
+  /// The hero is the one card the approved layout lets artwork color into;
+  /// everywhere else color comes only from the artwork itself or the accent.
+  static const double heroTintOpacity = 0.45;
 
   // --------------------------------------------------------------- Seek bar ---
 
@@ -321,15 +362,20 @@ class Tokens {
   // --------------------------------------------------------------- Motion ----
 
   static const Duration dPress = Duration(milliseconds: 80);
-  static const Duration dPageChange = Duration(milliseconds: 280);
+  static const Duration dPageChange = Duration(milliseconds: 200);
   static const Duration dFadeIn = Duration(milliseconds: 200);
-  static const Duration dAmbientCrossfade = Duration(milliseconds: 600);
+  static const Duration dAmbientCrossfade = Duration(milliseconds: 300);
 
-  /// Skeleton shimmer while a screen is loading.
-  static const Duration dShimmer = Duration(milliseconds: 1200);
+  /// Skeleton shimmer while a screen is loading (1.4 s loop per the states
+  /// board; the earlier 1.2 s came from the mock draft).
+  static const Duration dShimmer = Duration(milliseconds: 1400);
 
   /// With Reduce Motion on, movement is replaced by a 150 ms fade.
   static const Duration dReduceMotionFade = Duration(milliseconds: 150);
+
+  /// How long a failure toast stays up. Short on purpose: it reports a write
+  /// that did not happen, it is not something the user has to act on.
+  static const Duration dSnackbar = Duration(seconds: 3);
 
   static const Curve curvePress = Curves.easeOut;
   static const Curve curveRelease = Curves.elasticOut;
@@ -340,11 +386,21 @@ class Tokens {
   /// simulation, which keeps the animations declarative and interruptible.
   static const Curve curveSpring = Curves.easeOutBack;
 
-  /// Page change: fade plus 12px slide.
-  static const double pageSlide = 12;
+  /// Page change: a 200 ms opacity crossfade with NO slide — the motion board
+  /// states "Quick 200ms opacity crossfade, never a slide", so this stays 0.
+  /// Kept as a token so screens referencing it still compose.
+  static const double pageSlide = 0;
 
   /// Press: scale to 0.97.
   static const double pressScale = 0.97;
+
+  /// Tile hover: scale keeps at 103% per the motion spec ("Tile hover 103%,
+  /// deeper shadow"). Used by artwork tiles in Batch 3.
+  static const double hoverScale = 1.03;
+
+  /// Hover transition: the spec gives 200-300 ms ease-out for the hover state;
+  /// the low end keeps hover responsive without flutter.
+  static const Duration dHover = Duration(milliseconds: 200);
 
   /// Play/pause artwork scale.
   static const double artworkPlayingScale = 1.0;

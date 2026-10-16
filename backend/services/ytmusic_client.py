@@ -203,6 +203,64 @@ def build_auth_headers(cookie_map: dict) -> dict:
     }
 
 
+# Labels YouTube Music uses for its own navigation rather than for a person.
+#
+# Measured on a real signed-in session (2026-10-15): `get_account_info()`
+# answered `accountName: "Home"` while `channelHandle` from the same response
+# was the real `@handle`. The account menu's name run is whatever the service
+# put there, so a name that is one of these labels is not a name and is dropped
+# rather than shown to the user.
+_CHROME_LABELS = frozenset({
+    "home",
+    "explore",
+    "library",
+    "search",
+    "settings",
+    "now playing",
+    "new",
+    "downloads",
+    "albums",
+    "artists",
+    "songs",
+    "playlists",
+    "liked music",
+    "music",
+    "youtube music",
+    "menu",
+    "sign in",
+    "your account",
+})
+
+
+def sanitize_account(info) -> dict:
+    """Account info with a non-name dropped instead of displayed.
+
+    Returns the three fields the app reads, always present. When the service's
+    `accountName` is missing, empty or one of its own chrome labels, it becomes
+    None so the client falls back to the real channel handle (or to a neutral
+    label) instead of showing "Home" as the signed-in account.
+    """
+    if not isinstance(info, dict):
+        return {"accountName": None, "channelHandle": None, "accountPhotoUrl": None}
+
+    def text(value):
+        if not isinstance(value, str):
+            return None
+        value = value.strip()
+        return value or None
+
+    name = text(info.get("accountName"))
+    if name is not None and name.casefold() in _CHROME_LABELS:
+        logger.info("Account name from the service is a chrome label; omitting it.")
+        name = None
+
+    return {
+        "accountName": name,
+        "channelHandle": text(info.get("channelHandle")),
+        "accountPhotoUrl": text(info.get("accountPhotoUrl")),
+    }
+
+
 class YtmusicService:
     """
     Holds the sign-in session (headers encrypted via DPAPI, with keyring fallback)
@@ -311,7 +369,11 @@ class YtmusicService:
         """
         headers = build_auth_headers(cookie_map)
         candidate = YTMusic(auth=headers)
-        return candidate.get_account_info()
+        # The account menu's name run is not always a name (see
+        # _CHROME_LABELS), so the same sanitizing is applied on this path: the
+        # sign-in response and the Settings screen must agree about who is
+        # signed in.
+        return sanitize_account(candidate.get_account_info())
 
     def store_session(self, cookie_map: dict) -> dict:
         """Validate cookies, store headers securely, reset the client.
@@ -369,7 +431,11 @@ class YtmusicService:
                 self._client = YTMusic(auth=headers)
             except Exception as e:
                 logger.exception("Failed to build YTMusic client from stored session")
-                raise AuthError(f"Could not initialize YouTube Music client: {e}") from e
+                # Audit finding 6: never embed upstream exception text in an
+                # AuthError — these strings are surfaced in HTTP details.
+                raise AuthError(
+                    "Could not initialize the YouTube Music client."
+                ) from e
             return self._client
 
     def is_signed_in(self) -> bool:

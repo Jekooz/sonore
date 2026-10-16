@@ -22,7 +22,7 @@ class AppSettings {
   const AppSettings({
     this.reduceTransparency = false,
     this.reduceMotion = false,
-    this.textScale = Tokens.textScaleCap,
+    this.textScale = Tokens.textScaleDefault,
     this.lyricsAutoFollow = true,
     this.equalizer = const EqualizerConfig.flat(),
     this.repeatMode = RepeatMode.off,
@@ -36,7 +36,11 @@ class AppSettings {
   /// Overrides motion for platforms that do not surface it through MediaQuery.
   final bool reduceMotion;
 
-  /// Text scale the window clamps to, in [Tokens.textScaleMin, 1.3].
+  /// The largest text scale the window allows, in
+  /// [Tokens.textScaleMin, Tokens.textScaleCap].
+  ///
+  /// This is a ceiling, not a starting point: a fresh install starts at
+  /// [Tokens.textScaleDefault] and only moves when the user moves it.
   final double textScale;
 
   /// Whether the Lyrics screen follows the playback position on its own.
@@ -78,7 +82,7 @@ class AppSettings {
   }
 
   static double _clampScale(double value) {
-    if (value.isNaN) return Tokens.textScaleCap;
+    if (value.isNaN) return Tokens.textScaleDefault;
     return value < Tokens.textScaleMin
         ? Tokens.textScaleMin
         : (value > Tokens.textScaleCap ? Tokens.textScaleCap : value);
@@ -92,7 +96,7 @@ class AppSettings {
       reduceTransparency: _boolFrom(json['reduceTransparency']) ?? false,
       reduceMotion: _boolFrom(json['reduceMotion']) ?? false,
       textScale: _clampScale(
-        _numFrom(json['textScale']) ?? Tokens.textScaleCap,
+        _numFrom(json['textScale']) ?? Tokens.textScaleDefault,
       ),
       lyricsAutoFollow: _boolFrom(json['lyricsAutoFollow']) ?? true,
       equalizer: EqualizerConfig(

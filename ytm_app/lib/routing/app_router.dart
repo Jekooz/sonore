@@ -140,6 +140,19 @@ String settingsLocation(BuildContext context) {
   return '${destination.path}/settings';
 }
 
+/// Whether the page on screen is one the Settings item stands for.
+///
+/// Settings and the Equalizer are opened *on top of* a destination rather than
+/// being destinations of their own, so the branch index alone would keep the
+/// destination behind them highlighted — opening the Equalizer from Now Playing
+/// left "Now Playing" lit while the reader was on the Equalizer. The active nav
+/// item follows the route instead: on these two pages Settings is active and no
+/// destination is.
+bool onSettingsRoute(BuildContext context) {
+  final String location = GoRouterState.of(context).matchedLocation;
+  return location.endsWith('/settings') || location.endsWith('/equalizer');
+}
+
 /// A collection path whose kind or id is not recognised.
 ///
 /// Reachable only by following a malformed link; it says so plainly instead of

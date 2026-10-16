@@ -6,13 +6,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:riverpod/misc.dart' show Override;
+import 'package:ytm_app/audio/equalizer.dart';
 import 'package:ytm_app/core/app_settings.dart';
 import 'package:ytm_app/data/models.dart';
 import 'package:ytm_app/features/collection/collection_screen.dart';
+import 'package:ytm_app/features/settings/settings_screen.dart';
 import 'package:ytm_app/features/shell/mini_player.dart';
 import 'package:ytm_app/theme/icons.dart';
+import 'package:ytm_app/theme/tokens.dart';
 import 'package:ytm_app/ui/data_states.dart';
 import 'package:ytm_app/ui/media_rows.dart';
+import 'package:ytm_app/ui/pill_button.dart';
+import 'package:ytm_app/ui/screen_header.dart';
 
 import 'support/harness.dart';
 import 'support/recorded_sidecar.dart';
@@ -72,6 +77,28 @@ Future<void> tapLibrarySegment(WidgetTester tester, String label) async {
   await tester.ensureVisible(chip.first);
   await tester.pumpAndSettle();
   await tester.tap(chip.first);
+  await tester.pumpAndSettle();
+}
+
+/// Scrolls the Settings list until [finder] is in the tree and on screen.
+///
+/// The page is one lazily-built list, so anything below the fold — the Account
+/// section, the buttons at the bottom — is not in the tree until it is
+/// scrolled to.
+Future<void> scrollSettingsTo(
+  WidgetTester tester,
+  Finder finder, {
+  double dy = -300,
+}) async {
+  final Finder list = find.descendant(
+    of: find.byType(SettingsScreen),
+    matching: find.byType(ListView),
+  );
+  for (int i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
+    await tester.drag(list, Offset(0, dy));
+    await tester.pumpAndSettle();
+  }
+  await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
 }
 
@@ -765,6 +792,340 @@ void main() {
       final AppSettings stored = await store.load();
       expect(stored.shuffle, isTrue);
       expect(stored.autoplay, isFalse);
+    });
+
+    testWidgets('the account names the session, never a navigation label', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/library/settings'),
+        size: kDesktop,
+      );
+
+      await scrollSettingsTo(tester, find.text('Signed in as'));
+
+      // The recorded session's own name...
+      expect(find.text('Test Account'), findsOneWidget);
+      // ...and never a label the service uses for its own chrome. (The nav rail
+      // has a "Home" item on desktop, so this is scoped to the page.)
+      expect(
+        find.descendant(
+          of: find.byType(SettingsScreen),
+          matching: find.text('Home'),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('an account with no name falls back to the real handle', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(
+          initialLocation: '/library/settings',
+          repository: testRepository(
+            responses: <String, http.Response>{
+              // What the sidecar sends when the service states one of its own
+              // chrome labels as the account name: no name, a real handle.
+              '/account': jsonOk(
+                '{"accountName":null,"channelHandle":"@someone",'
+                '"accountPhotoUrl":null}',
+              ),
+            },
+          ),
+        ),
+        size: kDesktop,
+      );
+
+      await scrollSettingsTo(tester, find.text('Signed in as'));
+      expect(find.text('@someone'), findsOneWidget);
+      expect(find.text('Your account'), findsNothing);
+    });
+
+    testWidgets('an account with nothing real to name says so', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(
+          initialLocation: '/library/settings',
+          repository: testRepository(
+            responses: <String, http.Response>{
+              '/account': jsonOk(
+                '{"accountName":null,"channelHandle":null,'
+                '"accountPhotoUrl":null}',
+              ),
+            },
+          ),
+        ),
+        size: kDesktop,
+      );
+
+      await scrollSettingsTo(tester, find.text('Signed in as'));
+      expect(find.text('Your account'), findsOneWidget);
+    });
+
+    testWidgets('the notes, rows and buttons share one content column', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/library/settings'),
+        size: kDesktop,
+      );
+
+      final Rect screen = tester.getRect(find.byType(SettingsScreen));
+      final double columnLeft =
+          tester.getRect(find.text('Reduce transparency')).left;
+
+      // The longest note wraps, so its box really is the content column: it
+      // starts where the row title starts, and the margins on both sides match.
+      await scrollSettingsTo(
+        tester,
+        find.textContaining('Your YouTube Music session is kept'),
+      );
+      final Rect note = tester.getRect(
+        find.textContaining('Your YouTube Music session is kept'),
+      );
+      expect(note.left, closeTo(columnLeft, 0.5),
+          reason: 'a note starts where a row title starts');
+      expect(
+        note.left - screen.left,
+        closeTo(screen.right - note.right, 0.5),
+        reason: 'the right margin matches the left',
+      );
+
+      // The Reset button sits on that same left edge, not centered.
+      await scrollSettingsTo(
+        tester,
+        find.widgetWithText(PillButton, 'Reset preferences'),
+      );
+      expect(
+        tester
+            .getRect(find.widgetWithText(PillButton, 'Reset preferences'))
+            .left,
+        closeTo(columnLeft, 0.5),
+      );
+    });
+
+    testWidgets('the header is pinned, opaque, and above the scrolling list', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/library/settings'),
+        size: kDesktop,
+      );
+
+      final Finder header = find.byType(ScreenHeader);
+      expect(header, findsOneWidget);
+      // It is not inside the scroll view, so it stays put while the page moves.
+      expect(
+        find.ancestor(of: header, matching: find.byType(Scrollable)),
+        findsNothing,
+      );
+      // And it paints the page background rather than leaving a hole.
+      final Iterable<DecoratedBox> ancestors = tester.widgetList<DecoratedBox>(
+        find.ancestor(of: header, matching: find.byType(DecoratedBox)),
+      );
+      expect(
+        ancestors.any(
+          (DecoratedBox box) =>
+              box.decoration is BoxDecoration &&
+              (box.decoration as BoxDecoration).color == Tokens.bg,
+        ),
+        isTrue,
+        reason: 'the header has an opaque backdrop',
+      );
+    });
+
+    testWidgets('Sign out is a sign-out action, on the page content column', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/library/settings'),
+        size: kDesktop,
+      );
+
+      await scrollSettingsTo(tester, find.text('Signed in as'));
+      final double columnLeft =
+          tester.getRect(find.text('Signed in as')).left;
+      await scrollSettingsTo(tester, find.text('Sign out'));
+
+      expect(find.byIcon(AppIcons.signOut), findsOneWidget);
+      expect(find.byIcon(AppIcons.close), findsNothing,
+          reason: 'a close glyph is not a sign-out action');
+      // The button box starts on the page's content column, so it reads as a
+      // left-aligned action rather than a centered one.
+      expect(
+        tester.getRect(find.widgetWithText(PillButton, 'Sign out')).left,
+        closeTo(columnLeft, 0.5),
+      );
+    });
+
+    testWidgets('Reset preferences asks first, and only then resets', (
+      WidgetTester tester,
+    ) async {
+      final InMemorySettingsStore store = InMemorySettingsStore();
+      await pumpAtSize(
+        tester,
+        appScope(
+          initialLocation: '/library/settings',
+          extraOverrides: <Override>[
+            settingsStoreProvider.overrideWithValue(store),
+          ],
+        ),
+        size: kDesktop,
+      );
+
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Reduce transparency'));
+      await tester.pumpAndSettle();
+      expect(switchValue(tester, 'Reduce transparency'), isTrue);
+      expect((await store.load()).reduceTransparency, isTrue);
+
+      final Finder reset = find.widgetWithText(PillButton, 'Reset preferences');
+      await scrollSettingsTo(tester, reset);
+      await tester.tap(reset);
+      await tester.pumpAndSettle();
+
+      // A destructive action needs a deliberate second step: the dialog is
+      // asked for, and Cancel really cancels.
+      expect(find.text('Reset preferences?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reset preferences?'), findsNothing);
+      expect((await store.load()).reduceTransparency, isTrue,
+          reason: 'Cancel must not reset anything');
+
+      // Confirming is the only path that resets, and it writes through.
+      await tester.tap(reset);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reset'));
+      await tester.pumpAndSettle();
+      expect((await store.load()).reduceTransparency, isFalse);
+
+      // ...and the switch the user set really is back off.
+      await scrollSettingsTo(
+        tester,
+        find.text('Reduce transparency'),
+        dy: 300,
+      );
+      expect(switchValue(tester, 'Reduce transparency'), isFalse);
+    });
+  });
+
+  group('equalizer', () {
+    /// Every preset chip on screen, in the order they are laid out.
+    List<Rect> presetChips(WidgetTester tester) => <Rect>[
+      for (final EqualizerPreset preset in equalizerPresets)
+        tester.getRect(find.widgetWithText(PillButton, preset.name)),
+    ];
+
+    testWidgets('presets are wrapped, left-aligned chips with a selected state',
+        (WidgetTester tester) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/now-playing/equalizer'),
+        size: kPhone,
+      );
+
+      final List<Rect> chips = presetChips(tester);
+      final double leftMost =
+          chips.map((Rect chip) => chip.left).reduce((double a, double b) =>
+              a < b ? a : b);
+
+      // A chip row, not full-width buttons: every chip is narrower than the
+      // page and the row starts at the left edge.
+      for (final Rect chip in chips) {
+        expect(chip.width, lessThan(kPhone.width / 2));
+      }
+      expect(chips.first.left, closeTo(leftMost, 0.5));
+      // It really wraps on a phone, and the second run starts on the same edge.
+      final Set<double> rows = chips.map((Rect chip) => chip.top).toSet();
+      expect(rows.length, greaterThan(1));
+      expect(
+        chips.where((Rect chip) => chip.left == leftMost).length,
+        greaterThan(1),
+      );
+
+      // The selected preset is stated to assistive technology as well as
+      // painted, and it is the chip the user actually chose.
+      bool chipIsSelected(String label) => tester
+          .widgetList<Semantics>(
+            find.ancestor(
+              of: find.text(label),
+              matching: find.byType(Semantics),
+            ),
+          )
+          .any((Semantics node) => node.properties.selected == true);
+      int activeChips() => tester
+          .widgetList<PillButton>(find.byType(PillButton))
+          .where((PillButton chip) => chip.isActive)
+          .length;
+
+      // Off and flat to begin with: no preset is the selected one.
+      expect(activeChips(), 0);
+      expect(chipIsSelected('Flat'), isFalse);
+
+      await tester.tap(find.text('Bass boost'));
+      await tester.pumpAndSettle();
+
+      expect(chipIsSelected('Bass boost'), isTrue);
+      expect(chipIsSelected('Flat'), isFalse);
+      expect(activeChips(), 1);
+      expect(
+        tester
+            .widget<PillButton>(find.widgetWithText(PillButton, 'Bass boost'))
+            .isActive,
+        isTrue,
+      );
+    });
+
+    testWidgets('every band states its gain in dB and the range it moves over',
+        (WidgetTester tester) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/now-playing/equalizer'),
+        size: kPhone,
+      );
+
+      expect(find.text('±${equalizerMaxGainDb.round()} dB per band'),
+          findsOneWidget);
+
+      // Flat by default: every band reads "0 dB" — a unit and a value, not a
+      // bare integer that could be anything.
+      expect(
+        find.text('0 dB'),
+        findsNWidgets(equalizerBandFrequenciesHz.length),
+      );
+      for (final int hz in equalizerBandFrequenciesHz) {
+        final String label = hz >= 1000 ? '${hz ~/ 1000}k' : '$hz';
+        expect(find.text(label), findsOneWidget, reason: '$hz Hz label');
+      }
+
+      // Selecting a preset moves the readouts, still in dB — one readout per
+      // band, matching that preset's own gains.
+      final EqualizerPreset bass = equalizerPresets
+          .firstWhere((EqualizerPreset preset) => preset.name == 'Bass boost');
+      final List<String> expected = <String>[
+        for (final double gain in bass.gains)
+          '${gain.round() > 0 ? '+' : ''}${gain.round()} dB',
+      ];
+
+      await tester.tap(find.text('Bass boost'));
+      await tester.pumpAndSettle();
+
+      for (final String label in expected.toSet()) {
+        expect(
+          find.text(label),
+          findsNWidgets(expected.where((String l) => l == label).length),
+          reason: label,
+        );
+      }
+      expect(find.text('+9 dB'), findsOneWidget);
     });
   });
 

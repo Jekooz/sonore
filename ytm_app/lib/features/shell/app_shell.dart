@@ -12,17 +12,23 @@ import '../../theme/tokens.dart';
 import '../search/search_controller.dart';
 import 'mini_player.dart';
 import 'nav_bottom_bar.dart';
-import 'nav_rail.dart';
+import 'nav_tab_bar.dart';
 
 /// The adaptive shell: navigation, the responsive content area and the
 /// persistent mini player all live here, so no page owns the player.
 ///
-/// Layout rules from the spec:
-/// - under [Tokens.breakpointPhone]: glass bottom bar, mini player pill docked
-///   above it;
-/// - [Tokens.breakpointPhone]..[Tokens.breakpointDesktop): 72px icon rail;
-/// - [Tokens.breakpointDesktop] and wider: 220px sidebar, mini player as a
-///   full-width bar floating over the content, so content scrolls under it.
+/// Layout rules from the approved layout:
+/// - under [Tokens.breakpointPhone]: the compact glass bottom bar, with the
+///   mini player pill docked just above it;
+/// - [Tokens.breakpointPhone] and wider: a floating glass top tab bar that
+///   replaces the old left sidebar, with the mini player floating at the bottom
+///   centre so content scrolls under it.
+///
+/// The top tab bar floats over a reserved strip ([Tokens.shellTopInset]) rather
+/// than taking a layout column, so it reads as chrome rather than a panel.
+/// Navigation is deliberately identical either side of the breakpoint: the
+/// same four destinations, the same route-following highlight, the same
+/// Settings action.
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.navigationShell, this.titleBar});
 
@@ -40,9 +46,13 @@ class AppShell extends ConsumerWidget {
 
     final Size size = MediaQuery.sizeOf(context);
     final bool isPhone = size.width < Tokens.breakpointPhone;
-    final bool isDesktop = size.width >= Tokens.breakpointDesktop;
 
     final int currentIndex = navigationShell.currentIndex;
+    // The highlight follows the route, not only the branch: Settings and the
+    // Equalizer sit on top of a destination, so on those pages Settings is the
+    // active item and no destination is highlighted.
+    final bool settingsActive = onSettingsRoute(context);
+    final int? highlighted = settingsActive ? null : currentIndex;
     final bool hasTrack = ref.watch(
       playbackProvider.select((PlaybackState state) => state.hasTrack),
     );
@@ -70,40 +80,52 @@ class AppShell extends ConsumerWidget {
                   padding: EdgeInsets.symmetric(
                     horizontal: Tokens.pageMarginPhone,
                   ),
-                  child: MiniPlayer(fullWidth: true),
+                  child: MiniPlayer(),
                 ),
               SafeArea(
                 top: false,
                 child: NavBottomBar(
-                  currentIndex: currentIndex,
+                  currentIndex: highlighted,
+                  settingsActive: settingsActive,
                   onSelect: select,
                   onOpenSettings: openSettings,
                 ),
               ),
             ],
           )
-        : Row(
+        : Stack(
             children: <Widget>[
-              NavRail(
-                expanded: isDesktop,
-                currentIndex: currentIndex,
-                onSelect: select,
-                onOpenSettings: openSettings,
-              ),
-              Expanded(
-                child: Stack(
-                  children: <Widget>[
-                    navigationShell,
-                    if (showMiniPlayer)
-                      const Positioned(
-                        left: Tokens.s24,
-                        right: Tokens.s24,
-                        bottom: Tokens.s16,
-                        child: MiniPlayer(fullWidth: true),
-                      ),
-                  ],
+              // The tab bar floats in this strip; reserving it here keeps the
+              // floating chrome off the content without every page having to
+              // know it exists (unlike the mini player, whose inset the
+              // scrollables already carry).
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: Tokens.shellTopInset),
+                  child: navigationShell,
                 ),
               ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: NavTabBar(
+                    currentIndex: highlighted,
+                    settingsActive: settingsActive,
+                    onSelect: select,
+                    onOpenSettings: openSettings,
+                  ),
+                ),
+              ),
+              if (showMiniPlayer)
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: Tokens.s16,
+                  child: Center(child: MiniPlayer()),
+                ),
             ],
           );
 

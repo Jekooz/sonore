@@ -342,6 +342,19 @@ def auth_browser_info():
     return JSONResponse(content={"browser": detect_default_browser()})
 
 
+@app.get("/auth/extension/folder")
+def auth_extension_folder():
+    """The one folder the companion extension can be installed from.
+
+    A browser only lets an extension read files inside its own installation, so
+    the pairing file this service writes is readable from here and nowhere else.
+    That makes this folder a step the user has to take - load it unpacked - which
+    is why the sign-in screen names it rather than leaving the hand-off to time
+    out with no explanation.
+    """
+    return JSONResponse(content={"folder": _EXTENSION_DIR})
+
+
 @app.post("/auth/browser/start")
 def auth_browser_start(request: Request):
     """

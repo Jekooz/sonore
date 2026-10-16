@@ -258,8 +258,32 @@ void main() {
     });
   });
 
-  testWidgets('app clamps system text scaling to 1.3x',
+  testWidgets('app clamps system text scaling to the chosen ceiling',
       (WidgetTester tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          initialAppSettingsProvider.overrideWithValue(
+            const AppSettings(textScale: Tokens.textScaleCap),
+          ),
+        ],
+        child: YtmApp(
+          router: createAppRouter(initialLocation: devCataloguePath),
+        ),
+      ),
+    );
+
+    final BuildContext context = tester.element(find.byType(SpecimenBoard));
+    expect(MediaQuery.textScalerOf(context).scale(1), Tokens.textScaleCap);
+  });
+
+  testWidgets('app boots at the standard text scale, not the ceiling',
+      (WidgetTester tester) async {
+    // A fresh install on a device that asks for 2x must open at the standard
+    // scale: the ceiling is what the user may choose, not what they get.
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
@@ -272,7 +296,7 @@ void main() {
     );
 
     final BuildContext context = tester.element(find.byType(SpecimenBoard));
-    expect(MediaQuery.textScalerOf(context).scale(1), Tokens.textScaleCap);
+    expect(MediaQuery.textScalerOf(context).scale(1), Tokens.textScaleDefault);
   });
 }
 

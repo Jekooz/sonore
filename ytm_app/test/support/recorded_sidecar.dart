@@ -57,6 +57,10 @@ Future<http.Response> recordedResponse(
     '/library/playlists' => 'library_playlists.json',
     '/library/albums' => 'library_albums.json',
     '/library/artists' => 'library_artists.json',
+    // The subscription list has the same row shape as the artist library, so
+    // the same recorded payload answers it. (The POST toggle is written to the
+    // same path; tests that assert the write inject their own client.)
+    '/library/subscriptions' => 'library_artists.json',
     '/recommendations' => 'recommendations.json',
     '/search' => 'search.json',
     _ => '',

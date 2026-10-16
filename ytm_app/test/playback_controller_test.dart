@@ -141,6 +141,30 @@ void main() {
     expect(state.duration, const Duration(minutes: 5));
   });
 
+  test('a track change drops the previous track\'s reported duration', () {
+    controller.setQueue(testQueue());
+    // The engine reports something quite different from the metadata.
+    controller.reportProgress(duration: const Duration(minutes: 9));
+    expect(state.duration, const Duration(minutes: 9));
+
+    // The next track cannot inherit it: until the engine reports this one's own
+    // length, the metadata duration is what the bar and the time labels use.
+    controller.next();
+    expect(state.current!.id, 'b');
+    expect(state.reportedDuration, isNull);
+    expect(state.duration, testQueue()[1].duration);
+  });
+
+  test('removing the playing track drops its reported duration too', () {
+    controller.setQueue(testQueue());
+    controller.reportProgress(duration: const Duration(minutes: 9));
+    controller.removeAt(0);
+
+    expect(state.current!.id, 'b');
+    expect(state.reportedDuration, isNull);
+    expect(state.duration, testQueue()[1].duration);
+  });
+
   test('toggleLike flips only the current track and persists in the queue', () {
     controller.setQueue(testQueue());
     controller.toggleLike();

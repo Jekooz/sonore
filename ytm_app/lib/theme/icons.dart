@@ -132,6 +132,15 @@ class AppIcons {
   static const IconData user =
       IconData(0xe4c2, fontFamily: _regular, matchTextDirection: true);
 
+  /// Signs out (Settings → Account). Phosphor's `sign-out`: the codepoint comes
+  /// from the same canonical release as every other glyph here
+  /// (`@phosphor-icons/web` 2.1.1, where the codepoints of the icons already in
+  /// this file match theirs exactly) and it was checked against the bundled
+  /// font's own character map, so it renders the door-and-arrow glyph rather
+  /// than tofu.
+  static const IconData signOut =
+      IconData(0xe42a, fontFamily: _regular, matchTextDirection: true);
+
   /// Library sort control.
   static const IconData sortAscending =
       IconData(0xe444, fontFamily: _regular, matchTextDirection: true);

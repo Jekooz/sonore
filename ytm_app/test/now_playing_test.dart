@@ -1,12 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+// Riverpod 3 exposes `Override` only through misc.dart.
+import 'package:riverpod/misc.dart' show Override;
+import 'package:ytm_app/core/app_settings.dart';
 import 'package:ytm_app/features/library/library_screen.dart';
 import 'package:ytm_app/features/now_playing/queue_carousel.dart';
 import 'package:ytm_app/features/now_playing/queue_panel.dart';
 import 'package:ytm_app/theme/icons.dart';
+import 'package:ytm_app/theme/tokens.dart';
+import 'package:ytm_app/ui/art_tile.dart';
 import 'package:ytm_app/ui/seek_bar.dart';
 
 import 'support/harness.dart';
+
+/// The fraction of the seek bar that is actually painted as played.
+///
+/// Read off the render tree rather than the widget's inputs: the accent
+/// segment's painted width against the bar's own width is what the user sees,
+/// so "the fill equals position ÷ duration" is measured, not inferred.
+double paintedFill(WidgetTester tester) {
+  final Rect bar = tester.getRect(find.byType(SeekBar));
+  final Rect played = tester
+      .widgetList<DecoratedBox>(
+        find.descendant(
+          of: find.byType(SeekBar),
+          matching: find.byType(DecoratedBox),
+        ),
+      )
+      .where((DecoratedBox box) =>
+          (box.decoration as ShapeDecoration).color == Tokens.accent)
+      .map((DecoratedBox box) => tester.getRect(find.byWidget(box)))
+      .single;
+  return played.width / bar.width;
+}
 
 void main() {
   setUpAll(loadAppFonts);
@@ -122,7 +148,48 @@ void main() {
     expect(bar.duration, const Duration(minutes: 3, seconds: 58));
   });
 
-  testWidgets('desktop shows the queue panel, compact shows the carousel',
+  testWidgets('the progress fill is position ÷ duration, on seek and on a '
+      'track change', (WidgetTester tester) async {
+    await pumpAtSize(
+      tester,
+      appScope(
+        initialLocation: '/now-playing',
+        queue: testQueue(),
+        queuePosition: const Duration(seconds: 1),
+      ),
+      size: kDesktop,
+    );
+
+    // One second into a 3:58 track.
+    SeekBar bar = tester.widget<SeekBar>(find.byType(SeekBar));
+    expect(bar.position, const Duration(seconds: 1));
+    expect(bar.duration, const Duration(minutes: 3, seconds: 58));
+    expect(paintedFill(tester), closeTo(1 / 238, 0.001));
+
+    // A seek paints the position it committed, to the same fraction.
+    final Rect track = tester.getRect(find.byType(SeekBar));
+    await tester.tapAt(Offset(track.left + track.width * 0.5, track.center.dy));
+    await tester.pumpAndSettle();
+
+    bar = tester.widget<SeekBar>(find.byType(SeekBar));
+    expect(bar.position.inSeconds, closeTo(119, 2));
+    expect(
+      paintedFill(tester),
+      closeTo(bar.position.inMilliseconds / bar.duration.inMilliseconds, 0.001),
+    );
+
+    // Changing track restarts the fill at zero against the new track's own
+    // length, rather than carrying the previous track's progress over.
+    await tester.tap(find.byIcon(AppIcons.skipForward));
+    await tester.pumpAndSettle();
+
+    bar = tester.widget<SeekBar>(find.byType(SeekBar));
+    expect(bar.duration, const Duration(minutes: 4, seconds: 12));
+    expect(bar.position, Duration.zero);
+    expect(paintedFill(tester), 0);
+  });
+
+  testWidgets('the carousel is the centre at every size; desktop adds the panel',
       (WidgetTester tester) async {
     await pumpAtSize(
       tester,
@@ -130,9 +197,9 @@ void main() {
       size: kDesktop,
     );
 
+    expect(find.byType(QueueCarousel), findsOneWidget);
     expect(find.byType(QueuePanel), findsOneWidget);
     expect(find.text('Up Next'), findsOneWidget);
-    expect(find.byType(QueueCarousel), findsNothing);
 
     await pumpAtSize(
       tester,
@@ -142,6 +209,88 @@ void main() {
 
     expect(find.byType(QueueCarousel), findsOneWidget);
     expect(find.byType(QueuePanel), findsNothing);
+  });
+
+  testWidgets('tapping a neighbouring cover skips to it',
+      (WidgetTester tester) async {
+    await pumpAtSize(
+      tester,
+      appScope(initialLocation: '/now-playing', queue: testQueue()),
+      size: kPhone,
+    );
+
+    expect(find.text('Falling For You'), findsOneWidget);
+
+    final Finder tiles = find.byType(ArtTile);
+    expect(tiles, findsWidgets);
+    // The neighbour only hangs partly into the viewport, so the tap lands on
+    // the part of it that is actually on screen.
+    final Rect neighbour = tester.getRect(tiles.at(1));
+    final Rect viewport = tester.getRect(find.byType(QueueCarousel));
+    final double left = neighbour.left.clamp(viewport.left, viewport.right);
+    final double right = neighbour.right.clamp(viewport.left, viewport.right);
+    await tester.tapAt(Offset((left + right) / 2, neighbour.center.dy));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Midnight Drive'), findsOneWidget);
+  });
+
+  testWidgets('Reduce motion flattens the carousel — same queue, no 3D',
+      (WidgetTester tester) async {
+    await pumpAtSize(
+      tester,
+      appScope(
+        initialLocation: '/now-playing',
+        queue: testQueue(),
+        extraOverrides: <Override>[
+          initialAppSettingsProvider.overrideWithValue(
+            const AppSettings(reduceMotion: true),
+          ),
+        ],
+      ),
+      size: kDesktop,
+    );
+
+    // The preference reached MediaQuery, which is what every animated widget in
+    // the app reads (the same switch that silences the press and shimmer).
+    expect(
+      MediaQuery.of(tester.element(find.byType(QueueCarousel)))
+          .disableAnimations,
+      isTrue,
+    );
+    // No per-item fade and no rotation: the non-reduce path wraps each cover in
+    // an Opacity driven by the page offset.
+    expect(
+      find.descendant(
+        of: find.byType(QueueCarousel),
+        matching: find.byType(Opacity),
+      ),
+      findsNothing,
+    );
+    // It is still the queue, and the current cover is still on screen.
+    expect(find.text('Falling For You'), findsWidgets);
+  });
+
+  testWidgets('without Reduce motion the carousel keeps its depth',
+      (WidgetTester tester) async {
+    await pumpAtSize(
+      tester,
+      appScope(initialLocation: '/now-playing', queue: testQueue()),
+      size: kDesktop,
+    );
+
+    expect(
+      MediaQuery.of(tester.element(find.byType(QueueCarousel)))
+          .disableAnimations,
+      isFalse,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(QueueCarousel),
+        matching: find.byType(Opacity),
+      ),
+      findsWidgets,
+    );
   });
 
   testWidgets('the queue action hides and shows the panel on desktop',

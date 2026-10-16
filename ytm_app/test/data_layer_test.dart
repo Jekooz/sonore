@@ -51,6 +51,29 @@ void main() {
       expect((await repo.connection()).status, YtmStatus.signedOut);
     });
 
+    test('the extension folder the sign-in screen names comes from the sidecar',
+        () async {
+      // Sign-in cannot complete unless the helper extension was loaded from this
+      // exact folder, so the screen displays it. It is not decoration.
+      final YtmRepository repo = repositoryOver(recordedSidecar());
+
+      expect(
+        await repo.extensionFolder(),
+        r'C:\Program Files\Sonore\browser-extension',
+      );
+    });
+
+    test('a sidecar that cannot answer leaves the folder empty, not an error',
+        () async {
+      // Guidance for a manual step: an unreachable sidecar must not turn the
+      // signed-out screen into a failure.
+      final MockClient dead = MockClient(
+        (http.Request request) async => throw const SocketException('refused'),
+      );
+
+      expect(await repositoryOver(dead).extensionFolder(), isEmpty);
+    });
+
     test('/account failing does not turn a usable session into an error',
         () async {
       final YtmRepository repo = repositoryOver(

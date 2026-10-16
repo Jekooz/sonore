@@ -146,6 +146,24 @@ def test_pairing_file_is_written_into_the_extension_folder(client, monkeypatch, 
     assert os.path.basename(main.PAIRING_FILE) == "sidecar.json"
 
 
+def test_extension_folder_is_reported_so_the_sign_in_screen_can_name_it(client):
+    """The screen has to name the folder the extension must be loaded from.
+
+    An extension loaded from any other folder can never read the pairing file,
+    so the hand-off waits until it times out - a sign-in that appears broken
+    with nothing on screen explaining why. This is the path the UI displays and
+    offers to open.
+    """
+    resp = client.get("/auth/extension/folder")
+
+    assert resp.status_code == 200, resp.text
+    folder = resp.json()["folder"]
+    assert folder == main._EXTENSION_DIR
+    assert os.path.dirname(main.PAIRING_FILE) == folder, (
+        "the folder shown must be the one the pairing file lands in"
+    )
+
+
 # ------------------------------------------------------------ unsolicited/401
 
 

@@ -87,6 +87,13 @@ Future<http.Response> recordedResponse(
     return jsonOk('{"entries":[],"count":0}');
   }
   if (path.startsWith('/ratings')) return jsonOk('{"ok":true}');
+  // The folder the helper extension has to be loaded from. A fixed test path:
+  // the app displays it and hands it to the folder-reveal seam, nothing more.
+  if (path == '/auth/extension/folder') {
+    return jsonOk(jsonEncode(<String, String>{
+      'folder': r'C:\Program Files\Sonore\browser-extension',
+    }));
+  }
   return http.Response('{"detail":"not found"}', 404);
 }
 

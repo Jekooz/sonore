@@ -65,8 +65,11 @@ app needs at run time — nothing has to be installed first:
 - `yt-dlp.exe`, the binary the backend resolves with `shutil.which` for the
   `/stream/{video_id}` endpoint;
 - the sign-in helper extension, in the `browser-extension` folder beside the
-  app. Load it unpacked in your browser; the wizard's last page names the
-  exact folder.
+  app. **Sign-in cannot complete without it**: a browser only lets an extension
+  read a file inside its own folder, so a copy loaded from anywhere else can
+  never hand the session over. Load it unpacked from that folder (your browser's
+  extension page, Developer mode, "Load unpacked"); the sign-in screen and the
+  Setup wizard's last page both name it, and the sign-in screen can open it.
 
 The app starts the Python it shipped with rather than whatever happens to be on
 the machine, so the packages it runs against are fixed by the installer. Setting

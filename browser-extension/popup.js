@@ -1,5 +1,5 @@
 /**
- * YT Music Client Helper — popup (the hand-off trigger).
+ * Sonore Helper — popup (the hand-off trigger).
  *
  * This file is the piece that was missing: the service worker can only send
  * cookies when something asks it to, and the toolbar popup is that trigger. It

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../audio/equalizer_controller.dart';
 import '../../audio/playback_controller.dart';
 import '../../audio/playback_state.dart';
+import '../../core/app_identity.dart';
 import '../../core/app_settings.dart';
 import '../../core/sidecar/sidecar_launcher.dart';
 import '../../core/sidecar/sidecar_providers.dart';
@@ -160,6 +161,7 @@ class SettingsScreen extends ConsumerWidget {
                     icon: AppIcons.disc,
                     onTap: () {},
                   ),
+                  const _Note(appDisclaimer),
                   const _Note(
                     'Type is Inter. Icons are Phosphor. Both are MIT '
                     'licensed; their licence files ship with the app in '

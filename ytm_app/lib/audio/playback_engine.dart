@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:media_kit/media_kit.dart';
 
+import '../core/app_identity.dart';
 import 'equalizer.dart';
 
 /// Prepares the playback backend.
@@ -84,7 +85,7 @@ class MediaKitPlaybackEngine implements PlaybackEngine {
     _player = Player(
       configuration: const PlayerConfiguration(
         // Sets the process name shown in the Windows volume mixer.
-        title: 'YT Music Client',
+        title: appName,
       ),
     );
   }

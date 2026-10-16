@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/app_identity.dart';
 import 'core/app_settings.dart';
 import 'core/sidecar/sidecar_startup_gate.dart';
 import 'theme/app_theme.dart';
@@ -24,7 +25,7 @@ class YtmApp extends ConsumerWidget {
     final double maxScale = settings.textScale;
 
     return MaterialApp.router(
-      title: 'YT Music Client',
+      title: appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       themeMode: ThemeMode.dark,

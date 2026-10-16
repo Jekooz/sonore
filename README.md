@@ -1,8 +1,11 @@
-# ytm-client
+<img src="ytm_app/assets/brand/sonore-icon.svg" width="96" height="96" alt="Sonore app icon">
 
-A Flutter Windows desktop client for YouTube Music, driven by a small local Python
-service. Playback, search, library and account data come from a FastAPI sidecar on
-`127.0.0.1`; the app never talks to YouTube directly and never ships credentials.
+# Sonore
+
+An unofficial YouTube Music client for Windows: a Flutter desktop app driven by
+a small local Python service. Playback, search, library and account data come
+from a FastAPI sidecar on `127.0.0.1`; the app never talks to YouTube directly
+and never ships credentials.
 
 Status: working desktop app, actively developed. The backend pairing gate and the
 light-palette redesign are work in progress on separate branches and are not

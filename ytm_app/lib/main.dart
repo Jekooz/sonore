@@ -9,6 +9,7 @@ import 'audio/listening_event.dart';
 import 'audio/playback_engine.dart';
 import 'audio/playback_service.dart';
 import 'audio/track.dart';
+import 'core/app_identity.dart';
 import 'core/app_settings.dart';
 import 'core/settings_persistence.dart';
 import 'core/sidecar/sidecar_io.dart';
@@ -30,7 +31,7 @@ Future<void> main() async {
     // caption buttons below call back into window_manager.
     await windowManager.ensureInitialized();
     const WindowOptions options = WindowOptions(
-      title: 'YT Music Client',
+      title: appName,
       titleBarStyle: TitleBarStyle.hidden,
       backgroundColor: Tokens.transparent,
     );
@@ -132,7 +133,7 @@ class _WindowsTitleBarState extends State<WindowsTitleBar> {
   @override
   Widget build(BuildContext context) {
     return WindowTitleBar(
-      title: 'YT Music Client',
+      title: appName,
       isMaximized: _maximized,
       onDragStart: windowManager.startDragging,
       onMinimize: windowManager.minimize,

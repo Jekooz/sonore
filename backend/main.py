@@ -180,23 +180,39 @@ def _validate_and_store(cookies: dict, source: str) -> dict:
         raise HTTPException(status_code=500, detail="Could not store the session locally.")
     except Exception as e:
         logger.exception("Storing session failed")
-        raise HTTPException(status_code=500, detail=f"Could not store session: {e}")
+        raise HTTPException(status_code=500, detail="Could not store the session locally.")
 
     result["account"] = account
     return result
 
 
 @app.post("/auth/cookies")
-async def auth_cookies(payload: dict):
+async def auth_cookies(payload: dict, request: Request):
     """
     Complete sign-in. Body: {"cookies": {"SID": "...", "__Secure-3PAPISID": "...", ...}}
 
-    Kept for programmatic/diagnostic use; the UI flow now goes through
-    /auth/browser/start + /auth/extension. Same validation + storage path.
+    Security fix (audit finding 1): this route installs a full Google session,
+    so it now runs under the same gate as /auth/extension — a sign-in attempt
+    must actually be waiting, and the request must carry its single-use pairing
+    token in X-Ytm-Token. A bare POST to the loopback port can no longer
+    install or replace a session. No shipped UI calls this endpoint (both
+    frontends use /auth/browser/start + /auth/extension), so gating it breaks
+    nothing that works; check auth headers first if you are wiring a new
+    programmatic caller.
     """
     cookies = payload.get("cookies")
     if not isinstance(cookies, dict) or not cookies:
         raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
+    if not _sign_in_pending():
+        logger.warning("Rejected /auth/cookies: no sign-in in progress.")
+        raise HTTPException(
+            status_code=409,
+            detail="No sign-in is in progress. Start sign-in from the app first.",
+        )
+    rejection = _consume_pairing_token(request.headers.get("X-Ytm-Token"))
+    if rejection is not None:
+        logger.warning("Rejected /auth/cookies: %s", rejection)
+        raise HTTPException(status_code=401, detail=rejection)
     return JSONResponse(content=_validate_and_store(cookies, "auth/cookies"))
 
 
@@ -289,6 +305,12 @@ def _clear_pairing() -> None:
         logger.warning("Could not remove the extension pairing file: %s", e)
 
 
+# Serialises issue/consume of the pairing token. Without it two concurrent
+# hand-off requests could both pass compare_digest before either nulls the
+# token (audit finding 7): the check-and-clear must be one atomic step.
+_pairing_lock = threading.Lock()
+
+
 def _issue_pairing(port: int) -> None:
     """Rotate the pairing token for a new attempt.
 
@@ -296,8 +318,9 @@ def _issue_pairing(port: int) -> None:
     hand-off can complete, even if an older popup is still open somewhere.
     """
     global _pairing_token, _pairing_issued_at
-    _pairing_token = secrets.token_urlsafe(32)
-    _pairing_issued_at = time.monotonic()
+    with _pairing_lock:
+        _pairing_token = secrets.token_urlsafe(32)
+        _pairing_issued_at = time.monotonic()
     if _write_pairing_file(port, _pairing_token):
         logger.info(
             "Sign-in pairing token issued for port %s (valid %d s).",
@@ -316,12 +339,15 @@ def _consume_pairing_token(provided: str | None) -> str | None:
     global _pairing_token, _pairing_issued_at
     if not provided:
         return "Missing pairing token."
-    if _pairing_token is None or not secrets.compare_digest(provided, _pairing_token):
-        return "Invalid pairing token."
-    if time.monotonic() - _pairing_issued_at > WAIT_TIMEOUT_SECONDS:
-        return "Pairing token expired."
-    _pairing_token = None
-    _pairing_issued_at = 0.0
+    # The check-and-clear runs under the lock so exactly one of N concurrent
+    # requests holding a valid token can consume it (audit finding 7).
+    with _pairing_lock:
+        if _pairing_token is None or not secrets.compare_digest(provided, _pairing_token):
+            return "Invalid pairing token."
+        if time.monotonic() - _pairing_issued_at > WAIT_TIMEOUT_SECONDS:
+            return "Pairing token expired."
+        _pairing_token = None
+        _pairing_issued_at = 0.0
     return None
 
 
@@ -425,8 +451,10 @@ def auth_extension(payload: dict, request: Request):
     """
     global _extension_cookies
 
-    # Order matters: is anything waiting, then is the caller authorised, then is
-    # the body well formed. Nothing is stored until all three pass.
+    # Order matters (audit finding 8): is anything waiting, is the BODY well
+    # formed, is the caller authorised, then storage. Malformed-body 400s must
+    # not burn the single-use attempt — the caller may simply have fluffed a
+    # request and still hold the only token they get for it.
     if not _sign_in_pending():
         logger.warning("Rejected extension hand-off: no sign-in in progress.")
         raise HTTPException(
@@ -434,11 +462,16 @@ def auth_extension(payload: dict, request: Request):
             detail="No sign-in is in progress. Start sign-in from the app first.",
         )
 
+    cookies = payload.get("cookies")
+    if not isinstance(cookies, dict) or not cookies:
+        raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
+
     rejection = _consume_pairing_token(request.headers.get("X-Ytm-Token"))
     if rejection is not None:
         logger.warning("Rejected extension hand-off: %s", rejection)
         raise HTTPException(status_code=401, detail=rejection)
 
+<<<<<<< HEAD
     # A present-but-EMPTY jar is not a malformed body. The extension always
     # sends {"cookies": {...}}, and it is empty exactly when the browser it is
     # loaded in has no YouTube Music session -- the common real case, because
@@ -453,6 +486,9 @@ def auth_extension(payload: dict, request: Request):
     if not isinstance(cookies, dict):
         raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
 
+=======
+>>>>>>> 6a014a8 (WIP: light palette + pairing gate
+)
     try:
         result = _validate_and_store(cookies, "auth/extension")
     except HTTPException as e:

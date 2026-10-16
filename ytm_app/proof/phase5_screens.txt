@@ -1,0 +1,438 @@
+Phase 5 - Batch 3: Lyrics, Equalizer and Settings (screens sign-off)
+Date: 2026-10-15
+Status: the three screens are implemented, wired to real capabilities, and the
+whole verification suite below was run in this tree. NO COMMITS, NO PUSHES.
+
+====================================================================
+0. READ THIS FIRST - what this session actually found and did
+====================================================================
+This task was issued against a working tree that was BROKEN, not merely
+unfinished. `flutter analyze` reported 332 issues before any edit, including
+hard errors such as:
+
+  error - Undefined name 'ytmRepositoryProvider'  lib/main.dart:60
+  error - Undefined name 'connectionProvider'      lib/ui/data_states.dart:22
+  error - Undefined class 'SignInController'       lib/ui/data_states.dart:71
+  error - The function 'createSidecarLauncher' isn't defined  lib/main.dart:82
+  error - The function 'YtmApiClient' isn't defined  test/support/recorded_sidecar.dart:94
+  error - The method 'setLike' isn't defined for the type 'YtmRepository'
+
+Three source files had been rewritten wholesale in an earlier session and had
+LOST their real content (three files whose own mtimes are 2026-10-15 12:28):
+
+  file                                    HEAD    broken tree
+  lib/core/sidecar/sidecar_io.dart         276  ->   77 lines
+  lib/data/api_client.dart                 470  ->  350 lines
+  lib/data/ytm_repository.dart             398  ->  367 lines
+
+The deleted surface included every Riverpod entry point the untouched files
+still `ref.watch` (ytmRepositoryProvider, connectionProvider, signInProvider,
+homeProvider, libraryProvider, collectionProvider, SignInController,
+SignInState/SignInStage), `createSidecarLauncher`, `FilePortFile` and
+`YtmRepository.setLike`. The tree was internally inconsistent: files that were
+never touched referenced symbols the rewritten files had removed. Two widget
+test files and both sidecar integration tests had also been rewritten against a
+renamed `YtmClient` API that only existed in that broken rewrite.
+
+`git show HEAD:<file>` holds the coherent, verified versions, and the recorded
+proofs `proof/phase5_batch3.txt` and `proof/phase5_batch4.txt` (2026-10-14)
+describe that state (`flutter analyze` clean; 290 tests). The repair was
+therefore a restore, not a rewrite:
+
+  git checkout HEAD -- \
+    ytm_app/lib/core/sidecar/sidecar_io.dart \
+    ytm_app/lib/data/api_client.dart \
+    ytm_app/lib/data/ytm_repository.dart \
+    ytm_app/integration_test/backend_api_test.dart \
+    ytm_app/integration_test/sidecar_lifecycle_test.dart \
+    ytm_app/test/data_layer_test.dart \
+    ytm_app/test/lyrics_screen_test.dart
+
+After that restore: `flutter analyze` -> "No issues found!".
+
+Nothing of value was discarded: the discarded rewrites were the broken ones.
+Everything else in the working tree (the theme/token refresh, the regenerated
+goldens, the backend changes) was left exactly as found - see section 9.
+
+The Batch 3 feature code itself was NOT changed by this session. Sections 3-6
+record what it does and the checks that prove it; the one production-behaviour
+edit this session made is the integration-test correction in section 7.
+
+====================================================================
+1. BATCH 3A - FEATURE AUDIT FINDINGS
+====================================================================
+Routes and navigation (lib/routing/app_router.dart, lib/routing/destinations.dart)
+  /now-playing/lyrics     LyricsScreen     (off Now Playing, design.md G)
+  /now-playing/equalizer  EqualizerScreen  (off Now Playing, design.md H)
+  <any-branch>/settings   SettingsScreen   (nested in every branch, so opening
+                                           Settings keeps the origin destination
+                                           highlighted and the mini player alive)
+  Shell nav rail (desktop) and bottom bar (phone) carry the Settings entry;
+  Lyrics and Equalizer are reached from Now Playing, matching design.md.
+
+Shared layout / tokens / components
+  lib/theme/tokens.dart (the only place values are defined), lib/theme/icons.dart,
+  lib/ui/{screen_header,screen_states,data_states,pill_button,glass_surface,...},
+  lib/features/shell/*, lib/features/now_playing/*. All three screens are built
+  from these; tool/check_tokens.sh enforces it (below).
+
+Is lyrics data exposed by the backend?  YES.
+  backend/main.py:1040-1155 - GET /lyrics/{video_id}
+    200 {videoId, available:true, synced, lines:[{text, startMs?, endMs?}], source}
+    404 YouTube Music has no lyrics for this track (a real answer, not a failure)
+    400 malformed video id
+    401 not signed in (raised by _data() -> AuthError("Not signed in.")
+        at services/ytmusic_client.py:367)
+  Resolution is two real upstream calls: get_watch_playlist yields the track's
+  lyrics browse id, then ytmusicapi get_lyrics resolves it. `synced` is true
+  ONLY when the provider reports hasTimestamps is true; otherwise the untimed
+  lookup is returned as plain text. The handler never invents timings.
+  60-minute / 64-entry in-process cache; timed lookup runs on a throwaway
+  anonymous client because the mobile endpoint rejects a logged-in context.
+  App side: lib/data/ytm_repository.dart:249 lyrics() -> lib/data/api_client.dart
+  ; model lib/data/models.dart:444 LyricsLine / :457 LyricsResult.
+
+Does the audio engine support real equalizer processing?  YES, via libmpv.
+  lib/audio/equalizer.dart - media_kit's Dart Player API exposes no audio
+  filters, so the EQ writes mpv's own `af` property through the libmpv the app
+  already links (media_kit's generated bindings + the live mpv_handle from
+  Player.handle). The value is a real ffmpeg `equalizer` stage chain inside one
+  `lavfi` graph (`buildMpvAudioFilter`), and every write is read back off the
+  engine (`readFilter`) so "the control changed the processing configuration"
+  is asserted rather than claimed. Bands: 10 (31, 62, 125, 250, 500, 1000,
+  2000, 4000, 8000, 16000 Hz), each clamped to +/-12 dB. EqualizerEngine is an
+  abstraction with `isSupported`; when there is no libmpv the app builds
+  UnavailableEqualizer and the screen says so instead of showing dead sliders.
+  Persistence: the shape is stored in the settings record and re-applied at
+  startup (playback_service._applyPersistedEqualizer).
+
+Existing settings / persistence / diagnostics
+  lib/core/app_settings.dart - AppSettings (reduce transparency, reduce motion,
+  text scale, lyrics auto-follow, equalizer shape, repeat mode, shuffle,
+  autoplay) with validating fromJson/copyWith; AppSettingsNotifier writes every
+  change through a SettingsStore and reports save status.
+  lib/core/settings_persistence.dart - SharedPreferencesSettingsStore (raw reads,
+  every value validated, corrupt value degrades to default).
+  lib/main.dart loads the store before the first frame and overrides the
+  provider, so the app opens on the stored preferences.
+  Diagnostics: the Settings screen reports the live sidecar connection and the
+  local-runtime state with a re-check action, and the account state with a
+  sign-out behind a confirmation. It shows no cookie, token or signed URL.
+
+States identified (and each is implemented and tested)
+  loading (skeleton) | lyrics available (timed and untimed) | no lyrics |
+  sidecar offline | request failure + retry | signed-out | nothing playing
+  (Lyrics); engine supports EQ | engine cannot shape audio (Equalizer);
+  saving | saved | save failed, and a reset confirmation (Settings).
+
+Files that needed modification for Batch 3 itself: NONE. The three screens and
+their controllers, persistence and tests already exist in this tree and are
+verified below. The only files this session touched are listed in section 2.
+
+====================================================================
+2. CHANGED FILES AND WHY (this session)
+====================================================================
+Repair (restore from HEAD, because the working-tree copies had lost content):
+  ytm_app/lib/core/sidecar/sidecar_io.dart        restore 77 -> 276 lines
+  ytm_app/lib/data/api_client.dart                restore 350 -> 470 lines
+  ytm_app/lib/data/ytm_repository.dart            restore 367 -> 398 lines
+  ytm_app/integration_test/sidecar_lifecycle_test.dart   restore
+  ytm_app/test/data_layer_test.dart               restore (real YtmApiClient API)
+  ytm_app/test/lyrics_screen_test.dart            restore (real YtmApiClient API)
+
+Corrected to match real, current backend behaviour (see section 7):
+  ytm_app/integration_test/backend_api_test.dart
+
+  - "the real validator rejects an incomplete cookie hand-off without storing
+    it" -> renamed "an unsolicited cookie hand-off is refused by the sign-in
+    gate and stores nothing", and now asserts what the backend really does.
+
+No other file was edited. In particular the three Batch 3 screens, their
+controllers, app_settings/settings_persistence and their tests were read, not
+modified.
+
+====================================================================
+3. FUNCTIONAL CAPABILITIES IMPLEMENTED PER SCREEN
+====================================================================
+Lyrics (lib/features/lyrics/lyrics_screen.dart, lyrics_controller.dart)
+  - data comes only from /lyrics/{videoId}; nothing is scraped and no endpoint
+    is invented. The controller refetches on track change so the previous
+    song's words never sit over the next song.
+  - synced lyrics: the line whose start time has passed is highlighted, the view
+    scrolls to it, and each timed line is a real seek target (tapping seeks).
+  - static lyrics: rendered as plain text; a line with no timestamp is NOT a
+    seek target, because offering a time that does not exist would lie.
+  - states: skeleton while loading; "No lyrics for this track." with a footnote
+    when the service answers none; offline state; failure state with retry;
+    sign-in state when 401; "Nothing is playing." when the queue is empty.
+  - following stops when the reader drags by hand and offers "Back to current
+    line"; the "Follow playback" preference is honoured.
+  - accessibility: lines are Semantics(button, "Go to <line>"), the header back
+    action is labelled, and reduce-motion turns the scroll into an instant jump.
+
+Equalizer (lib/features/equalizer/equalizer_screen.dart,
+lib/audio/equalizer_controller.dart, lib/audio/equalizer.dart)
+  - every control writes into the running engine and the engine's own answer is
+    shown back ("Engine reports" <af value>), so nothing on the screen is
+    decorative.
+  - on/off switch; five named presets that are actually applied; 10 band sliders
+    with a dB readout and a frequency label; "Reset to flat"; an applying
+    indicator; an error line when the engine refuses.
+  - accessibility: each band is Semantics(container, "<freq> hertz band",
+    value "<n> decibels"); the switch is Semantics(toggled).
+  - if the engine cannot shape audio the screen renders the honest unavailable
+    message and no controls.
+
+Settings (lib/features/settings/settings_screen.dart)
+  - Appearance: reduce transparency, reduce motion, text size (clamped to the
+    supported range). A note states plainly that this version ships one theme.
+  - Playback: autoplay, shuffle (both owned by PlaybackController, so the
+    transport pill and this screen cannot disagree); repeat is noted as cycling
+    from the transport.
+  - Lyrics: follow playback.
+  - Audio: equalizer summary + link to the Equalizer screen.
+  - Diagnostics: live connection + local-runtime state with a re-check action.
+  - Account: sign-in state and sign out behind a confirmation.
+  - Privacy: states where the session lives; no cookie/token/signed URL is shown
+    or logged.
+  - About: version and licence note.
+  - Footer: "Reset preferences" behind a confirmation dialog.
+  - A save-status banner reports saving / saved / could-not-save, so a failed
+    write is visible instead of silent.
+
+====================================================================
+4. EXPLICITLY UNSUPPORTED - AND WHY (not stubs, differences)
+====================================================================
+- No output-device picker and no theme switch in Settings: the audio engine
+  exposes no device selection and this version ships a single (dark) theme, so
+  either control would be decorative. The Settings screen says so in the UI.
+- No Cache & storage section and no Keyboard-shortcuts page: neither behaviour
+  exists in the app yet, so the sections would be empty promises. Recorded as a
+  difference, not as unfinished work.
+- Equalizer audio-shaping is only real where libmpv is present (Windows does
+  link it). Elsewhere the app deliberately renders the unavailable state rather
+  than sliders that do nothing.
+- Lyrics CONTENT cannot be produced without a signed-in session, because
+  /lyrics resolves through the authenticated ytmusicapi client (verified live:
+  401 "Not signed in."). The app's signed-out state is what a signed-out user
+  sees; real words need the human sign-in step (section 10).
+
+====================================================================
+5. COMMANDS RUN, WITH EXIT CODES AND REAL OUTPUT
+====================================================================
+Run from ytm_app/ unless stated. All output is verbatim.
+
+1. flutter analyze
+   -> "Analyzing ytm_app...
+       No issues found! (ran in 170.2s)"
+   EXIT=0
+   (before the repair: "332 issues found", incl. the hard errors in section 0)
+
+2. bash tool/check_tokens.sh
+   -> "No design-token violations found."
+   EXIT=0
+
+3. flutter test --concurrency=1
+   -> "02:19 +290: All tests passed!"
+   EXIT=0
+   (includes the Lyrics, Equalizer and Settings suites)
+
+4. flutter test test/golden
+   -> "00:08 +23: All tests passed!"
+   EXIT=0
+
+5. python -m pytest tests -q            (from the repository root)
+   -> "77 passed, 1 warning in 9.17s"
+   EXIT=0
+   (the working tree also modifies backend/, so the backend suite was run too)
+
+6. flutter build windows --release
+   -> "Building Windows application... 156.9s
+       √ Built build\windows\x64\runner\Release\ytm_app.exe"
+   EXIT=0
+
+7. Windows integration suites, each run on its own (see limitation L5):
+   a. flutter test integration_test/sidecar_lifecycle_test.dart -d windows
+      -> "starts an isolated real sidecar, becomes healthy, and stops cleanly
+          without touching the shared port file" + "All tests passed!"
+      EXIT=0
+   b. flutter test integration_test/backend_api_test.dart -d windows
+      -> "00:37 +10: All tests passed!"     EXIT=0
+      (first run before the fix in section 7: "+9 -1", see section 7)
+   c. flutter test integration_test/playback_engine_test.dart -d windows
+      -> "the real engine decodes a local file and plays to the end" +
+          "All tests passed!"               EXIT=0
+
+8. Live end-to-end probe of the real sidecar (backend/main.py, uvicorn), run
+   with an isolated YTM_PORT=8321, YTM_PORT_FILE and LOCALAPPDATA/TEMP so the
+   shared %TEMP%/ytmusic_sidecar_port.txt was never touched. Responses verbatim:
+     GET /health                  -> {"status":"ok"}                 HTTP 200
+     GET /lyrics/bad%21%21        -> {"detail":"Invalid video id."}  HTTP 400
+     GET /lyrics/dQw4w9WgXcQ      -> {"detail":"Not signed in."}     HTTP 401
+     GET /lyrics/jNQXAC9IVRw      -> {"detail":"Not signed in."}     HTTP 401
+   The 401 is the real, ungated-without-session behaviour of /lyrics (the
+   handler resolves through the authenticated client). The app maps 401 to its
+   signed-out state, which the lyrics widget test drives.
+   After the probe: the sidecar was terminated, no python process was left, the
+   shared port file was untouched (still dated 2026-10-14 12:51), and the
+   isolated store directory held no file.
+
+   Exit codes were read from $? / ${PIPESTATUS[0]} where output was filtered,
+   so no failing case could be hidden by a pipe.
+
+====================================================================
+6. GOLDEN CHANGES AND THEIR REVIEW
+====================================================================
+23 goldens differ from HEAD. NONE of them changed because of this session's
+work, and none of them is a Batch 3 screen (there are no lyrics/equalizer/
+settings goldens). They come from the pre-existing token/theme refresh that was
+already in the working tree (section 9). They were inspected, not blessed
+blindly: each old (HEAD) image was compared with the current one pixel by pixel
+with Pillow, and the size of the change was measured.
+
+golden                                       changed   meanΔ  maxΔ  >30Δ
+now_playing_desktop_1280x800.png               25.50%    13.9   255    7.5%
+now_playing_desktop_1280x800_scale1_3.png      25.99%    15.7   255    8.9%
+shell_home_desktop_1280x800.png                17.11%    50.7   255   26.5%
+product_library_songs_desktop_1280x800.png      6.56%    59.4   255   41.7%
+product_context_menu_desktop_1280x800.png       6.54%    59.5   255   41.8%
+product_album_desktop_1280x800.png              5.50%    55.9   255   31.6%
+queue_desktop_1280x800.png                      3.63%    58.9   255   33.3%
+product_search_results_phone_390x844.png        8.79%     5.1    18    0.0%
+shell_home_phone_390x844.png                    8.16%     5.9    18    0.0%
+queue_phone_390x844.png                         7.75%     5.1    18    0.0%
+state_signed_out_phone_390x844.png              7.28%     5.1    18    0.0%
+now_playing_phone_390x844.png                   7.23%     4.8    18    0.0%
+state_offline_phone_390x844.png                 7.20%     5.1    18    0.0%
+state_empty_phone_390x844.png                   7.01%     4.9    18    0.0%
+shell_now_playing_empty_phone_390x844.png       7.01%     4.9    18    0.0%
+state_error_phone_390x844.png                   6.55%     4.7     6    0.0%
+shell_library_tablet_800x1280.png               0.81%     6.2    18    0.0%
+now_playing_tablet_800x1280.png                 0.33%     5.6    18    0.0%
+specimen_*  (phone/tablet/desktop/scale1_3)  6.7-10.6%   4.2-4.7 18  0.0%
+state_loading_phone_390x844.png                20.10%     2.7     6    0.0%
+
+Reading of this:
+  - Every phone and tablet golden has a tiny per-pixel delta (meanΔ <= 6.2,
+    maxΔ <= 18, 0.0% of changed pixels above 30 levels). That is a colour/tint
+    shift, not a layout change - the token refresh moved glass from white 6% to
+    white 8%, secondary text #A6A6A6 -> #A0A0A8 and muted #7A7A7A -> #686870.
+  - The DESKTOP goldens have real, large deltas (maxΔ 255, 26-42% of changed
+    pixels above 30 levels). This is a layout shift, and it is explained by the
+    same token refresh changing sidebarWidth 220 -> 200 and titleBarHeight
+    40 -> 36, which moves the whole content column on desktop.
+  - `flutter test test/golden` passes with these images, so the images and the
+    code agree. Whether the refresh itself is wanted is the user's call: it is
+    an unrelated, uncommitted workstream and is flagged in section 9.
+
+====================================================================
+7. THE ONE PRODUCTION-BEHAVIOUR DISCREPANCY FOUND, AND HOW IT WAS SETTLED
+====================================================================
+`flutter test integration_test/backend_api_test.dart -d windows` first ran
+"+9 -1":
+
+  test:    the real validator rejects an incomplete cookie hand-off without
+           storing it
+  failure: Expected: <422>   Actual: <409>
+
+Cause, established from the code, not guessed. The working tree's backend had
+added a security gate (documented at backend/main.py:187-215 as "Security fix
+(audit finding 1)"): /auth/cookies now runs under the same pairing gate as
+/auth/extension, so
+
+  - no sign-in in progress          -> 409 before the validator is reached
+  - bad/absent pairing token        -> 401
+  - pending + valid token, bad jar  -> the validator's 422
+
+The restored HEAD copy of the app-side integration test posted a bare cookie
+hand-off and expected the validator's 422. Under the gate it never reaches the
+validator, so 409 is correct and the 422 expectation was stale. The backend's
+OWN tests were already updated for this by the same workstream and pass
+(tests/test_auth_pairing.py: `test_incomplete_jar_is_rejected_before_storage`
+drives a real handshake and still asserts 422; `test_legacy_cookies_endpoint_
+is_gated_like_the_extension` asserts the gate).
+
+The app-side test was corrected to assert what really happens, and strengthened
+rather than loosened - it now requires the gate's own wording and that nothing
+was stored:
+
+  expect(response.statusCode, 409);
+  expect(response.body, contains('No sign-in is in progress'));
+  expect(response.body, isNot(contains(notARealCookie)));
+  expect(await client.isSignedIn(), signedIn);   // session unchanged
+
+Re-run: "00:37 +10: All tests passed!"  EXIT=0.
+No application code was changed: the validator's 422 path is still reachable by
+the app through /auth/extension (the flow the UI actually uses), and
+api_client.dart still maps 422 -> signed-out for it.
+
+====================================================================
+8. BATCH 3 TEST COVERAGE PRESENT IN THE TREE
+====================================================================
+test/lyrics_screen_test.dart (14 cases) - timed payload -> real lines with real
+  timings; untimed payload; 404 means "no lyrics"; malformed 200 does not
+  become fake lyrics; skeleton while loading; timed lyrics with attribution;
+  static lyrics with no seek affordance; timed lines offered as seek targets;
+  "no lyrics" message; offline state; failure with retry; signed-out state;
+  nothing-playing.
+test/equalizer_test.dart (16 cases) - flat is off/unnamed; gains clamped; short
+  lists padded; editing a band clamps and clears the preset; every preset is a
+  legal configuration; the filter is one lavfi graph with a real stage per band;
+  a band gain appears in the engine string; a band change is WRITTEN TO THE
+  ENGINE AND READ BACK; editing while off leaves the engine untouched; turning
+  off writes an empty chain; a preset reaches the engine with its name; reset;
+  an engine that refuses reports the failure; an engine without support says so;
+  the configuration is persisted on every change; incapable engine refuses.
+test/settings_test.dart (19 cases) - defaults; copyWith; text-scale clamping;
+  empty store -> defaults; wrong types fall back; out-of-range clamped; gains
+  clamped/padded; NaN rejected; toJson/fromJson round trip; in-memory store;
+  throwing store; SharedPreferences survive a reopen; unset store; malformed
+  stored value degrades; preset cleared; notifier seeds from the initial
+  provider; setter writes through and reports success; failing store surfaces a
+  status instead of throwing; reset returns every field to default.
+
+====================================================================
+9. PRESERVED UNRELATED CHANGES (read, not authored here)
+====================================================================
+Left exactly as found, and verified not to break the app:
+  ytm_app/lib/theme/tokens.dart, ytm_app/lib/theme/app_theme.dart
+      a token re-derivation from the exported design spec plus a dark/light
+      Palette class. NOTE: this class adds a light palette but nothing selects
+      it - the Settings screen still says the app ships one theme - so it is an
+      incomplete, uncommitted workstream, not a shipped feature.
+  ytm_app/test/golden/goldens/*.png (23) - the regenerated images for it.
+  ytm_app/pubspec.yaml + pubspec.lock - adds the `test` dev dependency.
+  backend/main.py, backend/services/*.py - security hardening (audit findings
+      1, 6, 7), the /auth/cookies pairing gate, and the /lyrics endpoint.
+  tests/test_auth_pairing.py, tests/test_recommendations.py - updated with it.
+  flutter_poc/**, frontend/**, design.md, design.pdf/png - untouched.
+
+Because these were kept, the "baseline" this sign-off rests on is this tree,
+not HEAD: analyze clean, 290 unit/widget tests, 23 goldens, 77 backend tests,
+and the three Windows integration suites all pass HERE, with these changes
+present.
+
+====================================================================
+10. NOT VERIFIED HERE, AND WHY
+====================================================================
+L1. Real lyrics CONTENT: needs a signed-in session (live probe returned 401
+    "Not signed in."). A human must sign in through the browser hand-off; then
+    the same screen renders real, and where YouTube supplies timestamps,
+    synced, lyrics.
+L2. Android: no device or emulator on this machine. Nothing in this batch was
+    run on Android.
+L3. Settings persistence through the GUI - "change a setting, quit, reopen, the
+    setting is still there" - is covered at the store level (settings_test.dart
+    write/reopen/corrupt/reset with SharedPreferences.setMockInitialValues) and
+    the packaged app was built and launches, but the click-through round trip
+    needs a human at the window.
+L4. The equalizer's read-back proves the axis value the engine reports; nobody
+    here listened to the result through speakers. An audible check is manual.
+L5. `flutter test integration_test -d windows` (all three files in one
+    invocation) fails to relaunch the app between files ("Error waiting for a
+    debug connection: The log reader stopped unexpectedly"). Each file passes
+    on its own; run them one at a time.
+L6. The 23 golden differences come from an unrelated workstream and are
+    recorded, not independently justified. They need the owner's confirmation
+    (section 6).
+L7. Nothing was committed or pushed.

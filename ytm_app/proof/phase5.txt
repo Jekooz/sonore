@@ -1,0 +1,357 @@
+Phase 5 - Batch 4: Final Regression and Release Sign-off
+Date: 2026-10-15
+Branch: flutter-only    HEAD: 02b2d0c (unchanged by this batch)
+Status: Phase 5 is IMPLEMENTATION-COMPLETE and the automated gates pass in this
+tree. It is NOT fully human-verified: the items in section 9 need a person.
+NO COMMITS, NO PUSHES, NO RESET, NO CLEAN.
+
+====================================================================
+0. THE ONE LINE THAT MATTERS
+====================================================================
+Every automated gate the batch specifies passes in this exact working tree,
+including the real release build and a real launch/shutdown smoke test, and the
+Lyrics feature was verified end to end against the real authenticated backend
+(real synced lyrics, real timestamps). The remaining gaps are the ones only a
+human can close: hearing the equalizer, approving the goldens by eye, and the
+interactive browser sign-in.
+
+====================================================================
+1. BASELINE (established before any change)
+====================================================================
+  git branch --show-current          -> flutter-only
+  git log --oneline -1               -> 02b2d0c chore: keep local design exports
+                                        and audit scratch out of the repo
+  git status --short                 -> 37 entries (36 modified + 1 untracked)
+  git diff --stat HEAD               -> 37 files, 983 insertions(+), 167 deletions(-)
+
+Proofs read before touching anything: phase4.txt, phase5_sidecar_integration.txt,
+phase5_integration.txt, phase5_batch3.txt, phase5_batch4.txt, and the
+phase5_screens.txt written for Batch 3. `phase5.txt` did NOT exist; this file
+creates it. The batch proofs are all kept (this file does not replace them).
+
+Final implementation located (all present and verified, not assumed):
+  Lyrics        lib/features/lyrics/lyrics_screen.dart, lyrics_controller.dart
+                + backend GET /lyrics/{video_id} (backend/main.py:1040-1155)
+  Equalizer     lib/features/equalizer/equalizer_screen.dart,
+                lib/audio/equalizer.dart (LibmpvEqualizer), equalizer_controller.dart
+  Settings      lib/features/settings/settings_screen.dart,
+                lib/core/app_settings.dart, lib/core/settings_persistence.dart
+  Sidecar       lib/core/sidecar/{sidecar_io,sidecar_launcher,sidecar_providers,
+                sidecar_startup_gate}.dart
+  Integration   integration_test/{sidecar_lifecycle,backend_api,playback_engine}_test.dart
+
+====================================================================
+2. CHANGED-FILE INVENTORY
+====================================================================
+(a) CHANGED BY THIS BATCH - exactly one file, documentation only, no behaviour:
+  ytm_app/lib/features/shell/nav_rail.dart
+      The docstring cited the spec as "220px glass sidebar". The working-tree
+      token change set Tokens.sidebarWidth to 200, so that citation was stale.
+      design.md ("Desktop measurements") states the sidebar is a "200 px base
+      width; 16 px internal padding" and the colour table calls it a solid
+      surface, so 200 is the correct value and the comment was wrong. The
+      citation now reads: a 200 px base-width sidebar with 16 px internal
+      padding, which "can collapse only when space is genuinely constrained".
+      This is a comment edit; no pixel, token or control changed. See section 5.
+
+(b) NEW PROOF FILES (untracked, intended):
+  ytm_app/proof/phase5_screens.txt   (Batch 3 evidence)
+  ytm_app/proof/phase5.txt           (this file)
+
+(c) PRESERVED PRE-EXISTING WORKING-TREE CHANGES (not authored here, not reverted):
+  ytm_app/lib/theme/tokens.dart, ytm_app/lib/theme/app_theme.dart
+  ytm_app/test/golden/goldens/*.png                       (23 images)
+  ytm_app/pubspec.yaml, ytm_app/pubspec.lock              (+ test dev dependency)
+  ytm_app/integration_test/backend_api_test.dart          (Batch 3 correction)
+  backend/main.py, backend/services/browser_auth.py, backend/services/ytmusic_client.py,
+  backend/requirements.txt
+  tests/test_auth_pairing.py, tests/test_recommendations.py
+  flutter_poc/pubspec.yaml, flutter_poc/pubspec.lock
+  No file under frontend/, design.md, DESIGN_TOKENS.md or design.pdf/png was touched.
+
+====================================================================
+3. REGRESSION RESULTS - EXACT COMMANDS AND EXIT CODES
+====================================================================
+All run from ytm_app/ except pytest (repository root). Exit codes captured
+directly ($?) into a log, one command per step, sequentially:
+  /tmp/ytm_backup/verify.log
+
+  #  command                                                       result                                              exit
+  1  flutter analyze            -> "No issues found! (ran in 9.9s)"                                                  0
+  2  flutter test --concurrency=1 -> "02:06 +290: All tests passed!"                                                0
+  3  bash tool/check_tokens.sh  -> "No design-token violations found."                                              0
+  4  flutter test test/golden   -> "00:09 +23: All tests passed!"                                                  0
+  5  flutter test integration_test/sidecar_lifecycle_test.dart -d windows
+                                -> "All tests passed!" (+1)                                                       0
+  6  flutter test integration_test/backend_api_test.dart -d windows
+                                -> "00:43 +10: All tests passed!"                                                 0
+  7  flutter test integration_test/playback_engine_test.dart -d windows
+                                -> "00:03 +1: All tests passed!"                                                  0
+  8  python -m pytest tests -q  -> "77 passed, 1 warning in 7.36s"                                                 0
+  9  flutter build windows --release
+                                -> "√ Built build\windows\x64\runner\Release\ytm_app.exe"                          0
+
+Every step that rebuilds printed "√ Built build\windows\x64\runner\Debug\ytm_app.exe"
+before its test run; no step printed a failure. The unit/widget count (290) and
+the golden count (23) are unchanged from the Batch 3 sign-off, so this batch
+introduced no regression. Backend tests were run because backend/ is modified.
+
+====================================================================
+4. RELEASE BUILD AND SMOKE TEST (directly observed)
+====================================================================
+Build: `flutter build windows --release` -> EXIT=0,
+  √ Built build\windows\x64\runner\Release\ytm_app.exe
+
+Smoke launch (log: /tmp/ytm_backup/smoke.log). Observed, in order:
+  - launch at 22:12:01; process alive and holding a real top-level window:
+      tasklist /V -> ytm_app.exe  PID 17700  Status Running  Window Title "YT Music Client"
+  - engine initialised, no startup crash:
+      "[IMPORTANT:flutter/shell/platform/embedder/embedder_surface_gl_impeller.cc(126)]
+       Using the Impeller rendering backend (OpenGLESSDF)."
+      "package:media_kit_libs_windows_audio registered."
+  - backend readiness: the app SPAWNED its own sidecar
+      tasklist -> python.exe PID 23200
+      shared %TEMP%/ytmusic_sidecar_port.txt -> 8000
+      curl http://127.0.0.1:8000/health -> {"status":"ok"}  [HTTP 200]
+  - clean shutdown: `taskkill /PID 17700` (WM_CLOSE, not /F) ->
+      "SUCCESS: Sent termination signal to the process with PID 17700."
+      process gone; smoke.log -> "exe returned EXIT=0"
+      python.exe after shutdown -> none
+
+Not directly observed in the smoke run: clicking through navigation, Now
+Playing, Lyrics, Equalizer and Settings screens. This agent cannot drive the
+GUI, so those interactions are recorded as pending in section 9 rather than
+claimed. The screens themselves are covered by widget tests, goldens and routes
+(see phase5_screens.txt and the route table in app_router.dart).
+
+====================================================================
+5. DESIGN-DIFF AUDIT (section 2 of the brief)
+====================================================================
+5a. The light palette - files, selection path, verdict: INCOMPLETE / DEAD CODE
+    Introduced in ytm_app/lib/theme/app_theme.dart: a `Palette` class with
+    `Palette.dark` (wraps Tokens verbatim) and `Palette.light` (hand-written
+    values), and `AppTheme.build(Palette)` with `AppTheme.dark` / `AppTheme.light`.
+    It is NOT selected anywhere:
+      - lib/app.dart:30-31 hard-codes `theme: AppTheme.dark, themeMode: ThemeMode.dark`
+      - `grep -rnE "AppTheme|Palette|ThemeMode" lib test integration_test` outside
+        app_theme.dart returns only: AppTheme.dark in app.dart and in
+        specimen_golden_test.dart, primitives_test.dart, screen_states_test.dart.
+        `AppTheme.light` has ZERO references outside its own file.
+      - `AppSettings` (lib/core/app_settings.dart) has no theme field, so no
+        provider, token or stored preference can select it.
+      - the Settings screen states: "Theme: dark. This version ships one theme,
+        so there is nothing to switch."
+      - design.md:6 states the intended scope: "dark-only v1".
+      - `AppTheme.light` is not even built at startup, so it cannot throw.
+    Verdict: unreachable, unselectable code that contradicts the spec's stated
+    v1 scope. It has no user-visible effect. Per the brief it was NOT reverted.
+
+5b. sidebarWidth 220 -> 200: INTENTIONAL and spec-correct.
+    Evidence: design.md "Desktop measurements" -> "| Sidebar | 200 px base width;
+    16 px internal padding |". Consumed by lib/features/shell/nav_rail.dart:44
+    (`expanded ? Tokens.sidebarWidth : Tokens.sidebarRailWidth`).
+    The only thing wrong was the docstring beside it, which still quoted 220 -> corrected (2a).
+
+5c. titleBarHeight 40 -> 36: INTENTIONAL; no contradicting evidence.
+    Consumed by lib/features/shell/window_title_bar.dart:33 and :81.
+    design.md states no title-bar number (only "respect OS caption controls");
+    the token's own comment cites the Figma frames drawing a 36 px bar with a
+    46x36 caption hit area, and Tokens.captionButtonWidth is 46. Nothing in the
+    repo asserts 40.
+
+5d. Colour values: BACKED BY THE FIGMA EXPORT, BUT BOTH WRITTEN DOCS ARE STALE.
+    Changed in lib/theme/tokens.dart:
+      glass          white 6%  -> white 8%   (0x0FFFFFFF -> 0x14FFFFFF)
+      textSecondary  #A6A6A6   -> #A0A0A8
+      textMuted      #7A7A7A   -> #686870
+      glassFallback  -> #242427
+    The written specs still list the OLD values:
+      design.md:205-207   textSecondary #A6A6A6, textTertiary #7A7A7A, glass 6%
+      DESIGN_TOKENS.md:19 --glass: rgba(255,255,255,0.06)
+                          :24 --text-secondary #FFFFFF @55%
+                          :25 --text-muted #FFFFFF @32%
+    The working tree's claim is that these were re-extracted from the exported
+    Figma spec (design.pdf) and that the old values came from the earlier mock
+    draft. That claim was INDEPENDENTLY TESTED, not taken on trust. design.pdf's
+    FlateDecode streams were decompressed (269 streams) and their colour
+    operators extracted:
+      #A0A0A8 present 454x     #686870 present 64x     #242427 present 1x
+      #A6A6A6 present 0x       #7A7A7A present 0x
+      #FA2D48 present 59x      #FFFFFF present 328x   (accent/white agree)
+    So the two text colours and the fallback ARE the values the Figma export
+    carries, and the old ones are absent from it: the colour refresh is
+    intentional and evidence-backed.
+    UNRESOLVED: the glass tint. The PDF exposes no `/ca` `/CA` alpha operators
+    (0 found) so 6% vs 8% could not be settled from it; the code says 8% while
+    both written docs say 6%. Recorded as an open item (section 9), not "fixed",
+    because the brief forbids reverting the palette and I could not establish
+    the intended value. glassStrong stays 10% and borderStrong 16%, which match
+    both docs.
+
+5e. Tokens that now have NO consumers (dead, harmless, not edited):
+      pageSlide   (12 -> 0)  zero `Tokens.pageSlide` references in lib/
+      hoverScale  (new)      zero references
+      dHover      (new)      zero references
+    Because they are unread, their new values change nothing. The `hoverScale`
+    comment claims it is "Used by artwork tiles in Batch 3", which is not true
+    in this tree (lib/features/now_playing/artwork.dart does not reference it).
+    Recorded here; tokens.dart is an unrelated workstream's file and was left alone.
+
+5f. Golden diffs (measured old vs new, not blindly regenerated):
+    Phone and tablet goldens are TINT-ONLY - per-pixel mean delta <= 6.2 levels,
+    max delta <= 18, and 0.0% of changed pixels exceed 30 levels - exactly what
+    a glass/text-colour shift produces. `state_loading_phone` changed most in
+    area (20.10%) at a mean delta of only 2.7, consistent with the shimmer loop
+    changing from 1.2 s to 1.4 s (dShimmer) moving the gradient phase.
+    Desktop goldens show a REAL layout shift - max delta 255, with 26-42% of
+    changed pixels above 30 levels - which is the sidebar 220->200 and title bar
+    40->36 change moving the content column:
+      now_playing_desktop_1280x800            25.50% (meanD 13.9)
+      now_playing_desktop_1280x800_scale1_3   25.99% (meanD 15.7)
+      shell_home_desktop_1280x800             17.11% (meanD 50.7)
+      product_library_songs_desktop           6.56%  (meanD 59.4)
+      product_context_menu_desktop            6.54%  (meanD 59.5)
+      product_album_desktop                   5.50%  (meanD 55.9)
+      queue_desktop                           3.63%  (meanD 58.9)
+      (remaining 16 phone/tablet goldens: 0.33%-20.10%, meanD <= 6.2)
+    `flutter test test/golden` passing proves the images match what the code
+    renders. It does NOT prove they look right, and this file does not claim
+    they are visually approved (section 9).
+
+====================================================================
+6. SIDECAR LIFECYCLE AND CLEANUP
+====================================================================
+- Automated: `sidecar_lifecycle_test.dart -d windows` -> "starts an isolated real
+  sidecar, becomes healthy, and stops cleanly without touching the shared port
+  file" + "All tests passed!" EXIT=0, and `backend_api_test.dart` covers
+  "a stopped backend reports offline and is rediscovered on restart" (offline
+  recovery) within its 10/10.
+- Real launch: the built release app spawned its own sidecar
+  (python.exe PID 23200), which answered /health 200 on the published port 8000.
+  Closing the app exited it and left NO python process behind.
+- Cleanup verified after every probe:
+    tasklist    -> 0 ytm_app / python processes remaining
+    shared port file -> content '8000' BEFORE and AFTER the smoke run (no
+                        corruption); it was never written by the isolated probes,
+                        whose YTM_PORT_FILE pointed into a temp directory
+    probes ran on ports 8321 with isolated port files; the integration suites
+    self-isolate (8199/8201, fresh %TEMP% dirs)
+- No shared port-file state was corrupted, and no destructive command was aimed
+  at unrelated processes.
+
+====================================================================
+7. AUTHENTICATION VERIFICATION LEVEL
+====================================================================
+AUTOMATED AND VERIFIED
+  - The real backend on this machine reports the real stored session:
+      curl /auth/status -> {"logged_in":true,"error":null}  [HTTP 200]
+    (The session lives at %LOCALAPPDATA%/ytmusic_client/auth_headers.dat,
+    DPAPI-encrypted. No credential value was read, printed or stored.)
+  - Authenticated endpoints were exercised for real: /search returned 20 songs
+    per query, and /lyrics returned real lyrics (section 8).
+  - Reject paths are covered by the suites: /auth/cookies with no sign-in in
+    progress -> 409 and nothing stored; /auth/extension unsolicited -> 409;
+    isolated backend with no session -> /lyrics 401 "Not signed in.", which the
+    app maps to its signed-out state (widget-tested).
+PENDING - HUMAN
+  - The interactive browser sign-in hand-off: POST /auth/browser/start opens
+    music.youtube.com in the real browser and the companion extension posts the
+    session back. This needs a person. This batch did NOT fabricate a sign-in
+    and did NOT record any cookie or token.
+  - The signed-out GUI journey (what a signed-out user actually sees and how
+    they recover) was verified by widget tests/goldens and by the 401 mapping,
+    not by clicking through a signed-out app window.
+
+====================================================================
+8. EQUALIZER VERIFICATION LEVEL - AND THE LIVE LYRICS RESULT
+====================================================================
+EQUALIZER
+  What IS proven: the filter is real DSP, not a slider - `buildMpvAudioFilter`
+  emits an ffmpeg `equalizer` stage per band inside one lavfi graph (pure unit
+  tests); `EqualizerController` writes it and then READS IT BACK off the engine
+  (unit tests against RecordingEqualizerEngine, which honours the same
+  apply/read-back contract as LibmpvEqualizer); tokens/controller persist the
+  shape and re-apply it at startup; and where the engine cannot shape audio the
+  screen renders its unavailable state instead of dead controls.
+  What is NOT proven, and is recorded as pending: that the change is AUDIBLE,
+  and that the real `LibmpvEqualizer` native path behaves as the fake does.
+  A search of the tree shows the real path is exercised by NO integration test:
+      grep -rnE "LibmpvEqualizer|equalizer" integration_test test/support
+      -> only test/support/fake_engine.dart (the recording double)
+  It is reachable only by running the app, so hearing the result and driving the
+  real screen both need a human. No test was added for this: the brief forbids
+  new work in this batch, and writing a test that reimplements the engine path
+  would violate the project's "test through the real code path" rule.
+
+LYRICS - VERIFIED LIVE, END TO END, WITH REAL CONTENT
+  Against the real backend using this machine's real session, with only the port
+  file isolated (no lyrics text is reproduced here, and no credential was
+  touched):
+    search 'adele hello' -> HTTP 200, 20 songs -> picked a real song video id
+    GET /lyrics/<that id> -> HTTP 200
+        available=True  synced=True  lines=49  blank=0
+        source='Source: Musixmatch'
+        first startMs: [0, 6380, 11950, 17950, 23570, 30620]
+        monotonic non-decreasing: True   all startMs are ints: True
+  So the synced branch of the Lyrics screen - highlighting, following and
+  seeking to real timings - is fed by real, timed lyrics, not fabricated ones.
+  The "no lyrics" branch is real too: /lyrics/dQw4w9WgXcQ and /lyrics/jNQXAC9IVRw
+  returned HTTP 404 {"detail":"No lyrics are available for this track."}.
+
+====================================================================
+9. TESTS AND MANUAL CHECKS NOT RUN (and why)
+====================================================================
+H1. Audible equalizer - needs a human ear at the speakers. See section 8.
+H2. Visual approval of the 23 goldens - needs a human eye. Passing golden tests
+    prove determinism and agreement with the code, not correctness of the look.
+    The desktop images also embody the sidebar/title-bar geometry, so they need
+    an explicit yes/no from the owner.
+H3. Interactive browser sign-in - needs a person in a real browser (section 7).
+H4. Settings GUI round trip - "change a setting, quit, reopen, it is still
+    there" needs clicking in the window. The store level is covered
+    (settings_test.dart: write, reopen, malformed value, cleared preset, reset,
+    failing store, with SharedPreferences.setMockInitialValues).
+H5. GUI navigation in the release smoke test - the app was launched, showed a
+    real window, spawned a live sidecar and exited cleanly; clicking through
+    Now Playing / Lyrics / Equalizer / Settings was not possible for this agent.
+H6. Android - no device or emulator on this machine; nothing in Phase 5 was run
+    on Android.
+H7. Glass tint 6% vs 8% - unresolved; see 5d.
+H8. `flutter test integration_test -d windows` (all three files in one
+    invocation) still fails to relaunch the app between files ("Error waiting
+    for a debug connection: The log reader stopped unexpectedly"); each file
+    passes on its own and they were run one at a time (as in step 4).
+
+====================================================================
+10. DESIGN DECISIONS AND OUTSTANDING LIMITATIONS
+====================================================================
+- The light palette is dead code that contradicts design.md's "dark-only v1".
+  Decision: NOT reverted (brief), NOT wired up (would add a feature). It should
+  either be deleted or delivered as a real, selectable feature with a theme
+  preference; that is the owner's call.
+- The token colour refresh and the geometry changes are intentional and, for the
+  colours and the sidebar, corroborated by design.md and by design.pdf's actual
+  colour data. The written docs design.md / DESIGN_TOKENS.md now lag the code on
+  textSecondary, textMuted, glass and glassFallback; they should be updated (or
+  the code reverted) so one source of truth exists. Not changed here.
+- Three tokens (pageSlide, hoverScale, dHover) have no consumers; hoverScale's
+  comment overstates its status. Harmless, recorded not edited.
+- The Now Playing layout is unchanged by this batch; the desktop reflow in the
+  goldens comes from the sidebar/title-bar tokens, not from this batch.
+
+====================================================================
+11. IMPLEMENTATION-COMPLETE vs FULLY HUMAN-VERIFIED
+====================================================================
+IMPLEMENTATION-COMPLETE (proven here, in this tree):
+  - flutter analyze clean; 290 unit/widget tests; 23 goldens; 77 backend tests;
+    all three Windows integration suites; release build; release launch, sidecar
+    readiness and clean shutdown.
+  - Lyrics verified against the real authenticated backend, synced and untimed.
+  - Sidecar lifecycle, isolation and cleanup verified; no orphaned processes and
+    no corrupted shared port-file state.
+FULLY HUMAN-VERIFIED: NOT YET. Open: H1 (audible EQ), H2 (golden approval),
+H3 (browser sign-in), H4 (settings round trip), H5 (GUI click-through), H6 (Android),
+H7 (glass tint), H8 (batch integration invocation).
+
+Batch 4 stops here. No feature was added, no new phase begun, nothing committed
+or pushed, and every unrelated working-tree change was preserved.

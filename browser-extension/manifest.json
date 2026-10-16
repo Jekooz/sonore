@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "YT Music Client Helper",
+  "name": "Sonore Helper",
   "version": "1.0.0",
-  "description": "Hands your YouTube Music session cookies to the local YT Music Client app so you can sign in from your own browser. Cookies are sent only to 127.0.0.1 and are never stored by the extension.",
+  "description": "Hands your YouTube Music session cookies to the local Sonore app so you can sign in from your own browser. Cookies are sent only to 127.0.0.1 and are never stored by the extension.",
   "permissions": ["cookies", "storage"],
   "host_permissions": [
     "https://music.youtube.com/*",
@@ -10,7 +10,7 @@
     "http://127.0.0.1/*"
   ],
   "action": {
-    "default_title": "Sign in to YT Music Client",
+    "default_title": "Sign in to Sonore",
     "default_popup": "popup.html"
   },
   "background": {

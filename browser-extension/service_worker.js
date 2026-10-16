@@ -1,5 +1,5 @@
 /**
- * YT Music Client Helper — MV3 service worker.
+ * Sonore Helper — MV3 service worker.
  *
  * Reads the youtube.com cookie jar with chrome.cookies.getAll (which includes
  * HttpOnly cookies like __Secure-3PAPISID) and POSTs them to the local backend

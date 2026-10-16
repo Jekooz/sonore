@@ -654,7 +654,7 @@ namespace YtMusicClient.Views
             // toolbar button. Telling them otherwise leaves them waiting for a
             // hand-off that never starts (the 3-minute timeout then fires).
             SignInDetail.Text = "music.youtube.com should have opened in your default browser. " +
-                "Sign in there, then click the YT Music Client Helper icon in that browser's toolbar.";
+                "Sign in there, then click the Sonore Helper icon in that browser's toolbar.";
             _overlayAnimToken++;
             BrowserSignInOverlay.Visibility = Visibility.Visible;
             Motion.Fade(BrowserSignInOverlay, 0, 1, 0.22);

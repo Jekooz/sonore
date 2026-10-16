@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ytm_app/core/app_identity.dart';
 import 'package:ytm_app/features/shell/window_title_bar.dart';
 
 import '../support/harness.dart';
@@ -20,7 +21,7 @@ void main() {
   testWidgets('home — desktop 1280x800', (WidgetTester tester) async {
     await pumpAtSize(
       tester,
-      appScope(titleBar: const WindowTitleBar(title: 'YT Music Client')),
+      appScope(titleBar: const WindowTitleBar(title: appName)),
       size: kDesktop,
     );
     await expectLater(

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Sonore">
+  <title>Sonore app icon</title>
+  <!-- Black tile, corner radius 112, with a hairline white 16% inset stroke. -->
+  <rect width="512" height="512" rx="112" fill="#000000"/>
+  <rect x="0.5" y="0.5" width="511" height="511" rx="111.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="1"/>
+  <!-- Mark geometry: five rounded bars, stroke-width 40, round caps. -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round">
+    <line x1="120" y1="206" x2="120" y2="306"/>
+    <line x1="188" y1="151" x2="188" y2="361"/>
+    <line x1="256" y1="106" x2="256" y2="406"/>
+    <line x1="324" y1="171" x2="324" y2="341"/>
+    <line x1="392" y1="226" x2="392" y2="286"/>
+  </g>
+</svg>

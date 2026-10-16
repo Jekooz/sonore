@@ -16,6 +16,7 @@ Endpoints:
   GET  /library/albums          your saved albums
   GET  /library/songs           your saved songs
   GET  /library/subscriptions   channel subscriptions
+  POST /library/subscriptions   follow / unfollow one artist
   GET  /library/liked           liked songs
   GET  /search?q=...            search songs / albums / artists / playlists
   GET  /radio?videoId=...       real YT Music radio candidates for a seed song
@@ -58,6 +59,7 @@ from services.ytmusic_client import (
     REQUIRED_COOKIES,
     AuthError,
     StorageError,
+    sanitize_account,
     ytmusic_service,
 )
 
@@ -102,9 +104,12 @@ def auth_status():
     try:
         signed_in = ytmusic_service.is_signed_in()
         return JSONResponse(content={"logged_in": signed_in, "error": None})
-    except Exception as e:
+    except Exception:
+        # Audit finding 6: str/repr of an upstream error can carry request
+        # detail (a real leak was captured live during this audit). The log is
+        # the place for the full text; the API side stays generic.
         logger.exception("auth/status failed")
-        return JSONResponse(content={"logged_in": False, "error": str(e)})
+        return JSONResponse(content={"logged_in": False, "error": None})
 
 
 def _log_cookie_count(cookies: dict, source: str, missing: list[str] | None = None) -> None:
@@ -151,17 +156,20 @@ def _validate_and_store(cookies: dict, source: str) -> dict:
     try:
         account = ytmusic_service.verify_candidate(cookies)
     except AuthError as e:
-        logger.error("Candidate session from %s is incomplete.", source)
+        logger.error("Candidate session from %s is incomplete: %s", source, e)
+        # detail is OUR wording only: AuthError texts never embed upstream
+        # exception text (audit finding 6).
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        # Log the exception TYPE only: str/repr of an upstream error can carry
-        # request detail, and this process must never record session material.
+        # Log the full text server-side; the client gets a generic line. The
+        # previous ": {e}" echoed a complete upstream JSON document into the
+        # HTTP response (captured live in the audit run).
         logger.error(
-            "Candidate session from %s was rejected by YouTube (%s).",
-            source, type(e).__name__)
+            "Candidate session from %s was rejected by YouTube (%s): %s",
+            source, type(e).__name__, e)
         raise HTTPException(
             status_code=401,
-            detail=f"Sign-in could not be verified with YouTube Music: {e}",
+            detail="Sign-in could not be verified with YouTube Music. Try again, then sign in again.",
         )
 
     # Only now persist. StorageError subclasses AuthError, so it goes first.
@@ -169,7 +177,7 @@ def _validate_and_store(cookies: dict, source: str) -> dict:
         result = ytmusic_service.store_session(cookies)
     except StorageError as e:
         logger.error("Credential storage failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not store the session locally.")
     except Exception as e:
         logger.exception("Storing session failed")
         raise HTTPException(status_code=500, detail=f"Could not store session: {e}")
@@ -344,9 +352,13 @@ def auth_browser_start(request: Request):
     Also rotates the handshake token and publishes {port, token} into the
     extension folder -- the only location the extension is able to read it from.
     """
-    global _browser_session
+    global _browser_session, _extension_cookies
 
     _clear_browser_session()
+    # Security fix (audit finding 9): without this global declaration this
+    # assignment created a LOCAL, module-invisible variable, so a residual jar
+    # from a cancelled or timed-out attempt stayed in module memory after every
+    # new attempt cleared the event only.
     _extension_cookies = None
     _extension_cookies_event.clear()
 
@@ -439,15 +451,22 @@ def _data(method: str, **kwargs):
     try:
         return ytmusic_service.call(method, **kwargs)
     except AuthError as e:
+        # AuthError texts are OUR wording (audit finding 6): safe to surface.
         raise HTTPException(status_code=401, detail=str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("%s failed", method)
-        raise HTTPException(status_code=502, detail=f"YouTube Music request failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="YouTube Music request failed. Try again shortly.",
+        )
 
 
 @app.get("/account")
 def account():
-    return JSONResponse(content=_data("get_account_info"))
+    # Sanitized here as well as in verify_candidate: the service's `accountName`
+    # has answered with one of its own chrome labels ("Home") on a real session,
+    # and Settings must never show that as the signed-in account.
+    return JSONResponse(content=sanitize_account(_data("get_account_info")))
 
 
 @app.get("/home")
@@ -663,6 +682,12 @@ def search(
 # /stream).
 _VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
 
+# Artist channel ids are longer than a video id (a real one is "UC" plus 22
+# characters, and library rows use the "MPLAUC" browse form). The pattern is
+# deliberately permissive on the prefix and bounded in length: a malformed id is
+# rejected here, everything else is left to the provider to accept or refuse.
+_ARTIST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
+
 # Sensible limits on candidate counts and stored-history operations.
 MAX_CANDIDATES = 50
 MAX_EXCLUDE_IDS = 200
@@ -686,6 +711,13 @@ class RatingIn(BaseModel):
 
     videoId: str = Field(pattern=_VIDEO_ID_RE.pattern)
     rating: Literal["LIKE", "DISLIKE", "INDIFFERENT"]
+
+
+class SubscriptionIn(BaseModel):
+    """Follow or unfollow one artist channel."""
+
+    artistId: str = Field(pattern=_ARTIST_ID_RE.pattern)
+    subscribed: bool
 
 
 def _validate_video_id(video_id: str) -> None:
@@ -720,11 +752,13 @@ def _ranked_candidates(seed: str, limit: int, exclude: set[str]) -> dict:
             ytmusic_service.call, seed, max(limit * 2, 25)
         )
     except AuthError as e:
+        # AuthError texts are OUR wording (audit finding 6): safe to surface.
         raise HTTPException(status_code=401, detail=str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("radio candidate fetch failed")
         raise HTTPException(
-            status_code=502, detail=f"YouTube Music request failed: {e}"
+            status_code=502,
+            detail="YouTube Music request failed. Try again shortly.",
         )
 
     # The seed itself, the whole current queue and recent repeats must not
@@ -831,12 +865,48 @@ def ratings(payload: RatingIn):
     )
 
 
+# The subscription toggle lives here rather than beside the other /library/
+# reads on purpose: its request model (defined with the others, above) has to
+# exist before FastAPI builds the route, and the model block sits after the
+# library reads.
+@app.post("/library/subscriptions")
+def set_subscription(payload: SubscriptionIn):
+    """Follow or unfollow one artist channel.
+
+    A genuine account change — the same operation the YouTube Music UI performs.
+    ytmusicapi's ``subscribe_artist`` takes one channel; unsubscribing goes
+    through ``unsubscribe_artists`` (a list), which is the only remove method the
+    library exposes. The plural subscribe form is deprecated upstream, so it is
+    deliberately not used.
+    """
+    if payload.subscribed:
+        _data("subscribe_artist", channelId=payload.artistId)
+    else:
+        _data("unsubscribe_artists", channelIds=[payload.artistId])
+    return JSONResponse(
+        content={"artistId": payload.artistId, "subscribed": payload.subscribed}
+    )
+
+
 # ---------------- playback ----------------
 
 # googlevideo URLs are signed and expire in about 6 hours; keep them a little
 # less than that so a listening session never starts playing a dead link.
+#
+# Audit finding 10: the cache had no size cap and entries were never evicted,
+# only read with a freshness check — one long-lived process would grow the map
+# without bound. The entries are now evicted on insert (expired first, then the
+# soonest-to-expire) and a hard cap bounds the map size.
 _STREAM_CACHE: dict[str, tuple[str, float]] = {}
 _STREAM_TTL_SECONDS = 4 * 60 * 60
+_STREAM_CACHE_MAX = 240
+
+# Audit finding 10: /stream called _resolve_stream directly, so nothing
+# limited how many yt-dlp subprocesses could run concurrently (a burst of
+# distinct tracks, a prefetch racing a manual play). This gate bounds the
+# live subprocesses; callers beyond it queue briefly and then get 503.
+_RESOLVE_GATE = threading.BoundedSemaphore(2)
+_RESOLVE_GATE_WAIT_SECONDS = 20
 
 # yt-dlp ships as a WinGet exe on this machine; resolve it at import time so a
 # missing binary produces one clear 503 instead of an unhandled crash.
@@ -903,6 +973,15 @@ def _resolve_stream(video_id: str) -> str:
     if cached and cached[1] > now:
         return cached[0]
 
+    # Bound the concurrent yt-dlp subprocesses (audit finding 10): callers
+    # beyond the two live gates queue briefly, then get a clean 503 instead of
+    # piling dozens of subprocesses up.
+    if not _RESOLVE_GATE.acquire(timeout=_RESOLVE_GATE_WAIT_SECONDS):
+        logger.warning("yt-dlp still busy after %ss for %s", _RESOLVE_GATE_WAIT_SECONDS, video_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Stream resolution is busy. Retry in a moment.",
+        )
     try:
         proc = subprocess.run(
             [
@@ -928,20 +1007,39 @@ def _resolve_stream(video_id: str) -> str:
             status_code=504,
             detail="Timed out resolving a stream URL for this track.",
         )
+    finally:
+        _RESOLVE_GATE.release()
 
     lines = [ln.strip() for ln in (proc.stdout or "").splitlines() if ln.strip()]
     if proc.returncode != 0 or not lines:
         err = [ln for ln in (proc.stderr or "").splitlines() if ln.strip()]
         reason = err[-1] if err else f"yt-dlp exited {proc.returncode}"
+        # Server log keeps the full stderr (audit finding 6): yt-dlp's output
+        # has already been seen echoing signer URLs and account context, so the
+        # HTTP detail stays generic.
         logger.error("yt-dlp failed for %s: %s", video_id, reason)
         raise HTTPException(
             status_code=502,
-            detail=f"Could not resolve a stream for this track: {reason}",
+            detail="Could not resolve a stream for this track. It may be unavailable.",
         )
 
     url = lines[-1]
-    _STREAM_CACHE[video_id] = (url, now + _STREAM_TTL_SECONDS)
+    _store_stream_url(video_id, url, now + _STREAM_TTL_SECONDS)
     return url
+
+
+def _store_stream_url(video_id: str, url: str, expires_at: float) -> None:
+    """Insert into the stream cache with eviction (audit finding 10).
+
+    Expired entries and, if the map is still full, the soonest-to-expire
+    entries are dropped first. Dict mutation happens on single atomic ops per
+    key, which is enough here: entries are independently recomputable.
+    """
+    if len(_STREAM_CACHE) >= _STREAM_CACHE_MAX:
+        evict = len(_STREAM_CACHE) - _STREAM_CACHE_MAX + 1
+        for vid, _ in sorted(_STREAM_CACHE.items(), key=lambda kv: kv[1][1])[:evict]:
+            _STREAM_CACHE.pop(vid, None)
+    _STREAM_CACHE[video_id] = (url, expires_at)
 
 
 @app.get("/stream/{video_id}")

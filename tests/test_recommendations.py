@@ -176,11 +176,17 @@ def test_radio_provider_auth_error_maps_to_401(client, monkeypatch):
     assert "signed in" in resp.json()["detail"].lower()
 
 
-def test_radio_provider_failure_maps_to_502_with_readable_detail(client, monkeypatch):
+def test_radio_provider_failure_maps_to_502_with_sanitized_detail(client, monkeypatch):
+    """Audit finding 6: the 502 detail must stay generic — upstream exception
+    text ("boom" here, real YouTube JSON in production) leaks server internals
+    to any local client. The full error lives in the server log only."""
     install(monkeypatch, FakeProvider(error=RuntimeError("boom")))
     resp = client.get("/radio", params={"videoId": VALID_ID})
     assert resp.status_code == 502
-    assert "boom" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    # Generic but actionable for the user; nothing from the exception itself.
+    assert "Try again" in detail, detail
+    assert "boom" not in resp.text, "upstream exception text must not reach the client"
     assert "cookie" not in resp.text.lower()
 
 
@@ -557,10 +563,14 @@ def test_rating_provider_auth_error_is_401(client, monkeypatch):
 
 
 def test_rating_provider_failure_is_502(client, monkeypatch):
+    """Audit finding 6: the 502 detail must stay generic — the exception text
+    stays in the server log, never in the HTTP response."""
     install(monkeypatch, FakeProvider(error=RuntimeError("upstream 500")))
     resp = client.post("/ratings", json={"videoId": VALID_ID, "rating": "LIKE"})
     assert resp.status_code == 502
-    assert "upstream 500" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert "Try again" in detail, detail
+    assert "upstream 500" not in resp.text, "upstream exception text must not reach the client"
 
 
 # -------------------------------------------- provider familiarity

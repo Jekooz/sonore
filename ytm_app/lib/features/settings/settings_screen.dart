@@ -37,21 +37,24 @@ class SettingsScreen extends ConsumerWidget {
     final AppSettingsNotifier controller =
         ref.read(appSettingsProvider.notifier);
 
+    final bool isDesktop =
+        MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
+    final double margin =
+        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+
     return Scaffold(
       backgroundColor: Tokens.bg,
       body: SafeArea(
         child: Column(
           children: <Widget>[
-            ScreenHeader(
-              title: 'Settings',
-              onBack: () => context.go(AppDestination.home.path),
-              backLabel: 'Back to Home',
-            ),
-            const _SaveStatusBanner(),
+            const _StickyHeader(),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Tokens.pageMarginPhone,
+                // One content column: the same margin on both sides, and the
+                // rows below give up ListTile's own inset, so section titles,
+                // notes and buttons all start and end on the same edges.
+                padding: EdgeInsets.symmetric(
+                  horizontal: margin,
                   vertical: Tokens.s8,
                 ),
                 children: <Widget>[
@@ -163,7 +166,8 @@ class SettingsScreen extends ConsumerWidget {
                     'assets/fonts.',
                   ),
                   const SizedBox(height: Tokens.s24),
-                  Center(
+                  Align(
+                    alignment: Alignment.centerLeft,
                     child: PillButton(
                       icon: AppIcons.arrowClockwise,
                       label: 'Reset preferences',
@@ -214,6 +218,32 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
+/// The pinned header: the page title with the save status under it.
+///
+/// It sits outside the scrolling list, so it stays put while the page scrolls,
+/// and it paints the page background, so it is explicitly opaque rather than
+/// relying on what happens to be behind it.
+class _StickyHeader extends StatelessWidget {
+  const _StickyHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: Tokens.bg),
+      child: Column(
+        children: <Widget>[
+          ScreenHeader(
+            title: 'Settings',
+            onBack: () => context.go(AppDestination.home.path),
+            backLabel: 'Back to Home',
+          ),
+          const _SaveStatusBanner(),
+        ],
+      ),
+    );
+  }
+}
+
 /// Says what the last preference write did, so "it did not stick" is never a
 /// silent surprise.
 class _SaveStatusBanner extends ConsumerWidget {
@@ -229,9 +259,12 @@ class _SaveStatusBanner extends ConsumerWidget {
         : (ref.read(settingsSaveStatusProvider.notifier).message ??
             'Preferences could not be saved.');
 
+    final bool isDesktop =
+        MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Tokens.pageMarginPhone,
+      padding: EdgeInsets.symmetric(
+        horizontal:
+            isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone,
       ),
       child: Row(
         children: <Widget>[
@@ -276,7 +309,7 @@ class _Note extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: Tokens.s8),
-      child: Text(text, style: Tokens.caption),
+      child: Text(text, style: Tokens.caption, textAlign: TextAlign.left),
     );
   }
 }
@@ -302,6 +335,9 @@ class _SwitchRow extends StatelessWidget {
       child: SwitchListTile(
         value: value,
         activeThumbColor: Tokens.accent,
+        // No inset of its own: the row shares the list's content column, so the
+        // control sits on the same right edge the notes end on.
+        contentPadding: EdgeInsets.zero,
         title: Text(title, style: Tokens.rowTitle),
         subtitle: Text(subtitle, style: Tokens.caption),
         onChanged: onChanged,
@@ -338,6 +374,7 @@ class _SliderRow extends StatelessWidget {
       label: title,
       value: label,
       child: ListTile(
+        contentPadding: EdgeInsets.zero,
         title: Text(title, style: Tokens.rowTitle),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -379,6 +416,7 @@ class _LinkRow extends StatelessWidget {
       button: true,
       label: title,
       child: ListTile(
+        contentPadding: EdgeInsets.zero,
         leading: Icon(icon, size: Tokens.iconSize, color: Tokens.textSecondary),
         title: Text(title, style: Tokens.rowTitle),
         subtitle: Text(subtitle, style: Tokens.caption),
@@ -433,7 +471,8 @@ class _Diagnostics extends ConsumerWidget {
       children: <Widget>[
         _KeyValueRow(label: 'Music service', value: backend),
         _KeyValueRow(label: 'Local runtime', value: runtime),
-        Center(
+        Align(
+          alignment: Alignment.centerLeft,
           child: PillButton(
             icon: AppIcons.arrowClockwise,
             label: 'Check again',
@@ -493,13 +532,22 @@ class _Account extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        // The account's own name when the service states one, otherwise the
+        // real channel handle from the same session. The service answers with
+        // one of its own chrome labels ("Home") on some sessions, which the
+        // sidecar now drops rather than passing on — so this never shows a
+        // navigation label as if it were the account, and falls back to a
+        // neutral label when there is nothing real to name.
         _KeyValueRow(
           label: 'Signed in as',
-          value: connection?.accountName ?? 'Your account',
+          value: connection?.accountName ??
+              connection?.handle ??
+              'Your account',
         ),
-        Center(
+        Align(
+          alignment: Alignment.centerLeft,
           child: PillButton(
-            icon: AppIcons.close,
+            icon: AppIcons.signOut,
             label: 'Sign out',
             onPressed: () => _confirmSignOut(context, ref),
           ),

@@ -62,7 +62,7 @@ def detect_default_browser() -> str:
     try:
         with winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
-            r"Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice",
+            r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
         ) as key:
             progid, _ = winreg.QueryValueEx(key, "ProgId")
         progid_upper = (progid or "").upper()

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
@@ -138,6 +139,85 @@ void main() {
           throwsA(isA<YtmSignedOutException>()),
         );
       }
+    });
+
+    testWidgets('no real card or row subtitle is a stringified object',
+        (WidgetTester tester) async {
+      // The live version of the subtitle bug: a Home rail playlist card states
+      // its owner as a list of objects, and the library lists state a count
+      // beside their owner. Every row the real sidecar returns is checked, so
+      // "[{name: …}]" cannot reach a card again.
+      if (!signedIn) {
+        // Stated rather than silent: a signed-out run cannot exercise this, and
+        // a passing tick must not be read as coverage.
+        debugPrint('SKIPPED: no real session, so there are no real rows to check');
+        return;
+      }
+      debugPrint('RUNNING against the real signed-in service');
+      final YtmRepository repo = repository;
+      final List<MediaItem> items = <MediaItem>[
+        for (final HomeRow row in await repo.home()) ...row.items,
+      ];
+      for (final LibrarySegment segment in LibrarySegment.values) {
+        if (segment == LibrarySegment.history) continue;
+        items.addAll(await repo.library(segment));
+      }
+      final SearchResults results = await repo.search('lofi');
+      items.addAll(<MediaItem>[
+        ...results.songs,
+        ...results.albums,
+        ...results.artists,
+        ...results.playlists,
+      ]);
+
+      expect(items, isNotEmpty, reason: 'the real service returned nothing');
+      for (final MediaItem item in items) {
+        expect(
+          item.subtitle,
+          isNot(matches(RegExp(r'[\[\{].*[\]\}]'))),
+          reason: 'subtitle of "${item.title}"',
+        );
+      }
+
+      // And the row that used to render the list is named, not empty: an owned
+      // playlist states its owner and its track count.
+      final Iterable<MediaItem> playlists = (await repo
+              .library(LibrarySegment.playlists))
+          .where((MediaItem item) => item.subtitle.isNotEmpty);
+      expect(playlists, isNotEmpty);
+      expect(
+        playlists.any((MediaItem item) => item.subtitle.endsWith('tracks')),
+        isTrue,
+        reason: 'a playlist with a count states it',
+      );
+    });
+
+    testWidgets('the real account is never one of the service\'s own labels',
+        (WidgetTester tester) async {
+      // The service answered `accountName: "Home"` for this session (measured
+      // live); the sidecar now drops a label like that and the app falls back to
+      // the real handle, so Settings can never say "Signed in as Home".
+      if (!signedIn) {
+        debugPrint('SKIPPED: no real session, so there is no real account to read');
+        return;
+      }
+      debugPrint('RUNNING against the real signed-in service');
+      final Map<String, dynamic> account = await client.account();
+      final String? name = account['accountName'] as String?;
+
+      expect(
+        name,
+        isNot(
+          anyOf('Home', 'Search', 'Library', 'Settings', 'Now Playing', 'Explore'),
+        ),
+      );
+      // Whatever the service said, the connection is usable and never blank.
+      final YtmConnection connection = await repository.connection();
+      expect(connection.status, YtmStatus.ready);
+      expect(
+        connection.accountName ?? connection.handle ?? 'Your account',
+        isNotEmpty,
+      );
     });
 
     testWidgets('a real stream request resolves through yt-dlp',

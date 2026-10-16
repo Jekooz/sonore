@@ -198,7 +198,8 @@ class PlaybackController extends Notifier<PlaybackState> {
       index: nextIndex,
       loadToken: reload ? state.loadToken + 1 : state.loadToken,
       position: reload ? Duration.zero : state.position,
-      reportedDuration: reload ? null : state.reportedDuration,
+      // The removed track's length is not the new track's length.
+      clearReportedDuration: reload,
     );
   }
 
@@ -219,7 +220,10 @@ class PlaybackController extends Notifier<PlaybackState> {
       isPlaying: true,
       position: Duration.zero,
       buffered: Duration.zero,
-      reportedDuration: null,
+      // Until the engine reports this track's own length, the bar and the time
+      // labels fall back to the track's metadata duration — never to whatever
+      // the track before it happened to be.
+      clearReportedDuration: true,
       clearError: true,
       loadToken: state.loadToken + 1,
     );
@@ -339,7 +343,7 @@ class PlaybackController extends Notifier<PlaybackState> {
       loadToken: state.loadToken + 1,
       position: Duration.zero,
       buffered: Duration.zero,
-      reportedDuration: null,
+      clearReportedDuration: true,
       isPlaying: true,
     );
   }

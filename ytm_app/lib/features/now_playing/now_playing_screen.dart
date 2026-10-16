@@ -8,7 +8,6 @@ import '../../audio/track.dart';
 import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
-import '../../ui/art_tile.dart';
 import '../../ui/format.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/screen_states.dart';
@@ -20,9 +19,9 @@ import 'transport_pill.dart';
 
 /// Now Playing, the primary experience.
 ///
-/// Compact layouts (phone and tablet) show the fan carousel of the queue;
-/// desktop shows a single large artwork with the queue panel on the right.
-/// The ambient wash behind everything comes only from the current artwork.
+/// Every size shows the fan carousel of the queue as its centre; desktop adds
+/// the Up Next panel on the right. The ambient wash behind everything comes only
+/// from the current artwork.
 ///
 /// It renders whatever the shared playback state says. In this phase no audio
 /// engine is attached, so in the shipped app the player is empty and this
@@ -82,7 +81,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       );
     }
 
-    final ArtworkResolver artwork = ref.watch(artworkResolverProvider);
     final AmbientPaletteLoader palette =
         ref.watch(ambientPaletteLoaderProvider);
 
@@ -96,7 +94,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         ),
         SafeArea(
           child: isDesktop
-              ? _desktopLayout(state, track, artwork)
+              ? _desktopLayout(state, track)
               : _compactLayout(state, track),
         ),
       ],
@@ -152,11 +150,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     );
   }
 
-  Widget _desktopLayout(
-    PlaybackState state,
-    Track track,
-    ArtworkResolver artwork,
-  ) {
+  Widget _desktopLayout(PlaybackState state, Track track) {
     return Row(
       children: <Widget>[
         Expanded(
@@ -164,10 +158,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             padding: const EdgeInsets.all(Tokens.pageMarginDesktop),
             child: Column(
               children: <Widget>[
-                ArtTile(
-                  size: Tokens.artworkMaxDesktop,
-                  radius: Tokens.rLarge,
-                  image: artwork(track.artworkUrl),
+                // The same fan carousel the compact layout uses: on desktop the
+                // centre is the queue too, with the panel beside it rather than
+                // a single lone cover.
+                SizedBox(
+                  height: Tokens.artworkMaxPhone + Tokens.s48,
+                  child: const QueueCarousel(),
                 ),
                 const SizedBox(height: Tokens.s32),
                 Text(

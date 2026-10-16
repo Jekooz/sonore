@@ -8,16 +8,20 @@ import '../../theme/tokens.dart';
 import '../../ui/art_tile.dart';
 import 'artwork.dart';
 
-/// Fan carousel of the queue.
+/// Fan carousel of the queue — the centre of Now Playing at every size.
 ///
 /// Spec: neighbours sit at scale 0.8, rotateY 35 degrees at perspective 0.001,
 /// and fade to 0.35 opacity; the carousel snaps on a spring, and the current
 /// artwork scales between 1.0 (playing) and 0.86 (paused). The transform is
 /// driven by the page offset, so the motion follows the finger and is
-/// interruptible.
+/// interruptible. A tap on a neighbour skips straight to it.
 ///
-/// Swiping changes track through the shared playback controller, so the mini
-/// player and queue panel follow immediately.
+/// Reduce Motion replaces the whole thing with a flat row: no rotation, no
+/// perspective, no scaling and no fade — but the same queue, the same swipe and
+/// the same tap-to-skip.
+///
+/// Swiping (or tapping) changes track through the shared playback controller, so
+/// the mini player and queue panel follow immediately.
 class QueueCarousel extends ConsumerStatefulWidget {
   const QueueCarousel({super.key});
 
@@ -42,6 +46,8 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
     final PlaybackState state = ref.watch(playbackProvider);
     if (!state.hasTrack) return const SizedBox.shrink();
 
+    final bool reduceMotion = MediaQuery.of(context).disableAnimations;
+
     // Follow queue changes that did not come from this carousel (next/previous).
     ref.listen<int>(playbackProvider.select((PlaybackState s) => s.index),
         (int? previous, int next) {
@@ -50,7 +56,7 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
       if (shown == next) return;
       _pageController.animateToPage(
         next,
-        duration: Tokens.dPageChange,
+        duration: reduceMotion ? Duration.zero : Tokens.dPageChange,
         curve: Tokens.curvePageChange,
       );
     });
@@ -64,11 +70,32 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
           ref.read(playbackProvider.notifier).playAt(index),
       itemBuilder: (BuildContext context, int index) {
         final Track track = state.queue[index];
+        final bool isCurrent = index == state.index;
 
         return LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double artSize =
                 constraints.maxWidth.clamp(0.0, Tokens.artworkMaxPhone);
+            final Widget art = ArtTile(
+              size: artSize,
+              radius: Tokens.rLarge,
+              image: artwork(track.artworkUrl),
+            );
+
+            if (reduceMotion) {
+              // Flat row: every cover is the same size and fully opaque, and a
+              // tap on any of the neighbours skips to it.
+              return Center(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: isCurrent
+                      ? null
+                      : () =>
+                          ref.read(playbackProvider.notifier).playAt(index),
+                  child: art,
+                ),
+              );
+            }
 
             return AnimatedBuilder(
               animation: _pageController,
@@ -76,7 +103,8 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
                 double delta = 0;
                 if (_pageController.hasClients &&
                     _pageController.position.hasContentDimensions) {
-                  delta = (_pageController.page ?? state.index.toDouble()) - index;
+                  delta =
+                      (_pageController.page ?? state.index.toDouble()) - index;
                 }
                 final double clamped = delta.clamp(-1.0, 1.0);
                 final double scale = 1 -
@@ -100,17 +128,22 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
               },
               child: Center(
                 child: AnimatedScale(
-                  scale: index == state.index
+                  scale: isCurrent
                       ? (state.isPlaying
                           ? Tokens.artworkPlayingScale
                           : Tokens.artworkPausedScale)
                       : Tokens.artworkPlayingScale,
                   duration: Tokens.dPageChange,
                   curve: Tokens.curveSpring,
-                  child: ArtTile(
-                    size: artSize,
-                    radius: Tokens.rLarge,
-                    image: artwork(track.artworkUrl),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    // Tapping the cover already in the centre is not a skip;
+                    // the transport owns play/pause.
+                    onTap: isCurrent
+                        ? null
+                        : () =>
+                            ref.read(playbackProvider.notifier).playAt(index),
+                    child: art,
                   ),
                 ),
               ),

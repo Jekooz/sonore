@@ -62,7 +62,20 @@ class _PressableState extends State<Pressable> {
                 minWidth: Tokens.minTouchTarget,
                 minHeight: Tokens.minTouchTarget,
               ),
-              child: Center(child: widget.child),
+              // Factors of 1 shrink-wrap to the child instead of expanding to
+              // whatever width the parent offers. Without them a pressable took
+              // the full width it was handed and centred its child inside, so a
+              // pill in a Wrap occupied a row of its own and a button in a
+              // stretched column was centred rather than starting at the left
+              // edge. A child that genuinely wants the whole width (a full-width
+              // row, a stretched box) still gets it. The 48x48 minimum above
+              // keeps the touch target intact either way.
+              child: Align(
+                alignment: Alignment.center,
+                widthFactor: 1,
+                heightFactor: 1,
+                child: widget.child,
+              ),
             ),
           ),
         ),

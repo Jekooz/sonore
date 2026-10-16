@@ -20,9 +20,8 @@ class YtmApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final double maxScale = ref.watch(
-      appSettingsProvider.select((AppSettings settings) => settings.textScale),
-    );
+    final AppSettings settings = ref.watch(appSettingsProvider);
+    final double maxScale = settings.textScale;
 
     return MaterialApp.router(
       title: 'YT Music Client',
@@ -31,11 +30,21 @@ class YtmApp extends ConsumerWidget {
       themeMode: ThemeMode.dark,
       routerConfig: router,
       builder: (BuildContext context, Widget? child) {
+        // The Reduce motion preference overrides the platform flag, so one
+        // switch turns every animated transition in the app into a plain
+        // cross-fade. It is folded into MediaQuery rather than read screen by
+        // screen because every animated widget already asks MediaQuery.
+        final MediaQueryData media = MediaQuery.of(context);
         return SidecarStartupGate(
-          child: MediaQuery.withClampedTextScaling(
-            minScaleFactor: Tokens.textScaleMin,
-            maxScaleFactor: maxScale,
-            child: child!,
+          child: MediaQuery(
+            data: media.copyWith(
+              disableAnimations: media.disableAnimations || settings.reduceMotion,
+            ),
+            child: MediaQuery.withClampedTextScaling(
+              minScaleFactor: Tokens.textScaleMin,
+              maxScaleFactor: maxScale,
+              child: child!,
+            ),
           ),
         );
       },

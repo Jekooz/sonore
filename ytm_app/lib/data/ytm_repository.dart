@@ -132,6 +132,33 @@ class YtmRepository {
     return _items(await _api.library(segment.endpoint));
   }
 
+  /// GET /library/subscriptions — the channel ids the account follows.
+  ///
+  /// Returned as [artistChannelKey]s so the Home hero's Follow button can
+  /// compare a featured release's artist against it without caring which of the
+  /// service's two artist id forms each side happened to use.
+  Future<Set<String>> subscribedArtistIds() async {
+    final List<dynamic> rows = await _api.subscriptions();
+    final Set<String> ids = <String>{};
+    for (final dynamic row in rows) {
+      if (row is! Map<String, dynamic>) continue;
+      final String id = ((row['browseId'] as String?) ??
+              (row['channelId'] as String?) ??
+              '')
+          .trim();
+      if (id.isEmpty) continue;
+      ids.add(artistChannelKey(id));
+    }
+    return ids;
+  }
+
+  /// POST /library/subscriptions — follow or unfollow an artist.
+  ///
+  /// A real capability: the sidecar forwards it to ytmusicapi, so the change
+  /// lands on the user's account rather than only in this session.
+  Future<void> setArtistSubscribed(String artistId, bool subscribed) =>
+      _api.setArtistSubscribed(artistId, subscribed);
+
   /// GET /listening/history — what this app played, newest first.
   ///
   /// A row is only built when the stored event carried a title, because a row
@@ -295,6 +322,16 @@ final FutureProvider<YtmConnection> connectionProvider =
 final FutureProvider<List<HomeRow>> homeProvider =
     FutureProvider<List<HomeRow>>(
   (ref) => ref.watch(ytmRepositoryProvider).home(),
+);
+
+/// The artists the account follows, as [artistChannelKey]s.
+///
+/// The Home hero reads this so its Follow button shows the real state instead
+/// of guessing; a sidecar that cannot answer leaves it null, which the button
+/// treats as "not following yet".
+final FutureProvider<Set<String>> subscribedArtistsProvider =
+    FutureProvider<Set<String>>(
+  (ref) => ref.watch(ytmRepositoryProvider).subscribedArtistIds(),
 );
 
 /// One library segment. Family types are not exported by flutter_riverpod, so

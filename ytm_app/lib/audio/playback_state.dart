@@ -102,6 +102,15 @@ class PlaybackState {
     bool? isLoading,
     String? error,
     bool clearError = false,
+
+    /// Drop [reportedDuration] instead of keeping it.
+    ///
+    /// A nullable field cannot be reset through this method's `??` default, so
+    /// "start this track over" has to say so explicitly: without it a track
+    /// change kept the previous track's engine-reported length, and the
+    /// progress fill and the time labels were computed against the wrong
+    /// duration until (or unless) the engine reported the new one.
+    bool clearReportedDuration = false,
     int? loadToken,
     int? seekToken,
     Duration? seekRequest,
@@ -112,12 +121,13 @@ class PlaybackState {
       isPlaying: isPlaying ?? this.isPlaying,
       position: position ?? this.position,
       buffered: buffered ?? this.buffered,
-      reportedDuration: reportedDuration ?? this.reportedDuration,
       repeat: repeat ?? this.repeat,
       shuffle: shuffle ?? this.shuffle,
       autoplay: autoplay ?? this.autoplay,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
+      reportedDuration:
+          clearReportedDuration ? null : (reportedDuration ?? this.reportedDuration),
       loadToken: loadToken ?? this.loadToken,
       seekToken: seekToken ?? this.seekToken,
       seekRequest: seekRequest ?? this.seekRequest,

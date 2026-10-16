@@ -20,3 +20,11 @@ YTM Client UI.html
 
 # Temporary extraction folders used while auditing design exports
 .audit_design_extract/
+
+# ---- Regenerable build artifacts (never commit these again) ---------------
+build/
+dist/
+*.zip
+*.exe
+proof/*.txt
+proof/golden_review/

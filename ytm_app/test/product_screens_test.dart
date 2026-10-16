@@ -205,6 +205,23 @@ void main() {
       expect(revealed, <String>[r'C:\Program Files\Sonore\browser-extension']);
     });
 
+    testWidgets('the sign-in instructions still fit at the accessibility text '
+        'scale', (WidgetTester tester) async {
+      // This copy is long by necessity: it names a folder and a manual step. A
+      // column that no longer fits reports a RenderFlex overflow, which fails
+      // this test rather than reaching a user as a clipped sentence.
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/home', repository: signedOutRepository()),
+        size: kPhone,
+        textScale: kAccessibleTextScale,
+      );
+
+      expect(find.text('Not signed in to YouTube Music.'), findsOneWidget);
+      expect(find.text('Sign in'), findsOneWidget);
+      expect(find.text('Open extension folder'), findsOneWidget);
+    });
+
     testWidgets('shows a skeleton until the service answers', (
       WidgetTester tester,
     ) async {

@@ -161,18 +161,34 @@ class RotatingBackendLog implements BackendLogSink {
   }
 }
 
-/// Resolves the Python executable and the sidecar entry point.
+/// Resolves the Python executable, the sidecar entry point and the child's
+/// environment.
 ///
-/// Order: an explicit override, then `YTM_PYTHON` / `YTM_BACKEND_SCRIPT`, then
-/// discovery. The script is found by walking up from the running executable (and
-/// the current directory) to the repo folder that contains `backend/main.py`,
+/// Precedence: an explicit override, then `YTM_PYTHON` / `YTM_BACKEND_SCRIPT`,
+/// then discovery. The script is found by walking up from the running executable
+/// (and the current directory) to the folder that contains `backend/main.py`,
 /// which works both from a packaged `build/…/Release` layout and from
 /// `flutter run`.
+///
+/// The layout the installer produces puts the sidecar, a private CPython and the
+/// sidecar's tools beside the executable, and discovery prefers them:
+///
+///     <app>\sonore.exe
+///     <app>\backend\main.py
+///     <app>\python\python.exe
+///     <app>\yt-dlp.exe
+///
+/// An installed app therefore runs on the runtime it shipped with and needs
+/// nothing pre-installed, while a repository checkout still falls back to the
+/// `python` on PATH. The bundled names are Windows-only by design, because the
+/// installer is Windows-only.
 class SystemSidecarResolver implements SidecarResolver {
   SystemSidecarResolver({
     this.pythonOverride,
     this.scriptOverride,
     this.environment,
+    this.executablePath,
+    this.currentDirectory,
   });
 
   final String? pythonOverride;
@@ -182,32 +198,64 @@ class SystemSidecarResolver implements SidecarResolver {
   /// explicit `YTM_PORT`. Null means inherit only.
   final Map<String, String>? environment;
 
+  /// Where the walk up for the app folder starts, defaulting to the running
+  /// executable. Injectable so a test can point it at a staged layout instead
+  /// of depending on where the test binary itself happens to live.
+  final String? executablePath;
+
+  /// The second walk start, defaulting to the working directory.
+  final String? currentDirectory;
+
+  /// The interpreter the installer ships, relative to the app folder.
+  static const String _bundledPythonDir = 'python';
+
+  /// The console tool the sidecar shells out to, shipped beside the app. The
+  /// sidecar resolves it with `shutil.which`, so the folder holding it has to be
+  /// on the child's PATH (see [_childEnvironment]).
+  static const String _bundledToolName = 'yt-dlp.exe';
+
   @override
   Future<SidecarSpawnSpec> resolve() async {
-    final String? script = _resolveScript();
+    final List<Directory> roots = _searchRoots().toList();
+
+    final String? script = _resolveScript(roots);
     if (script == null) {
       throw const SidecarUnavailableException(
         'The local music service (backend/main.py) could not be found.',
       );
     }
 
+    return SidecarSpawnSpec(
+      executable: _resolveInterpreter(roots),
+      arguments: <String>[script],
+      workingDirectory: File(script).parent.path,
+      environment: _childEnvironment(roots),
+    );
+  }
+
+  /// An explicit interpreter wins, then the one the installer shipped, then
+  /// whatever `python` the machine already has.
+  ///
+  /// The bundled runtime is deliberately ahead of PATH: the installed app then
+  /// runs on the exact interpreter and packages it was built against, instead of
+  /// silently using whichever Python the user happens to have installed.
+  String _resolveInterpreter(List<Directory> roots) {
     final String configured = (pythonOverride ??
             Platform.environment['YTM_PYTHON'] ??
             '')
         .trim();
-    final String executable = configured.isNotEmpty
-        ? configured
-        : (Platform.isWindows ? 'python' : 'python3');
+    if (configured.isNotEmpty) return configured;
 
-    return SidecarSpawnSpec(
-      executable: executable,
-      arguments: <String>[script],
-      workingDirectory: File(script).parent.path,
-      environment: environment,
-    );
+    for (final Directory root in roots) {
+      final String bundled =
+          _join(_join(root.path, _bundledPythonDir), 'python.exe');
+      if (File(bundled).existsSync()) return bundled;
+    }
+
+    return Platform.isWindows ? 'python' : 'python3';
   }
 
-  String? _resolveScript() {
+  String? _resolveScript(List<Directory> roots) {
     final String configured = (scriptOverride ??
             Platform.environment['YTM_BACKEND_SCRIPT'] ??
             '')
@@ -218,27 +266,66 @@ class SystemSidecarResolver implements SidecarResolver {
       return null;
     }
 
-    for (final Directory dir in _searchDirectories()) {
-      final String candidate = _join(dir.path, 'main.py');
+    for (final Directory root in roots) {
+      final String candidate = _join(_join(root.path, 'backend'), 'main.py');
       if (File(candidate).existsSync()) return candidate;
     }
     return null;
   }
 
-  /// Candidate directories, nearest first: the ancestry of the running
+  /// The caller's environment plus the folders that ship the sidecar's tools.
+  ///
+  /// The sidecar finds `yt-dlp` with `shutil.which`, so the folder holding the
+  /// bundled copy has to be on the child's PATH — a child would otherwise
+  /// inherit only the parent's PATH, which never contains the app folder. The
+  /// inherited value is preserved, so this only widens where the sidecar looks.
+  Map<String, String>? _childEnvironment(List<Directory> roots) {
+    final List<String> toolDirs = <String>[];
+    for (final Directory root in roots) {
+      if (File(_join(root.path, _bundledToolName)).existsSync() &&
+          !toolDirs.contains(root.path)) {
+        toolDirs.add(root.path);
+      }
+    }
+    if (toolDirs.isEmpty) return environment;
+
+    final Map<String, String> child = <String, String>{...?environment};
+    if (!child.keys.any((String key) => key.toUpperCase() == 'PATH')) {
+      final String inherited = _inheritedPath();
+      child['PATH'] = <String>[
+        ...toolDirs,
+        if (inherited.isNotEmpty) inherited,
+      ].join(Platform.isWindows ? ';' : ':');
+    }
+    return child;
+  }
+
+  /// The parent's PATH, matched case-insensitively because Windows spells the
+  /// variable `Path` in the environment block and Python reads it back as
+  /// `PATH`.
+  static String _inheritedPath() {
+    for (final MapEntry<String, String> entry in Platform.environment.entries) {
+      if (entry.key.toUpperCase() == 'PATH') return entry.value;
+    }
+    return '';
+  }
+
+  /// Candidate app folders, nearest first: the ancestry of the running
   /// executable and of the current directory, deduplicated.
-  Iterable<Directory> _searchDirectories() sync* {
+  ///
+  /// A candidate is a folder that may hold `backend/`, `python/` and the bundled
+  /// tools — the repository layout and the installed layout alike.
+  Iterable<Directory> _searchRoots() sync* {
     final Set<String> seen = <String>{};
+    final String here = currentDirectory ?? Directory.current.path;
     for (final Directory start in <Directory>[
-      File(Platform.resolvedExecutable).parent,
-      Directory.current,
+      File(executablePath ?? Platform.resolvedExecutable).parent,
+      Directory(here),
     ]) {
       Directory? dir = start;
       for (int depth = 0; dir != null && depth < 8; depth++) {
         final String path = dir.absolute.path;
-        if (seen.add(path)) {
-          yield Directory(_join(path, 'backend'));
-        }
+        if (seen.add(path)) yield dir;
         final Directory parent = dir.parent;
         if (parent.path == path) break;
         dir = parent;

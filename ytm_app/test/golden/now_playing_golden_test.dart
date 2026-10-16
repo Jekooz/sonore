@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ytm_app/core/app_identity.dart';
 import 'package:ytm_app/core/app_settings.dart';
 import 'package:ytm_app/features/shell/window_title_bar.dart';
 import 'package:ytm_app/theme/tokens.dart';
@@ -46,7 +47,7 @@ void main() {
       appScope(
         initialLocation: '/now-playing',
         queue: testQueue(),
-        titleBar: const WindowTitleBar(title: 'YT Music Client'),
+        titleBar: const WindowTitleBar(title: appName),
       ),
       size: kDesktop,
     );
@@ -64,7 +65,7 @@ void main() {
       appScope(
         initialLocation: '/now-playing',
         queue: testQueue(),
-        titleBar: const WindowTitleBar(title: 'YT Music Client'),
+        titleBar: const WindowTitleBar(title: appName),
         // The app now boots at the standard scale, so the ceiling has to be
         // asked for explicitly — this golden is the maximum-scale board.
         extraOverrides: [

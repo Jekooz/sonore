@@ -15,6 +15,10 @@
  * Pairing: the app writes port + one-time token into the extension folder
  * (sidecar.json) when sign-in starts; the worker reads it, sends once, and
  * reports the result through chrome.storage so the popup can display it.
+ *
+ * Lockdown: the sidecar also requires the per-install API token (Settings ->
+ * Account in the app) on every hand-off. The popup passes it in the message;
+ * the worker sends it as X-Sonore-Token. The pairing token alone is not enough.
  */
 
 const CONFIG_URL = chrome.runtime.getURL("sidecar.json");
@@ -29,6 +33,15 @@ async function loadConfig() {
         throw new Error("sidecar.json missing or incomplete — start sign-in from the app first.");
     }
     return cfg;
+}
+
+/** The API token from the popup, or from storage if the message omitted it. */
+async function resolveApiToken(fromMessage) {
+    if (typeof fromMessage === "string" && fromMessage.trim()) {
+        return fromMessage.trim();
+    }
+    const { apiToken } = await chrome.storage.local.get("apiToken");
+    return typeof apiToken === "string" ? apiToken.trim() : "";
 }
 
 async function collectCookies() {
@@ -56,7 +69,15 @@ function collectHeaders() {
     };
 }
 
-async function sendSessionToApp() {
+async function sendSessionToApp(apiToken) {
+    if (!apiToken) {
+        return {
+            ok: false,
+            status: 401,
+            detail: "Paste the API token from the app (Settings → Account) first.",
+        };
+    }
+
     const cfg = await loadConfig();
     const cookies = await collectCookies();
 
@@ -65,6 +86,7 @@ async function sendSessionToApp() {
         headers: {
             "Content-Type": "application/json",
             "X-Ytm-Token": cfg.token,
+            "X-Sonore-Token": apiToken,
         },
         body: JSON.stringify({ cookies, headers: collectHeaders() }),
     });
@@ -77,7 +99,8 @@ async function sendSessionToApp() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== "sendCookies") return false;
 
-    sendSessionToApp()
+    resolveApiToken(msg.apiToken)
+        .then((apiToken) => sendSessionToApp(apiToken))
         .then((result) => {
             chrome.storage.local.set({ lastResult: result });
             sendResponse(result);

@@ -13,6 +13,7 @@
 
 const statusEl = document.getElementById("status");
 const sendButton = document.getElementById("send");
+const tokenInput = document.getElementById("apiToken");
 
 function setStatus(text, tone) {
     statusEl.textContent = text;
@@ -35,7 +36,9 @@ function describe(result) {
         return ["The app is not waiting for sign-in. Start sign-in from the app, then press this again.", "warn"];
     }
     if (result.status === 401) {
-        return ["The pairing token was rejected. Start sign-in again from the app.", "warn"];
+        // The sidecar distinguishes a rejected pairing token from a missing or
+        // wrong API token in `detail`; both are its own user-facing wording.
+        return [result.detail || "Sign-in was rejected. Start sign-in again from the app.", "warn"];
     }
     if (result.status === 422) {
         return [result.detail || "Not signed in to music.youtube.com in this browser.", "warn"];
@@ -47,7 +50,11 @@ function describe(result) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    chrome.storage.local.get("lastResult", ({ lastResult }) => {
+    // The token is the only thing this extension stores, and only so it does
+    // not have to be pasted before every hand-off. Cookies are never stored.
+    chrome.storage.local.get(["apiToken", "lastResult"], ({ apiToken, lastResult }) => {
+        if (typeof apiToken === "string") tokenInput.value = apiToken;
+
         // Ignore a stale success from an earlier session — it is not this
         // attempt's outcome.
         const previous = lastResult && lastResult.ok ? null : lastResult;
@@ -56,11 +63,26 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 
+tokenInput.addEventListener("change", () => {
+    chrome.storage.local.set({ apiToken: tokenInput.value.trim() });
+});
+
 sendButton.addEventListener("click", () => {
+    const apiToken = tokenInput.value.trim();
+    if (!apiToken) {
+        setStatus(
+            "Paste the API token from the app (Settings → Account) first.",
+            "warn",
+        );
+        tokenInput.focus();
+        return;
+    }
+    chrome.storage.local.set({ apiToken });
+
     sendButton.disabled = true;
     setStatus("Connecting to Sonore…", null);
 
-    chrome.runtime.sendMessage({ type: "sendCookies" }, (result) => {
+    chrome.runtime.sendMessage({ type: "sendCookies", apiToken }, (result) => {
         sendButton.disabled = false;
 
         if (chrome.runtime.lastError) {

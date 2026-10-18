@@ -18,6 +18,19 @@
     #status { min-height: 34px; color: #b9b9bf; }
     #status[data-tone="ok"] { color: #7ee0a3; }
     #status[data-tone="warn"] { color: #ffb4b4; }
+    label { display: block; margin: 0 0 4px; color: #85858d; font-size: 11px; }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 0 10px;
+      padding: 7px 9px;
+      border: 1px solid #3a3a40;
+      border-radius: 8px;
+      background: #141416;
+      color: #f2f2f3;
+      font: inherit;
+      font-family: ui-monospace, Consolas, monospace;
+    }
     button {
       width: 100%;
       padding: 8px 12px;
@@ -36,10 +49,13 @@
 <body>
   <h1>Sonore</h1>
   <p id="status">Checking…</p>
+  <label for="apiToken">API token (from the app: Settings → Account)</label>
+  <input id="apiToken" type="password" autocomplete="off" spellcheck="false"
+         placeholder="Paste the token once">
   <button id="send" type="button">Connect to Sonore</button>
   <p class="hint">
     Sign in to music.youtube.com, then press Connect while the app is waiting.
-    Nothing is stored by this extension.
+    Only this token is remembered; cookies are never stored by the extension.
   </p>
   <!-- External script: Manifest V3 forbids inline JavaScript in extension pages. -->
   <script src="popup.js"></script>

@@ -77,32 +77,72 @@ def detect_default_browser() -> str:
 class BrowserAuthSession:
     """One sign-in attempt: open the browser, poll for the extension hand-off."""
 
-    def __init__(self, cookie_source):
-        # cookie_source: callable () -> dict | None, injected by main.py —
-        # returns a youtube.com cookie jar when one has arrived, else None.
-        # Injection keeps this module free of HTTP/server knowledge.
+    def __init__(self, cookie_source=None):
+        # cookie_source: optional callable () -> dict | None for a direct
+        # cookie read (strategy A). The extension hand-off does not use it:
+        # main.py delivers that jar with deliver() below. Injection keeps this
+        # module free of HTTP/server knowledge.
         self._cookie_source = cookie_source
         self._lock = threading.Lock()
         self._state = "waiting"
         self._error = None
         self._wake = threading.Event()
         self._thread = None
+        # The hand-off slot for THIS attempt, per-session on purpose. A shared
+        # module-level slot let a superseded attempt's poll loop consume the jar
+        # meant for the live one, which left the app waiting forever when the
+        # user retried sign-in quickly -- reproduced by this suite. A jar only
+        # ever reaches the session it was delivered to, and only while that
+        # session is still waiting.
+        self._jar = None
+        self._jar_event = threading.Event()
+
+    def deliver(self, cookies: dict) -> bool:
+        """Hand a validated cookie jar to this attempt.
+
+        Returns False when the attempt is no longer waiting (cancelled, failed
+        or already completed), so a late hand-off cannot resurrect it.
+        """
+        with self._lock:
+            if self._state != "waiting":
+                return False
+            self._jar = cookies
+        self._jar_event.set()
+        return True
+
+    def _take_jar(self) -> dict | None:
+        """Consume the jar delivered to this attempt, if one is pending."""
+        if self._jar_event.wait(0.1):
+            self._jar_event.clear()
+            jar, self._jar = self._jar, None
+            return jar
+        return None
 
     # ---------------- lifecycle ----------------
 
-    def start(self):
+    def start(self, open_browser: bool = True):
+        """Begin the attempt, opening music.youtube.com unless the caller did.
+
+        The desktop app opens the URL itself with url_launcher (it owns the
+        user's default-browser experience) and passes open_browser=False, so
+        exactly one tab appears either way. The fallback path -- a caller that
+        does not or cannot open it -- keeps the OS-shell behaviour below.
+        """
         browser = detect_default_browser()
         with self._lock:
             self._browser = browser
-        try:
-            # OS shell handles the association - never a hard-coded executable.
-            webbrowser.open_new_tab(MUSIC_URL)
-            logger.info("browser auth: opened %s in %s", MUSIC_URL, browser)
-        except Exception as e:
-            with self._lock:
-                self._state = "failed"
-                self._error = f"Could not open {browser}: {e}"
-            return
+        if open_browser:
+            try:
+                # OS shell handles the association - never a hard-coded executable.
+                webbrowser.open_new_tab(MUSIC_URL)
+                logger.info("browser auth: opened %s in %s", MUSIC_URL, browser)
+            except Exception as e:
+                with self._lock:
+                    self._state = "failed"
+                    self._error = f"Could not open {browser}: {e}"
+                return
+        else:
+            logger.info("browser auth: %s already opened by the app", MUSIC_URL)
 
         self._thread = threading.Thread(target=self._poll_loop, daemon=True)
         self._thread.start()
@@ -138,7 +178,9 @@ class BrowserAuthSession:
     def _poll_loop(self):
         deadline = time.monotonic() + WAIT_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
-            if self._cookie_source is not None:
+            # Jar delivered by main.py (extension or paste hand-off) first.
+            cookies = self._take_jar()
+            if not cookies and self._cookie_source is not None:
                 try:
                     cookies = self._cookie_source()
                 except Exception as e:
@@ -146,11 +188,11 @@ class BrowserAuthSession:
                     self.fail(f"Cookie capture failed: {e}")
                     return
 
-                if cookies:
-                    # main.py has already stored+validated these before wiring
-                    # the source; reaching here means everything succeeded.
-                    self.complete_with_cookies("extension")
-                    return
+            if cookies:
+                # main.py has already stored+validated these before delivering
+                # them; reaching here means everything succeeded.
+                self.complete_with_cookies("extension")
+                return
 
             if self._wake.wait(POLL_INTERVAL_SECONDS):
                 return  # cancelled or failed

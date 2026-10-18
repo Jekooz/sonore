@@ -85,8 +85,6 @@ def isolated_env(tmp_path, monkeypatch):
 
     main._clear_browser_session()
     main._clear_pairing()
-    main._extension_cookies = None
-    main._extension_cookies_event.clear()
 
     yield
 

@@ -173,13 +173,52 @@ def _build_cookie_header(cookie_map: dict) -> str:
     return "; ".join(parts)
 
 
-def build_auth_headers(cookie_map: dict) -> dict:
+# Headers the caller may supply alongside the cookies. The extension reads these
+# off the real browser request, so using them keeps the app talking with the
+# browser's own identity instead of a hard-coded one. Deliberately NOT included:
+# cookie and authorization (built from the validated jar on purpose) and origin/
+# x-origin (must be the YouTube Music origin for SAPISIDHASH to verify).
+_PASSTHROUGH_HEADERS = (
+    "user-agent",
+    "accept-language",
+    "x-youtube-client-name",
+    "x-youtube-client-version",
+    "x-goog-authuser",
+)
+
+
+
+
+def cookies_from_cookie_header(header: str) -> dict:
+    """Parse a raw ``Cookie:`` header line into a name -> value mapping.
+
+    The "paste request headers" fallback delivers headers rather than a jar,
+    so the cookie half is recovered here and then flows through exactly the
+    same validation and storage path as an extension jar.
+    """
+    cookies: dict = {}
+    for part in header.split(";"):
+        if "=" not in part:
+            continue
+        name, _, value = part.partition("=")
+        name = name.strip()
+        if name:
+            cookies[name] = value.strip()
+    return cookies
+
+
+def build_auth_headers(cookie_map: dict, extra_headers: dict | None = None) -> dict:
     """
     Build the ytmusicapi browser-auth header dict from captured cookies.
 
     Raises AuthError if a required cookie is missing. The authorization header
     format (SAPISIDHASH) is what ytmusicapi checks for to classify this as
     BROWSER auth; it recomputes the timestamped hash itself on every request.
+
+    ``extra_headers`` carries the caller's own browser identity (user-agent,
+    client version, ...) when it sent one; only the allow-listed passthrough
+    names are taken from it, so a hostile payload cannot override the cookie
+    or authorization this function derives from the validated jar.
     """
     missing = [name for name in REQUIRED_COOKIES if not cookie_map.get(name)]
     if missing:
@@ -191,7 +230,7 @@ def build_auth_headers(cookie_map: dict) -> dict:
     cookie_header = _build_cookie_header(cookie_map)
     # A placeholder SAPISIDHASH is required so ytmusicapi classifies the headers as
     # BROWSER auth; ytmusicapi recomputes it (fresh timestamp + hash) per request.
-    return {
+    headers = {
         "cookie": cookie_header,
         "authorization": "SAPISIDHASH 0_placeholder",
         "x-origin": YTM_ORIGIN,
@@ -201,6 +240,12 @@ def build_auth_headers(cookie_map: dict) -> dict:
             "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         ),
     }
+    if isinstance(extra_headers, dict):
+        for name in _PASSTHROUGH_HEADERS:
+            value = extra_headers.get(name)
+            if isinstance(value, str) and value.strip():
+                headers[name] = value.strip()
+    return headers
 
 
 # Labels YouTube Music uses for its own navigation rather than for a person.
@@ -354,7 +399,7 @@ class YtmusicService:
 
     # ---------- session methods ----------
 
-    def verify_candidate(self, cookie_map: dict) -> dict:
+    def verify_candidate(self, cookie_map: dict, extra_headers: dict | None = None) -> dict:
         """Confirm YouTube accepts these cookies, WITHOUT touching stored ones.
 
         Sign-in must never damage a working session (M2): if a hand-off carries
@@ -367,7 +412,7 @@ class YtmusicService:
         Raises AuthError when required cookies are missing, or whatever the
         upstream call raised when YouTube rejects the candidate.
         """
-        headers = build_auth_headers(cookie_map)
+        headers = build_auth_headers(cookie_map, extra_headers)
         candidate = YTMusic(auth=headers)
         # The account menu's name run is not always a name (see
         # _CHROME_LABELS), so the same sanitizing is applied on this path: the
@@ -375,7 +420,7 @@ class YtmusicService:
         # signed in.
         return sanitize_account(candidate.get_account_info())
 
-    def store_session(self, cookie_map: dict) -> dict:
+    def store_session(self, cookie_map: dict, extra_headers: dict | None = None) -> dict:
         """Validate cookies, store headers securely, reset the client.
 
         On Windows, uses DPAPI (CryptProtectData) to encrypt the headers and
@@ -383,7 +428,7 @@ class YtmusicService:
         Credential Manager limit that caused CredWrite error 1783.
         Falls back to keyring for backwards compatibility or non-Windows.
         """
-        headers = build_auth_headers(cookie_map)
+        headers = build_auth_headers(cookie_map, extra_headers)
         value = json.dumps(headers)
         if _DPAPI_AVAILABLE:
             self._dpapi_set(value)

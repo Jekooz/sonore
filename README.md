@@ -49,25 +49,22 @@ Everything below is present in the code on this branch:
 - **Synced lyrics** — lyric lines with timestamps; the screen follows playback
   and seek-by-tap when a synced source is available.
 - **Sign-in** — sign in through your own browser with the bundled helper
-  extension (`browser-extension/`). The app opens music.youtube.com and waits
-  while the extension's **Connect** button hands the session to the local
-  service over a loopback-only endpoint (`POST /auth/handoff`); only one
-  pairing attempt can be in flight per session, so a stale attempt can never
-  steal the hand-off. The first time, copy the app's **API token**
-  (Settings → Account → **Copy token**) and paste it into the extension popup,
-  so the extension can authenticate the hand-off. A "paste request headers"
-  fallback in Settings → Account feeds the same endpoint when the extension
-  cannot be loaded. The session is stored encrypted on this device, an expired
-  session is reported as signed-out (not broken), and a failed sign-in never
-  damages a working one.
+  extension (`browser-extension/`). The app opens music.youtube.com and the
+  extension hands the session to the local service over a loopback-only endpoint
+  (`POST /auth/handoff`) on its own — there is no token to copy and nothing to
+  press, once it is loaded. Only one pairing attempt can be in flight per
+  session, so a stale attempt can never steal the hand-off. A "paste request
+  headers" fallback in Settings → Account feeds the same endpoint when the
+  extension cannot be loaded. The session is stored encrypted on this device, an
+  expired session is reported as signed-out (not broken), and a failed sign-in
+  never damages a working one.
 - **Ten-band equalizer** — per-band gain on top of media_kit's audio bindings,
   with named presets and manual editing (`ytm_app/lib/audio/`,
   `ytm_app/lib/features/equalizer/`).
 - **Settings** — reduce transparency, reduce motion, text scale, equalizer and
   playback preferences; all persisted with `shared_preferences`. Settings →
-  Account also shows the per-install **API token** (with a copy button) and
-  Settings → Playback shows the playback engine's version with an **Update
-  playback engine** button.
+  Playback shows the playback engine's version with an **Update playback engine**
+  button.
 
 ## Not done yet (roadmap)
 
@@ -93,9 +90,11 @@ everything the app needs at run time — nothing has to be installed first:
 - the sign-in helper extension, in the `browser-extension` folder beside the
   app. **Sign-in cannot complete without it**: a browser only lets an extension
   read a file inside its own folder, so a copy loaded from anywhere else can
-  never hand the session over. Load it unpacked from that folder (your browser's
-  extension page, Developer mode, "Load unpacked"); the sign-in screen and the
-  Setup wizard's last page both name it, and the sign-in screen can open it.
+  never hand the session over. Load it unpacked from that folder once (your
+  browser's extension page, Developer mode, "Load unpacked"); after that, signing
+  in is automatic — the extension catches the session the moment your browser has
+  one. The sign-in screen and the Setup wizard's last page both name the folder,
+  and the sign-in screen can open it.
 
 The app starts the Python it shipped with rather than whatever happens to be on
 the machine, so the packages it runs against are fixed by the installer. Setting
@@ -168,9 +167,9 @@ Sign-in is performed in your own browser; the session the backend derives from
 it is stored **encrypted on this device** and token/cookie values are never
 logged (the Settings page states this too). The service binds to loopback only,
 rejects non-loopback callers and foreign web origins, and requires a per-install
-**API token** (`X-Sonore-Token`, shown in Settings → Account) on every account,
-library and stream route — so a stray local process or web page cannot read your
-account even on the same machine.
+**API token** (`X-Sonore-Token`) on every account, library and stream route — the
+app fetches its own copy, and the helper extension fetches its own — so a stray
+local process or web page cannot read your account even on the same machine.
 
 ## Building the installer
 

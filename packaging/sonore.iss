@@ -122,6 +122,7 @@ begin
       'To sign in to YouTube Music, load the helper extension that shipped with the app: ' +
       'open your browser''s extension page (chrome://extensions in Chrome, Edge or Brave), ' +
       'turn on Developer mode, choose "Load unpacked" and select' + #13#10 +
-      ExpandConstant('{app}\browser-extension');
+      ExpandConstant('{app}\browser-extension') + #13#10 + #13#10 +
+      'After that, signing in is automatic - there is no token to copy.';
   end;
 end;

@@ -12,7 +12,7 @@ a small local Python service. Playback, search, library and account data come
 from a FastAPI sidecar on `127.0.0.1`; the app never talks to YouTube directly
 and never ships credentials.
 
-Current version: **1.6.0** (tracked in `VERSION`). Status: working desktop app,
+Current version: **1.6.1** (tracked in `VERSION`). Status: working desktop app,
 actively developed — the latest GitHub release carries the single-file installer.
 The backend pairing gate and the light-palette redesign are work in progress on
 separate branches and are not part of this tree.
@@ -46,9 +46,14 @@ Everything below is present in the code on this branch:
 - **Synced lyrics** — lyric lines with timestamps; the screen follows playback
   and seek-by-tap when a synced source is available.
 - **Sign-in** — sign in through your own browser with the bundled helper
-  extension (`browser-extension/`); the session the backend derives from it is
-  stored encrypted on this device, and an account is reported signed-out (not
-  broken) when the cookie jar is empty.
+  extension (`browser-extension/`). The app opens music.youtube.com and waits
+  while the extension's **Connect** button hands the session to the local
+  service over a loopback-only endpoint (`POST /auth/handoff`); only one
+  pairing attempt can be in flight per session, so a stale attempt can never
+  steal the hand-off. A "paste request headers" fallback in Settings → Account
+  feeds the same endpoint when the extension cannot be loaded. The session is
+  stored encrypted on this device, an expired session is reported as
+  signed-out (not broken), and a failed sign-in never damages a working one.
 - **Ten-band equalizer** — per-band gain on top of media_kit's audio bindings,
   with named presets and manual editing (`ytm_app/lib/audio/`,
   `ytm_app/lib/features/equalizer/`).
@@ -131,8 +136,8 @@ a stale port file is detected and a fresh backend is spawned in that case.
 ## Running the tests
 
 ```
-python -m pytest tests -q             # 86 backend/UI-pairing tests
-cd ytm_app && flutter test            # 341 widget and unit tests
+python -m pytest tests -q             # 111 backend/UI-pairing tests
+cd ytm_app && flutter test            # 349 widget and unit tests
 ```
 
 ## Architecture

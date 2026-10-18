@@ -28,3 +28,7 @@ dist/
 *.exe
 proof/*.txt
 proof/golden_review/
+
+# ---- IDE / editor state (per-machine, never commit) -----------------------
+.idea/
+YtMusicClient.sln

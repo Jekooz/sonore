@@ -464,15 +464,17 @@ class SignInController extends Notifier<SignInState> {
 
     // The sidecar times the attempt out at three minutes; wait a little
     // longer so its final state — with its own wording — is observed rather
-    // than raced. The deadline is the app's own backstop for a sidecar that
-    // stopped answering without going offline.
-    final DateTime deadline = DateTime.now().add(_signInWaitTimeout);
+    // than raced. The tick budget below is the app's own backstop for a
+    // sidecar that stopped answering without going offline, counted in polls
+    // rather than wall-clock time so the behaviour is deterministic under a
+    // test clock.
+    int elapsedPolls = 0;
     _poll = Timer.periodic(const Duration(seconds: 2), (Timer timer) async {
       if (!ref.mounted) {
         timer.cancel();
         return;
       }
-      if (DateTime.now().isAfter(deadline)) {
+      if (++elapsedPolls > _signInWaitPollTicks) {
         timer.cancel();
         await _abandon(
           'Sign-in timed out waiting for the helper extension.',
@@ -540,8 +542,10 @@ class SignInController extends Notifier<SignInState> {
   }
 }
 
-/// How long the app keeps waiting for the hand-off before giving up itself.
-const Duration _signInWaitTimeout = Duration(minutes: 3, seconds: 30);
+/// How many 2-second polls the app keeps waiting for the hand-off before
+/// giving up itself: 105 ticks = 3 min 30 s, a little beyond the sidecar's
+/// own three-minute timeout.
+const int _signInWaitPollTicks = 105;
 
 /// The page sign-in happens on; the app opens it in the default browser.
 final Uri signInMusicUrl = Uri.parse('https://music.youtube.com');

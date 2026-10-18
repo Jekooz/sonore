@@ -14,8 +14,11 @@ and never ships credentials.
 
 Current version: **1.6.1** (tracked in `VERSION`). Status: working desktop app,
 actively developed — the latest GitHub release carries the single-file installer.
-The backend pairing gate and the light-palette redesign are work in progress on
-separate branches and are not part of this tree.
+
+> **Unofficial.** This project is not affiliated with, endorsed by, or sponsored
+> by YouTube or Google. "YouTube Music" is a trademark of Google LLC. It is a
+> personal client that reaches YouTube Music through your own signed-in browser
+> session; use it in line with YouTube's terms.
 
 ## Screenshots
 
@@ -50,15 +53,21 @@ Everything below is present in the code on this branch:
   while the extension's **Connect** button hands the session to the local
   service over a loopback-only endpoint (`POST /auth/handoff`); only one
   pairing attempt can be in flight per session, so a stale attempt can never
-  steal the hand-off. A "paste request headers" fallback in Settings → Account
-  feeds the same endpoint when the extension cannot be loaded. The session is
-  stored encrypted on this device, an expired session is reported as
-  signed-out (not broken), and a failed sign-in never damages a working one.
+  steal the hand-off. The first time, copy the app's **API token**
+  (Settings → Account → **Copy token**) and paste it into the extension popup,
+  so the extension can authenticate the hand-off. A "paste request headers"
+  fallback in Settings → Account feeds the same endpoint when the extension
+  cannot be loaded. The session is stored encrypted on this device, an expired
+  session is reported as signed-out (not broken), and a failed sign-in never
+  damages a working one.
 - **Ten-band equalizer** — per-band gain on top of media_kit's audio bindings,
   with named presets and manual editing (`ytm_app/lib/audio/`,
   `ytm_app/lib/features/equalizer/`).
 - **Settings** — reduce transparency, reduce motion, text scale, equalizer and
-  playback preferences; all persisted with `shared_preferences`.
+  playback preferences; all persisted with `shared_preferences`. Settings →
+  Account also shows the per-install **API token** (with a copy button) and
+  Settings → Playback shows the playback engine's version with an **Update
+  playback engine** button.
 
 ## Not done yet (roadmap)
 
@@ -78,8 +87,9 @@ everything the app needs at run time — nothing has to be installed first:
 - a private CPython 3.11 with `fastapi`, `uvicorn`, `ytmusicapi` and `keyring`
   from `backend/requirements.txt` already installed into it;
 - the backend itself (`backend/main.py` and its services);
-- `yt-dlp.exe`, the binary the backend resolves with `shutil.which` for the
-  `/stream/{video_id}` endpoint;
+- `yt-dlp.exe`, the binary the backend uses for the `/stream/{video_id}`
+  endpoint. It can also update itself into `%LOCALAPPDATA%\Sonore\bin\`
+  (see **Settings → Playback → Update playback engine**);
 - the sign-in helper extension, in the `browser-extension` folder beside the
   app. **Sign-in cannot complete without it**: a browser only lets an extension
   read a file inside its own folder, so a copy loaded from anywhere else can
@@ -93,14 +103,21 @@ the machine, so the packages it runs against are fixed by the installer. Setting
 2015-2022 runtime is installed too, but only when the machine does not already
 have it.
 
+The installer is not code-signed, so Windows SmartScreen may warn that the
+publisher is unknown ("Windows protected your PC"). Choose **More info → Run
+anyway** to continue; the same warning appears on every new release.
+
 ## Requirements for running from source
 
-- **Flutter SDK** (stable channel; the app targets Windows and also builds
-  for Android).
+- **Flutter SDK** (stable channel; Windows desktop).
 - **Python 3** with `fastapi`, `uvicorn`, `ytmusicapi` and `keyring`
   (`backend/requirements.txt`).
-- **yt-dlp** on your `PATH`. The backend resolves it with `shutil.which`,
-  and the `/stream/{video_id}` endpoint shells out to it for audio URLs.
+
+`yt-dlp` no longer has to be on your `PATH`. The backend prefers a copy it has
+updated into `%LOCALAPPDATA%\Sonore\bin\yt-dlp.exe`, then a copy bundled beside
+the app, and only falls back to `PATH` for a source checkout. It checks for an
+update at most once a day, and when a track fails to resolve the error points at
+**Settings → Playback → Update playback engine**.
 
 ## Running from source
 
@@ -110,7 +127,9 @@ have it.
    pip install -r backend/requirements.txt
    ```
 
-   and make sure `yt-dlp` is on your `PATH` (`winget install yt-dlp`).
+   `yt-dlp` is fetched by the backend itself (bundled, or updated into
+   `%LOCALAPPDATA%\Sonore\bin\`); you only need it on `PATH` for a bare
+   checkout that has neither.
 
 2. Start the sidecar:
 
@@ -120,7 +139,8 @@ have it.
    ```
 
    It binds to `127.0.0.1` and writes the chosen port to
-   `%TEMP%\ytmusic_sidecar_port.txt` for discovery.
+   `%LOCALAPPDATA%\Sonore\sidecar_port.txt` for discovery (an older
+   `%TEMP%\ytmusic_sidecar_port.txt` is still read as a fallback).
 
 3. Run the app:
 
@@ -136,8 +156,8 @@ a stale port file is detected and a fresh backend is spawned in that case.
 ## Running the tests
 
 ```
-python -m pytest tests -q             # 111 backend/UI-pairing tests
-cd ytm_app && flutter test            # 349 widget and unit tests
+python -m pytest tests -q             # 122 backend/API tests
+cd ytm_app && flutter test            # 354 widget and unit tests
 ```
 
 ## Architecture
@@ -146,8 +166,11 @@ Flutter (Riverpod + go_router, media_kit for playback) talking over `http` to a
 local FastAPI service that wraps `ytmusicapi` and `yt-dlp` on `127.0.0.1`.
 Sign-in is performed in your own browser; the session the backend derives from
 it is stored **encrypted on this device** and token/cookie values are never
-logged (the Settings page states this too). Only the paired sidecar instance is
-trusted; nothing outside the local machine talks to the service.
+logged (the Settings page states this too). The service binds to loopback only,
+rejects non-loopback callers and foreign web origins, and requires a per-install
+**API token** (`X-Sonore-Token`, shown in Settings → Account) on every account,
+library and stream route — so a stray local process or web page cannot read your
+account even on the same machine.
 
 ## Building the installer
 
@@ -175,5 +198,6 @@ Phosphor icons (icon set) — Phosphor Icons, MIT License.
 
 ## License
 
-There is no LICENSE file in the repository yet. Nothing in this repo grants or
-denies distribution rights; add a license before treating this as reusable.
+MIT — see [LICENSE](LICENSE). This project is unofficial and not affiliated with
+YouTube or Google; "YouTube Music" is a trademark of Google LLC (see the notice
+at the top).

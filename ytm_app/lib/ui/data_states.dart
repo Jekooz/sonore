@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/folder_reveal.dart';
 import '../data/api_client.dart';
 import '../data/ytm_repository.dart';
 import '../theme/icons.dart';
@@ -62,6 +63,14 @@ class OfflineState extends ConsumerWidget {
 /// The sidecar is running but has no session. The one real action is the
 /// project's established sign-in hand-off: the sidecar opens music.youtube.com
 /// and waits for the companion extension.
+///
+/// The extension is not optional on this build. A browser only lets an extension
+/// read a pairing file inside its own installation, so a copy loaded from
+/// anywhere else can never hand the session over — and signing in to YouTube
+/// Music in the browser on its own changes nothing. The screen therefore names
+/// the folder the extension has to be loaded from and offers to open it;
+/// without that, the hand-off waits for three minutes and then times out, which
+/// reads as a sign-in screen that does not work.
 class SignedOutState extends ConsumerWidget {
   const SignedOutState({super.key});
 
@@ -69,35 +78,61 @@ class SignedOutState extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final SignInState signIn = ref.watch(signInProvider);
     final SignInController controller = ref.read(signInProvider.notifier);
+    // Empty when the sidecar cannot answer, in which case the screen keeps its
+    // generic wording instead of printing a blank path.
+    final String folder = ref.watch(extensionFolderProvider).value ?? '';
+    final bool hasFolder = folder.isNotEmpty;
+    final VoidCallback? openFolder = hasFolder
+        ? () => ref.read(folderRevealerProvider)(folder)
+        : null;
 
     return switch (signIn.stage) {
       SignInStage.waiting => StateMessage(
-        message: 'Waiting for your browser…',
-        footnote:
-            'Finish signing in to YouTube Music in the browser window. '
-            'This screen updates on its own.',
+        message: 'Waiting for the helper extension…',
+        footnote: hasFolder
+            ? 'In the browser window that just opened, sign in to YouTube Music, '
+                  'then open the Sonore Helper extension and send your session to '
+                  'the app. Nothing arrives until you do. That extension loads '
+                  'from:\n$folder'
+            : 'Finish signing in to YouTube Music in the browser window, then send '
+                  'the session over from the Sonore Helper extension. Nothing '
+                  'arrives until you do.',
         actionLabel: 'Cancel',
         actionIcon: AppIcons.close,
         onAction: controller.cancel,
+        secondaryLabel: hasFolder ? 'Open extension folder' : null,
+        onSecondary: openFolder,
       ),
       SignInStage.done => const StateMessage(
         message: 'Signed in. Loading your music…',
       ),
       SignInStage.failed => StateMessage(
         message: signIn.detail ?? 'Sign-in did not complete.',
-        footnote: 'You can start it again when you are ready.',
+        footnote: hasFolder
+            ? 'You can start it again when you are ready. Sign-in only completes '
+                  'through the helper extension, which loads from:\n$folder'
+            : 'You can start it again when you are ready.',
         actionLabel: 'Try again',
         actionIcon: AppIcons.arrowClockwise,
         onAction: controller.start,
+        secondaryLabel: hasFolder ? 'Open extension folder' : null,
+        onSecondary: openFolder,
       ),
       SignInStage.idle => StateMessage(
         message: 'Not signed in to YouTube Music.',
-        footnote:
-            'Sign-in opens in your browser, and your session is kept by '
-            'the local service — the app never stores it.',
+        footnote: hasFolder
+            ? 'Sign-in finishes in the helper extension that ships with this '
+                  'app, and it only works loaded from its own folder: open your '
+                  'browser\'s extension page, turn on Developer mode, choose '
+                  '"Load unpacked" and select:\n$folder\nThen sign in and send '
+                  'the session over from the extension.'
+            : 'Sign-in opens in your browser, and your session is kept by '
+                  'the local service — the app never stores it.',
         actionLabel: 'Sign in',
         actionIcon: AppIcons.user,
         onAction: controller.start,
+        secondaryLabel: hasFolder ? 'Open extension folder' : null,
+        onSecondary: openFolder,
       ),
     };
   }

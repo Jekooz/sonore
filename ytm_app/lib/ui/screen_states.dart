@@ -87,8 +87,12 @@ class _SkeletonState extends State<Skeleton>
   }
 }
 
-/// The empty / error / offline presentation: one sentence and, when there is a
-/// real action to take, one button.
+/// The empty / error / offline presentation: one sentence, an optional
+/// explanation, and the actions a user can take.
+///
+/// [actionLabel] is the state's real action and is drawn as a filled button;
+/// [secondaryLabel] is for the side step a state also needs (opening a folder,
+/// for instance) and is drawn as a quieter text button beside it.
 ///
 /// Error states use neutral text rather than red (spec: "error ... no red").
 class StateMessage extends StatelessWidget {
@@ -99,6 +103,8 @@ class StateMessage extends StatelessWidget {
     this.onAction,
     this.actionIcon,
     this.footnote,
+    this.secondaryLabel,
+    this.onSecondary,
   });
 
   final String message;
@@ -106,6 +112,8 @@ class StateMessage extends StatelessWidget {
   final VoidCallback? onAction;
   final IconData? actionIcon;
   final String? footnote;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
 
   @override
   Widget build(BuildContext context) {
@@ -134,6 +142,13 @@ class StateMessage extends StatelessWidget {
                 icon: actionIcon,
                 label: actionLabel,
                 onPressed: onAction,
+              ),
+            ],
+            if (secondaryLabel != null && onSecondary != null) ...<Widget>[
+              const SizedBox(height: Tokens.s4),
+              TextButton(
+                onPressed: onSecondary,
+                child: Text(secondaryLabel!, style: Tokens.subtitle),
               ),
             ],
           ],

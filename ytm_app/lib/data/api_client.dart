@@ -434,6 +434,25 @@ class YtmApiClient {
     return 'your browser';
   }
 
+  /// GET /auth/extension/folder -> `{"folder": "..."}`, an absolute path.
+  ///
+  /// The one folder the helper extension can be installed from, because a
+  /// browser only lets an extension read a pairing file inside its own
+  /// installation. The sign-in screen names it and can open it, since sign-in
+  /// cannot finish until the user has loaded the extension from there.
+  Future<String> extensionFolder() async {
+    try {
+      final dynamic body = await _getJson('/auth/extension/folder');
+      if (body is Map<String, dynamic>) {
+        return (body['folder'] as String?) ?? '';
+      }
+    } on YtmException {
+      // Guidance for a manual step, not part of sign-in itself: a sidecar that
+      // cannot answer leaves the screen on its generic wording.
+    }
+    return '';
+  }
+
   String _stateOf(dynamic body) {
     if (body is Map<String, dynamic>) {
       return (body['state'] as String?) ?? 'unknown';

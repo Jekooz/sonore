@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:riverpod/misc.dart' show Override;
 import 'package:ytm_app/audio/equalizer.dart';
 import 'package:ytm_app/core/app_settings.dart';
+import 'package:ytm_app/core/folder_reveal.dart';
 import 'package:ytm_app/data/models.dart';
 import 'package:ytm_app/features/collection/collection_screen.dart';
 import 'package:ytm_app/features/settings/settings_screen.dart';
@@ -170,6 +171,55 @@ void main() {
 
       expect(find.text('Not signed in to YouTube Music.'), findsOneWidget);
       expect(find.text('Sign in'), findsOneWidget);
+    });
+
+    testWidgets('names the extension folder sign-in cannot finish without, and '
+        'can open it', (WidgetTester tester) async {
+      // The hand-off only completes through the helper extension, and only when
+      // it was loaded from this folder. Without that on screen, the three-minute
+      // wait that follows reads as a sign-in screen that simply does not work.
+      final List<String> revealed = <String>[];
+      await pumpAtSize(
+        tester,
+        appScope(
+          initialLocation: '/home',
+          repository: signedOutRepository(),
+          extraOverrides: <Override>[
+            folderRevealerProvider.overrideWithValue(
+              (String path) async => revealed.add(path),
+            ),
+          ],
+        ),
+        size: kPhone,
+      );
+
+      expect(find.text('Not signed in to YouTube Music.'), findsOneWidget);
+      expect(
+        find.textContaining(r'C:\Program Files\Sonore\browser-extension'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Open extension folder'));
+      await tester.pumpAndSettle();
+
+      expect(revealed, <String>[r'C:\Program Files\Sonore\browser-extension']);
+    });
+
+    testWidgets('the sign-in instructions still fit at the accessibility text '
+        'scale', (WidgetTester tester) async {
+      // This copy is long by necessity: it names a folder and a manual step. A
+      // column that no longer fits reports a RenderFlex overflow, which fails
+      // this test rather than reaching a user as a clipped sentence.
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/home', repository: signedOutRepository()),
+        size: kPhone,
+        textScale: kAccessibleTextScale,
+      );
+
+      expect(find.text('Not signed in to YouTube Music.'), findsOneWidget);
+      expect(find.text('Sign in'), findsOneWidget);
+      expect(find.text('Open extension folder'), findsOneWidget);
     });
 
     testWidgets('shows a skeleton until the service answers', (

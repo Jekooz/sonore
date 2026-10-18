@@ -342,6 +342,19 @@ def auth_browser_info():
     return JSONResponse(content={"browser": detect_default_browser()})
 
 
+@app.get("/auth/extension/folder")
+def auth_extension_folder():
+    """The one folder the companion extension can be installed from.
+
+    A browser only lets an extension read files inside its own installation, so
+    the pairing file this service writes is readable from here and nowhere else.
+    That makes this folder a step the user has to take - load it unpacked - which
+    is why the sign-in screen names it rather than leaving the hand-off to time
+    out with no explanation.
+    """
+    return JSONResponse(content={"folder": _EXTENSION_DIR})
+
+
 @app.post("/auth/browser/start")
 def auth_browser_start(request: Request):
     """
@@ -426,8 +439,18 @@ def auth_extension(payload: dict, request: Request):
         logger.warning("Rejected extension hand-off: %s", rejection)
         raise HTTPException(status_code=401, detail=rejection)
 
+    # A present-but-EMPTY jar is not a malformed body. The extension always
+    # sends {"cookies": {...}}, and it is empty exactly when the browser it is
+    # loaded in has no YouTube Music session -- the common real case, because
+    # the app opens whatever the default browser is. Measured live against the
+    # installed build: this used to answer the popup with "Body must contain a
+    # 'cookies' object." and, since the 400 was raised outside the handler
+    # below, the app then waited out its full three minutes with nothing on
+    # screen. Routing it through the shared validation says what is actually
+    # wrong (no session cookies present) and fails the attempt, so the UI
+    # reports it at once instead of appearing to hang.
     cookies = payload.get("cookies")
-    if not isinstance(cookies, dict) or not cookies:
+    if not isinstance(cookies, dict):
         raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
 
     try:

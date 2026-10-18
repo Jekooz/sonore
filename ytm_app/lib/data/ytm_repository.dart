@@ -291,6 +291,11 @@ class YtmRepository {
   /// GET /auth/browser/status -> idle | waiting | done | failed | cancelled
   Future<String> browserSignInState() => _api.browserSignInState();
 
+  /// GET /auth/extension/folder — the folder the helper extension has to be
+  /// loaded from. The hand-off cannot complete from any other copy, so the
+  /// signed-out screen names this path.
+  Future<String> extensionFolder() => _api.extensionFolder();
+
   /// POST /auth/signout — the sidecar forgets the stored session. The app
   /// itself never holds one, so there is nothing else to clear.
   Future<void> signOut() => _api.signOut();
@@ -316,6 +321,13 @@ final Provider<YtmRepository> ytmRepositoryProvider = Provider<YtmRepository>(
 final FutureProvider<YtmConnection> connectionProvider =
     FutureProvider<YtmConnection>(
   (ref) => ref.watch(ytmRepositoryProvider).connection(),
+);
+
+/// The folder the helper extension is installed from, for the signed-out
+/// screen. Empty when the sidecar cannot answer, which the screen treats as
+/// "show the generic wording" rather than a blank path.
+final FutureProvider<String> extensionFolderProvider = FutureProvider<String>(
+  (ref) => ref.watch(ytmRepositoryProvider).extensionFolder(),
 );
 
 /// Home's rails.

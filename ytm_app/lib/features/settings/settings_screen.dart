@@ -9,6 +9,7 @@ import '../../core/app_identity.dart';
 import '../../core/app_settings.dart';
 import '../../core/sidecar/sidecar_launcher.dart';
 import '../../core/sidecar/sidecar_providers.dart';
+import '../../data/api_client.dart';
 import '../../data/ytm_repository.dart';
 import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
@@ -513,21 +514,60 @@ class _KeyValueRow extends StatelessWidget {
   }
 }
 
-/// Sign-in state and the only account action the service supports.
-class _Account extends ConsumerWidget {
+/// Sign-in state and the account actions the service supports: the browser
+/// flow, and — for a machine where the helper extension cannot be loaded — a
+/// "paste request headers" fallback feeding the same hand-off endpoint.
+class _Account extends ConsumerStatefulWidget {
   const _Account();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Account> createState() => _AccountState();
+}
+
+class _AccountState extends ConsumerState<_Account> {
+  /// Pasted headers live only in this controller: they go straight to the
+  /// sidecar and are never stored by the app.
+  final TextEditingController _headersController = TextEditingController();
+
+  bool _showPasteField = false;
+  bool _pastingIn = false;
+  String? _pasteError;
+
+  @override
+  void dispose() {
+    _headersController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final YtmConnection? connection =
         ref.watch(connectionProvider).value;
 
     if (connection?.status != YtmStatus.ready) {
-      return _LinkRow(
-        title: 'Sign in',
-        subtitle: 'Opens the sign-in flow on your browser.',
-        icon: AppIcons.user,
-        onTap: () => context.go(AppDestination.home.path),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _LinkRow(
+            title: 'Sign in',
+            subtitle: 'Opens the sign-in flow on your browser.',
+            icon: AppIcons.user,
+            onTap: () => context.go(AppDestination.home.path),
+          ),
+          _LinkRow(
+            title: _showPasteField
+                ? 'Hide pasted headers'
+                : 'Paste request headers',
+            subtitle: 'No helper extension on this machine? Paste the request '
+                'headers from a signed-in music.youtube.com tab instead.',
+            icon: AppIcons.linkSimple,
+            onTap: () => setState(() {
+              _showPasteField = !_showPasteField;
+              _pasteError = null;
+            }),
+          ),
+          if (_showPasteField) _pasteField(),
+        ],
       );
     }
 
@@ -557,6 +597,84 @@ class _Account extends ConsumerWidget {
         const SizedBox(height: Tokens.s8),
       ],
     );
+  }
+
+  Widget _pasteField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        TextField(
+          controller: _headersController,
+          maxLines: 6,
+          style: Tokens.caption.copyWith(color: Tokens.text),
+          decoration: InputDecoration(
+            hintText: 'cookie: SID=…; SAPISID=…\n'
+                'user-agent: Mozilla/5.0 …',
+            hintStyle: Tokens.caption,
+            filled: true,
+            fillColor: Tokens.surfaceRaised,
+            border: const OutlineInputBorder(borderSide: BorderSide.none),
+          ),
+        ),
+        if (_pasteError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: Tokens.s4),
+            child: Text(
+              _pasteError!,
+              style: Tokens.caption.copyWith(color: Tokens.accent),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(top: Tokens.s8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: PillButton(
+              icon: AppIcons.plus,
+              label: _pastingIn ? 'Signing in…' : 'Use these headers',
+              onPressed: _pastingIn ? null : _submitPastedHeaders,
+            ),
+          ),
+        ),
+        const SizedBox(height: Tokens.s8),
+      ],
+    );
+  }
+
+  /// Feeds the pasted headers to the same /auth/handoff endpoint the
+  /// extension uses: the sidecar recovers the cookie line, validates the
+  /// candidate against YouTube and only then stores it — so the account shown
+  /// afterwards is the validated one or nothing.
+  Future<void> _submitPastedHeaders() async {
+    setState(() {
+      _pastingIn = true;
+      _pasteError = null;
+    });
+    try {
+      await ref
+          .read(ytmRepositoryProvider)
+          .signInWithPastedHeaders(_headersController.text);
+      ref.invalidate(connectionProvider);
+      if (mounted) {
+        setState(() {
+          _pastingIn = false;
+          _showPasteField = false;
+        });
+      }
+    } on YtmException catch (error) {
+      if (mounted) {
+        setState(() {
+          _pastingIn = false;
+          _pasteError = error.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _pastingIn = false;
+          _pasteError = 'Sign-in did not complete. Try again.';
+        });
+      }
+    }
   }
 
   Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {

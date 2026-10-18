@@ -39,6 +39,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 import uvicorn
@@ -101,13 +102,15 @@ def _drop_stale_port_file() -> None:
         pass
 
 
+# The install (or source checkout) root: backend\main.py, so one level up is the
+# folder the installer stages yt-dlp.exe into and the extension lives beside.
+_APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Where the companion extension lives. This is the ONLY folder a pairing file
 # can work from: an extension page may fetch resources only from its own
 # installation (Chrome docs, "Cross-origin network requests"), so a config file
 # anywhere else on disk is unreadable by the extension by design.
-_EXTENSION_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "browser-extension"
-)
+_EXTENSION_DIR = os.path.join(_APP_ROOT, "browser-extension")
 PAIRING_FILE = os.path.join(_EXTENSION_DIR, "sidecar.json")
 
 
@@ -1321,13 +1324,157 @@ _STREAM_CACHE_MAX = 240
 _RESOLVE_GATE = threading.BoundedSemaphore(2)
 _RESOLVE_GATE_WAIT_SECONDS = 20
 
-# yt-dlp ships as a WinGet exe on this machine; resolve it at import time so a
-# missing binary produces one clear 503 instead of an unhandled crash.
-_YT_DLP = shutil.which("yt-dlp") or "yt-dlp"
+# yt-dlp: prefer a copy this app updated in %LOCALAPPDATA%\Sonore\bin\, then the
+# copy the installer ships beside the app (the sidecar's working directory is
+# backend\, so PATH alone would never find it), then PATH, and finally the bare
+# name so a missing binary produces one clear 503.
+_YT_DLP_DIR = os.path.join(_SONORE_STATE_DIR, "bin")
+_YT_DLP_UPDATED = os.path.join(_YT_DLP_DIR, "yt-dlp.exe")
+_YT_DLP_BUNDLED = os.path.join(_APP_ROOT, "yt-dlp.exe")
+
+
+def _resolve_yt_dlp() -> str:
+    """The yt-dlp to run: an updated copy, else the bundled one, else PATH."""
+    if os.path.exists(_YT_DLP_UPDATED):
+        return _YT_DLP_UPDATED
+    if os.path.exists(_YT_DLP_BUNDLED):
+        return _YT_DLP_BUNDLED
+    return shutil.which("yt-dlp") or "yt-dlp"
+
+
+_YT_DLP = _resolve_yt_dlp()
 
 # itag 140 (m4a/AAC) plays through Windows Media Foundation. Prefer it, but
 # fall back to whatever audio YouTube serves rather than failing outright.
 _AUDIO_FORMAT = "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio"
+
+# yt-dlp auto-update: at most once per day, in the background, results recorded
+# in %LOCALAPPDATA%\Sonore\update_state.json for Settings to report.
+_UPDATE_STATE_FILE = os.path.join(_SONORE_STATE_DIR, "update_state.json")
+_UPDATE_CHECK_SECONDS = 24 * 60 * 60
+_updating = False
+_updating_lock = threading.Lock()
+
+
+def _update_due() -> bool:
+    """True when the once-per-day background check may run again."""
+    try:
+        with open(_UPDATE_STATE_FILE, encoding="utf-8") as f:
+            state = json.load(f)
+    except (OSError, ValueError):
+        return True
+    last = state.get("last_check")
+    if not last:
+        return True
+    try:
+        last_time = datetime.fromisoformat(str(last))
+    except ValueError:
+        return True
+    return time.time() - last_time.timestamp() > _UPDATE_CHECK_SECONDS
+
+
+def _read_update_state() -> dict:
+    try:
+        with open(_UPDATE_STATE_FILE, encoding="utf-8") as f:
+            state = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(state, dict):
+        return {}
+    return state
+
+
+def _record_update_state(
+    *,
+    ok: bool,
+    version: str | None = None,
+    error: str | None = None,
+) -> None:
+    state = {
+        "last_check": datetime.now(timezone.utc).isoformat(),
+        "ok": ok,
+        "version": version,
+        "error": error,
+    }
+    tmp_path = _UPDATE_STATE_FILE + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(state, f)
+    os.replace(tmp_path, _UPDATE_STATE_FILE)
+
+
+def _fetch_yt_dlp_update(dest_dir: str) -> str:
+    """
+    Download the latest yt-dlp.exe from GitHub into *dest_dir* and return its
+    version. Monkeypatched by tests so no network is needed.
+    """
+    import urllib.request
+
+    with urllib.request.urlopen(
+        "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", timeout=30
+    ) as resp:
+        release = json.loads(resp.read().decode("utf-8"))
+    asset = next(
+        (a for a in (release or {}).get("assets", []) if a.get("name") == "yt-dlp.exe"),
+        None,
+    )
+    if not asset or not asset.get("browser_download_url"):
+        raise RuntimeError("The latest yt-dlp release has no yt-dlp.exe asset.")
+    os.makedirs(dest_dir, exist_ok=True)
+    tmp_path = os.path.join(dest_dir, "yt-dlp.exe.new")
+    with urllib.request.urlopen(asset["browser_download_url"], timeout=120) as src, open(
+        tmp_path, "wb"
+    ) as dst:
+        shutil.copyfileobj(src, dst)
+    final_path = os.path.join(dest_dir, "yt-dlp.exe")
+    os.replace(tmp_path, final_path)
+    # Forget the resolved binary so the update takes effect at once.
+    global _YT_DLP
+    _YT_DLP = final_path
+    return _yt_dlp_version(final_path) or "unknown"
+
+
+def _do_yt_dlp_update() -> None:
+    """Background worker: check once per day, refresh yt-dlp when due."""
+    global _updating
+    with _updating_lock:
+        if _updating:
+            return
+        _updating = True
+    try:
+        if not _update_due():
+            _record_update_state(ok=True, version=_yt_dlp_version(_YT_DLP))
+            return
+        version = _fetch_yt_dlp_update(_YT_DLP_DIR)
+        logger.info("yt-dlp updated to %s in %s", version, _YT_DLP_DIR)
+        _record_update_state(ok=True, version=version)
+    except Exception as e:
+        logger.warning("yt-dlp background update failed: %s", e)
+        _record_update_state(ok=False, error=type(e).__name__)
+    finally:
+        with _updating_lock:
+            _updating = False
+
+
+def _maybe_start_yt_dlp_update_check() -> None:
+    """Kick off the at-most-once-per-day background update check at launch."""
+    threading.Thread(target=_do_yt_dlp_update, daemon=True).start()
+
+
+def _yt_dlp_version(binary: str) -> str | None:
+    """The upstream version of *binary*, or None when it cannot be read."""
+    try:
+        proc = subprocess.run(
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode == 0:
+        version = (proc.stdout or "").strip()
+        return version or None
+    return None
 
 
 def _warm_stream_cache(video_id: str) -> None:
@@ -1417,7 +1564,11 @@ def _resolve_stream(video_id: str) -> str:
     except FileNotFoundError:
         raise HTTPException(
             status_code=503,
-            detail="yt-dlp was not found on PATH. Install it and restart the app.",
+            detail=(
+                "The playback engine (yt-dlp) is not installed. "
+                "Update it in Settings > Playback, or place yt-dlp.exe in "
+                "%LOCALAPPDATA%/Sonore/bin/."
+            ),
         )
     except subprocess.TimeoutExpired:
         raise HTTPException(
@@ -1593,6 +1744,65 @@ def lyrics(request: Request, video_id: str):
     return JSONResponse(content={"videoId": video_id, **cached})
 
 
+@app.get("/playback/engine")
+def playback_engine(request: Request):
+    """The playback engine (yt-dlp) in use: version, source and update state."""
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
+    binary = _YT_DLP
+    if binary == _YT_DLP_UPDATED:
+        source = "updated"
+    elif binary == _YT_DLP_BUNDLED:
+        source = "bundled"
+    elif shutil.which("yt-dlp"):
+        source = "path"
+    else:
+        source = "bundled"
+    return JSONResponse(
+        content={
+            "version": _yt_dlp_version(binary),
+            "source": source,
+            "path": binary,
+            "update": _read_update_state(),
+        }
+    )
+
+
+@app.post("/playback/engine/update")
+def playback_engine_update(request: Request):
+    """Refresh the playback engine to the latest yt-dlp (runs in the background)."""
+    global _updating
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
+
+    with _updating_lock:
+        if _updating:
+            return JSONResponse(
+                status_code=202,
+                content={"update": "busy", "detail": "An update is already in progress."},
+            )
+        _updating = True
+
+    def worker() -> None:
+        try:
+            version = _fetch_yt_dlp_update(_YT_DLP_DIR)
+            logger.info("yt-dlp updated on demand to %s in %s", version, _YT_DLP_DIR)
+            _record_update_state(ok=True, version=version)
+        except Exception as e:
+            logger.warning("yt-dlp on-demand update failed: %s", e)
+            _record_update_state(ok=False, error=str(e) or type(e).__name__)
+        finally:
+            with _updating_lock:
+                _updating = False
+
+    threading.Thread(target=worker, daemon=True).start()
+    return JSONResponse(status_code=202, content={"update": "started"})
+
+
 def _port_is_free(port: int) -> bool:
     """True if 127.0.0.1:port can be bound right now.
 
@@ -1668,9 +1878,12 @@ def _publish_when_ready(port: int, timeout: float = 20.0) -> None:
 
 
 if __name__ == "__main__":
+    _drop_stale_port_file()
     port = _choose_port()
     _BOUND_PORT = port
 
     logger.info(f"Starting backend on port {port}")
     threading.Thread(target=_publish_when_ready, args=(port,), daemon=True).start()
+    # At most once per day, in the background: keep the playback engine current.
+    _maybe_start_yt_dlp_update_check()
     uvicorn.run(app, host="127.0.0.1", port=port)

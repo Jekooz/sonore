@@ -12,7 +12,7 @@ a small local Python service. Playback, search, library and account data come
 from a FastAPI sidecar on `127.0.0.1`; the app never talks to YouTube directly
 and never ships credentials.
 
-Current version: **1.6.1** (tracked in `VERSION`). Status: working desktop app,
+Current version: **1.6.2** (tracked in `VERSION`). Status: working desktop app,
 actively developed — the latest GitHub release carries the single-file installer.
 
 > **Unofficial.** This project is not affiliated with, endorsed by, or sponsored

@@ -61,6 +61,39 @@ class YtmAccount {
   final String? photoUrl;
 }
 
+/// The playback engine (yt-dlp) the sidecar uses to resolve stream URLs, plus
+/// the result of the last update check. Settings → Playback renders this.
+///
+/// Named `...Info` on purpose: the audio layer already owns `PlaybackEngine`
+/// (the just_audio wrapper in `lib/audio/playback_engine.dart`), and the two
+/// must not be confused.
+@immutable
+class PlaybackEngineInfo {
+  const PlaybackEngineInfo({
+    this.version,
+    this.source = 'bundled',
+    this.lastOk,
+    this.lastError,
+    this.lastCheck,
+  });
+
+  /// The upstream yt-dlp version, or null when it could not be read.
+  final String? version;
+
+  /// Where the binary came from: `bundled`, `path`, or `updated`.
+  final String source;
+
+  /// Result of the last update check: true (ok), false (failed), or null
+  /// (never checked).
+  final bool? lastOk;
+
+  /// The failure message from the last check, if any.
+  final String? lastError;
+
+  /// ISO-8601 timestamp of the last check, if any.
+  final String? lastCheck;
+}
+
 /// Maps the sidecar's endpoints onto the app's models.
 ///
 /// Every method here can throw [YtmOfflineException], [YtmSignedOutException]
@@ -358,6 +391,29 @@ class YtmRepository {
   /// itself never holds one, so there is nothing else to clear.
   Future<void> signOut() => _api.signOut();
 
+  /// The per-install API token, for Settings → Account to show and copy so the
+  /// extension popup can be given it once. Null when the sidecar cannot answer.
+  Future<String?> installToken() => _api.installToken();
+
+  /// The playback engine (yt-dlp) in use: version, source and last update.
+  Future<PlaybackEngineInfo> playbackEngineInfo() async {
+    final Map<String, dynamic> body = await _api.playbackEngine();
+    final dynamic update = body['update'];
+    return PlaybackEngineInfo(
+      version: body['version'] as String?,
+      source: body['source'] as String? ?? 'bundled',
+      lastOk: update is Map<String, dynamic> ? update['ok'] as bool? : null,
+      lastError: update is Map<String, dynamic> ? update['error'] as String? : null,
+      lastCheck: update is Map<String, dynamic>
+          ? update['last_check'] as String?
+          : null,
+    );
+  }
+
+  /// POST /playback/engine/update — ask the sidecar to refresh yt-dlp. It runs
+  /// in the background; callers re-read [playbackEngine] to see the result.
+  Future<void> updatePlaybackEngine() => _api.updatePlaybackEngine();
+
   List<MediaItem> _items(dynamic raw) {
     if (raw is! List<dynamic>) return const <MediaItem>[];
     final List<MediaItem> items = <MediaItem>[];
@@ -386,6 +442,20 @@ final FutureProvider<YtmConnection> connectionProvider =
 /// "show the generic wording" rather than a blank path.
 final FutureProvider<String> extensionFolderProvider = FutureProvider<String>(
   (ref) => ref.watch(ytmRepositoryProvider).extensionFolder(),
+);
+
+/// The per-install API token, for Settings → Account to show and copy so the
+/// extension popup can be given it once. Null when the sidecar cannot answer.
+final FutureProvider<String?> installTokenProvider = FutureProvider<String?>(
+  (ref) => ref.watch(ytmRepositoryProvider).installToken(),
+);
+
+/// The playback engine (yt-dlp) state, for Settings → Playback. The update is
+/// a background job on the sidecar, so the screen refreshes this provider to
+/// pick up the new version and result.
+final FutureProvider<PlaybackEngineInfo> playbackEngineInfoProvider =
+    FutureProvider<PlaybackEngineInfo>(
+  (ref) => ref.watch(ytmRepositoryProvider).playbackEngineInfo(),
 );
 
 /// Home's rails.

@@ -674,6 +674,97 @@ void main() {
     });
   });
 
+  group('lockdown token', () {
+    test('the install token is fetched, then sent on the data call', () async {
+      final List<http.Request> requests = <http.Request>[];
+      final YtmRepository repo = repositoryOver(
+        MockClient((http.Request request) async {
+          requests.add(request);
+          return recordedResponse(request);
+        }),
+      );
+
+      await repo.home();
+
+      final http.Request tokenCall = requests.firstWhere(
+        (http.Request r) => r.url.path == '/auth/install-token',
+      );
+      // The token endpoint needs no token: it is the secret being fetched.
+      expect(tokenCall.headers['X-Sonore-Token'], isNull);
+
+      final http.Request homeCall =
+          requests.firstWhere((http.Request r) => r.url.path == '/home');
+      expect(homeCall.headers['X-Sonore-Token'], 'install-token-fixture');
+    });
+
+    test('the token is fetched once and reused for later calls', () async {
+      int tokenCalls = 0;
+      final YtmRepository repo = repositoryOver(
+        MockClient((http.Request request) async {
+          if (request.url.path == '/auth/install-token') tokenCalls += 1;
+          return recordedResponse(request);
+        }),
+      );
+
+      await repo.home();
+      await repo.library(LibrarySegment.songs);
+      await repo.connection();
+
+      expect(tokenCalls, 1, reason: 'the token must be cached, not re-fetched');
+    });
+
+    test('a sidecar that cannot answer leaves the token null, not an error',
+        () async {
+      final MockClient dead = MockClient(
+        (http.Request request) async => throw const SocketException('refused'),
+      );
+
+      expect(await repositoryOver(dead).installToken(), isNull);
+    });
+  });
+
+  group('playback engine', () {
+    test('reports the version, source and last result the sidecar gives',
+        () async {
+      final YtmRepository repo = repositoryOver(
+        recordedSidecar(responses: <String, http.Response>{
+          '/playback/engine': jsonOk(
+            '{"version":"2026.10.18","source":"updated","path":null,'
+            '"update":{"ok":true,"version":"2026.10.18","error":null,'
+            '"last_check":"2026-10-18T00:00:00Z"}}',
+          ),
+        }),
+      );
+
+      final PlaybackEngineInfo engine = await repo.playbackEngineInfo();
+
+      expect(engine.version, '2026.10.18');
+      expect(engine.source, 'updated');
+      expect(engine.lastOk, isTrue);
+      expect(engine.lastError, isNull);
+    });
+
+    test('a failed update carries the reason, not a fake success', () async {
+      final YtmRepository repo = repositoryOver(
+        recordedSidecar(responses: <String, http.Response>{
+          '/playback/engine': jsonOk(
+            '{"version":"2024.08.06","source":"bundled",'
+            '"update":{"ok":false,"version":null,'
+            '"error":"update server unreachable","last_check":null}}',
+          ),
+        }),
+      );
+
+      final PlaybackEngineInfo engine = await repo.playbackEngineInfo();
+
+      expect(engine.lastOk, isFalse);
+      expect(engine.lastError, 'update server unreachable');
+      // The engine in use is still named even though the update failed.
+      expect(engine.version, '2024.08.06');
+      expect(engine.source, 'bundled');
+    });
+  });
+
   group('failures', () {
     test('401 means signed out, and carries the sidecar detail', () async {
       final YtmRepository repo = repositoryOver(

@@ -78,6 +78,20 @@ class YtmApiClient {
 
   bool get isConnected => _baseUrl != null;
 
+  /// The per-install API token the sidecar requires on every account/stream
+  /// route (header `X-Sonore-Token`). Fetched once from the sidecar's own
+  /// `/auth/install-token` and then attached automatically; the app never
+  /// shows or logs it except through the explicit Settings copy button.
+  String? _apiToken;
+
+  /// The token in use, or null before the first successful fetch.
+  String? get apiToken => _apiToken;
+
+  /// True while a token fetch is in flight. The fetch is a plain HTTP call on
+  /// purpose: routing it through [_send] would call [connect], which calls back
+  /// into [_ensureToken], and the two would recurse forever.
+  bool _fetchingToken = false;
+
   /// Deadlines per call shape: a search or home feed is a few seconds, but
   /// resolving a stream runs yt-dlp on the sidecar and is measurably slower.
   static const Duration _dataTimeout = Duration(seconds: 30);
@@ -87,13 +101,15 @@ class YtmApiClient {
   /// Finds the sidecar and remembers its base URL.
   ///
   /// The sidecar picks a free port in 8000-8099 at boot and publishes it to
-  /// `%TEMP%/ytmusic_sidecar_port.txt` — the same contract the WinUI client's
-  /// SidecarLauncher uses. Android has no on-device sidecar, so the host
-  /// loopback address is tried there instead.
+  /// `%LOCALAPPDATA%\Sonore\sidecar_port.txt` — per-user, outside the app
+  /// folder and %TEMP%. The old `%TEMP%/ytmusic_sidecar_port.txt` is still
+  /// read as a fallback so an older sidecar keeps working. Android has no
+  /// on-device sidecar, so the host loopback address is tried there instead.
   Future<String?> connect() async {
     for (final String candidate in await _candidates()) {
       if (await _isHealthy(candidate)) {
         _baseUrl = candidate;
+        await _ensureToken();
         return candidate;
       }
     }
@@ -101,21 +117,76 @@ class YtmApiClient {
     return null;
   }
 
-  /// Reads `%TEMP%/ytmusic_sidecar_port.txt`, which the sidecar writes once it
-  /// is actually listening. An unreadable temp directory is not fatal: the
-  /// fixed-port fallbacks still have a chance of finding it.
+  /// Reads the published port file. The current location is
+  /// `%LOCALAPPDATA%\Sonore\sidecar_port.txt`; the pre-1.6.1
+  /// `%TEMP%/ytmusic_sidecar_port.txt` is the fallback. An unreadable
+  /// directory is not fatal: the fixed-port fallbacks still have a chance.
   static Future<String?> _readPublishedPort() async {
+    final List<String> directories = <String>[
+      if (Platform.environment['LOCALAPPDATA'] != null)
+        '${Platform.environment['LOCALAPPDATA']}${Platform.pathSeparator}Sonore',
+      Directory.systemTemp.path,
+    ];
+    const List<String> names = <String>[
+      'sidecar_port.txt',
+      'ytmusic_sidecar_port.txt',
+    ];
+    for (final String directory in directories) {
+      for (final String name in names) {
+        try {
+          final File file = File('$directory${Platform.pathSeparator}$name');
+          if (!await file.exists()) continue;
+          final String value = (await file.readAsString()).trim();
+          if (value.isNotEmpty) return value;
+        } catch (_) {
+          // Try the next candidate path.
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Fetches the per-install API token once and keeps it for later calls.
+  ///
+  /// Best effort: a sidecar that cannot answer here will surface the real
+  /// problem on the request that follows, so this never throws. It talks to
+  /// [_baseUrl] directly (no [_send]) because the request that triggered the
+  /// fetch is already inside `_send`; going through it would recurse.
+  Future<void> _ensureToken() async {
+    if (_apiToken != null || _fetchingToken) return;
+    final String? base = _baseUrl;
+    if (base == null) return; // Not connected yet; connect() fetches it.
+
+    _fetchingToken = true;
     try {
-      final File file = File(
-        '${Directory.systemTemp.path}${Platform.pathSeparator}'
-        'ytmusic_sidecar_port.txt',
-      );
-      if (!await file.exists()) return null;
-      return (await file.readAsString()).trim();
+      final http.Response response = await _client
+          .get(Uri.parse('$base/auth/install-token'))
+          .timeout(_connectTimeout);
+      if (response.statusCode == 200) {
+        final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
+        if (decoded is Map<String, dynamic>) {
+          _apiToken = decoded['install_token'] as String?;
+        }
+      }
     } catch (_) {
-      return null;
+      // Leave it null; the actual request surfaces the real failure.
+    } finally {
+      _fetchingToken = false;
     }
   }
+
+  /// The per-install token, fetched if needed. Used by Settings to show and
+  /// copy the value so the extension popup can be given it once.
+  Future<String?> installToken() async {
+    if (_baseUrl == null) await connect();
+    await _ensureToken();
+    return _apiToken;
+  }
+
+  /// The header every locked route expects, or nothing before the fetch lands.
+  Map<String, String> _authHeaders() => _apiToken == null
+      ? const <String, String>{}
+      : <String, String>{'X-Sonore-Token': _apiToken!};
 
   Future<List<String>> _candidates() async {
     final List<String> candidates = <String>[];
@@ -173,8 +244,10 @@ class YtmApiClient {
   }
 
   Future<dynamic> _getJson(String path, {Duration? timeout}) async {
+    await _ensureToken();
     final http.Response response = await _send(
-      (String base) => _client.get(Uri.parse('$base$path')),
+      (String base) =>
+          _client.get(Uri.parse('$base$path'), headers: _authHeaders()),
       timeout: timeout ?? _dataTimeout,
     );
     return _decode(response, path);
@@ -186,11 +259,13 @@ class YtmApiClient {
     Duration? timeout,
     Map<String, String> extraHeaders = const <String, String>{},
   }) async {
+    await _ensureToken();
     final http.Response response = await _send(
       (String base) => _client.post(
         Uri.parse('$base$path'),
         headers: <String, String>{
           'Content-Type': 'application/json',
+          ..._authHeaders(),
           ...extraHeaders,
         },
         body: jsonEncode(body),
@@ -348,9 +423,12 @@ class YtmApiClient {
   /// effort: a failure here is not the user's problem, so it is swallowed.
   Future<void> prefetch(String videoId) async {
     try {
+      await _ensureToken();
       await _send(
-        (String base) =>
-            _client.get(Uri.parse('$base/prefetch/${Uri.encodeComponent(videoId)}')),
+        (String base) => _client.get(
+          Uri.parse('$base/prefetch/${Uri.encodeComponent(videoId)}'),
+          headers: _authHeaders(),
+        ),
         timeout: _dataTimeout,
       );
     } on YtmException {
@@ -513,6 +591,18 @@ class YtmApiClient {
   /// POST /auth/signout — forget the stored session on the sidecar.
   Future<void> signOut() async {
     await _postJson('/auth/signout', const <String, dynamic>{});
+  }
+
+  /// GET /playback/engine -> {version, source, path, update}. The playback
+  /// engine is the bundled (or updated) yt-dlp the sidecar uses to resolve
+  /// stream URLs; Settings shows its version and the last update result.
+  Future<Map<String, dynamic>> playbackEngine() async =>
+      _asMap(await _getJson('/playback/engine'));
+
+  /// POST /playback/engine/update — refresh yt-dlp in the background. The
+  /// caller re-reads [playbackEngine] to see the result once it lands.
+  Future<void> updatePlaybackEngine() async {
+    await _postJson('/playback/engine/update', const <String, dynamic>{});
   }
 
   /// POST /ratings — real like/dislike via ytmusicapi's rate_song.

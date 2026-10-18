@@ -67,6 +67,22 @@ Future<http.Response> recordedResponse(
   };
   if (name.isNotEmpty) return jsonOk(fixture(name));
 
+  // Per-install API token: the app fetches this once and then sends it as
+  // X-Sonore-Token on every account/stream route. Inline rather than a fixture
+  // because it is not a recording of account data.
+  if (path == '/auth/install-token') {
+    return jsonOk('{"install_token":"install-token-fixture"}');
+  }
+  // The playback engine (yt-dlp build): version, source, last update result.
+  if (path == '/playback/engine') {
+    return jsonOk('{"version":"2024.08.06","source":"bundled",'
+        '"path":null,'
+        '"update":{"ok":null,"version":null,"error":null,"last_check":null}}');
+  }
+  if (path == '/playback/engine/update') {
+    return jsonOk('{"update":"started"}');
+  }
+
   if (path.startsWith('/album/')) return jsonOk(fixture('album.json'));
   if (path.startsWith('/playlist/')) return jsonOk(fixture('playlist.json'));
   if (path.startsWith('/artist/')) return jsonOk(fixture('artist.json'));

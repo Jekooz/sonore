@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -115,6 +116,8 @@ class SettingsScreen extends ConsumerWidget {
                             'Repeat (Off, All, One) cycles from the transport '
                             'controls and persists with these.',
                           ),
+                          const SizedBox(height: Tokens.s8),
+                          const _PlaybackEngineRow(),
                         ],
                       );
                     },
@@ -148,6 +151,7 @@ class SettingsScreen extends ConsumerWidget {
                   const _Diagnostics(),
                   const _Section(title: 'Account'),
                   const _Account(),
+                  const _ApiTokenRow(),
                   const _Section(title: 'Privacy'),
                   const _Note(
                     'Your YouTube Music session is kept by the local service '
@@ -487,7 +491,8 @@ class _Diagnostics extends ConsumerWidget {
         const SizedBox(height: Tokens.s8),
         const _Note(
           'The service runs on this computer only. If it is not reachable, '
-          'make sure Python and yt-dlp are installed, then check again.',
+          'restart the app and check again; use “Update playback engine” under '
+          'Playback if a track will not play.',
         ),
       ],
     );
@@ -708,4 +713,166 @@ class _AccountState extends ConsumerState<_Account> {
     ref.invalidate(connectionProvider);
     if (context.mounted) context.go(AppDestination.home.path);
   }
+}
+
+/// The per-install API token, shown once so the helper extension's popup can be
+/// given it. This is the only place in the UI the value appears; the app sends
+/// it automatically on every local request and never logs it. The row is shown
+/// whether or not a session exists, because the extension needs the token
+/// before the first sign-in.
+class _ApiTokenRow extends ConsumerWidget {
+  const _ApiTokenRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<String?> token = ref.watch(installTokenProvider);
+    final String? value = token.value;
+    final bool ready = value != null && value.isNotEmpty;
+
+    final String shown = switch (token) {
+      AsyncData() => ready ? value : 'Unavailable',
+      AsyncError() => 'Unavailable',
+      _ => 'Loading…',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: Tokens.s4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(child: Text('API token', style: Tokens.subtitle)),
+              const SizedBox(width: Tokens.s8),
+              Flexible(
+                child: SelectableText(
+                  shown,
+                  style: Tokens.caption,
+                  textAlign: TextAlign.right,
+                  maxLines: 2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (ready)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: PillButton(
+              icon: AppIcons.linkSimple,
+              label: 'Copy token',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: value));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('API token copied.')),
+                );
+              },
+            ),
+          ),
+        const _Note(
+          'The helper extension asks for this once so it can hand your session '
+          'to this app. Keep it private: it unlocks your local account data.',
+        ),
+      ],
+    );
+  }
+}
+
+/// The playback engine is the yt-dlp build the sidecar resolves stream URLs
+/// with. The bundled build ages; this shows which one is in use and lets the
+/// user pull the latest without waiting for an app update. The refresh runs in
+/// the background on the sidecar, so after triggering it we poll the provider
+/// until the result lands (or give up and say so).
+class _PlaybackEngineRow extends ConsumerStatefulWidget {
+  const _PlaybackEngineRow();
+
+  @override
+  ConsumerState<_PlaybackEngineRow> createState() => _PlaybackEngineRowState();
+}
+
+class _PlaybackEngineRowState extends ConsumerState<_PlaybackEngineRow> {
+  bool _updating = false;
+  String? _result;
+
+  @override
+  Widget build(BuildContext context) {
+    final AsyncValue<PlaybackEngineInfo> engine =
+        ref.watch(playbackEngineInfoProvider);
+    final PlaybackEngineInfo? value = engine.value;
+
+    final String version = switch (engine) {
+      AsyncData() => value?.version ?? 'Unknown',
+      AsyncError() => 'Not reachable',
+      _ => 'Checking…',
+    };
+    final String source = switch (value?.source) {
+      'updated' => 'updated copy',
+      'path' => 'on PATH',
+      _ => 'bundled',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _KeyValueRow(label: 'Playback engine', value: '$version ($source)'),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: PillButton(
+            icon: AppIcons.arrowClockwise,
+            label: _updating ? 'Updating…' : 'Update playback engine',
+            onPressed: _updating ? null : _update,
+          ),
+        ),
+        if (_result != null)
+          Padding(
+            padding: const EdgeInsets.only(top: Tokens.s8),
+            child: Text(_result!, style: Tokens.caption),
+          ),
+        const _Note(
+          'An update is checked once a day in the background. Use this button '
+          'if a track will not play, then try it again.',
+        ),
+      ],
+    );
+  }
+
+  Future<void> _update() async {
+    setState(() {
+      _updating = true;
+      _result = null;
+    });
+    try {
+      await ref.read(ytmRepositoryProvider).updatePlaybackEngine();
+      String? message;
+      // The sidecar updates in the background; poll for the finished job so the
+      // row reports the real outcome rather than "started".
+      for (int attempt = 0; attempt < 24; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        final PlaybackEngineInfo engine =
+            await ref.refresh(playbackEngineInfoProvider.future);
+        if (engine.lastOk == null) continue;
+        message = engine.lastOk!
+            ? 'Updated to ${engine.version ?? 'the latest version'}.'
+            : 'Update failed: ${_redact(engine.lastError ?? 'unknown error')}';
+        break;
+      }
+      if (!mounted) return;
+      setState(() {
+        _updating = false;
+        _result = message ?? 'The update is still running. Try again shortly.';
+      });
+    } on YtmException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _updating = false;
+        _result = _redact(error.message);
+      });
+    }
+  }
+
+  /// A network failure can carry a URL, which the UI never shows verbatim.
+  static String _redact(String value) =>
+      value.replaceAll(RegExp(r'https?://\S+'), '<url>');
 }

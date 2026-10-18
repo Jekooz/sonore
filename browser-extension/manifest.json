@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Sonore Helper",
-  "version": "1.0.0",
-  "description": "Hands your YouTube Music session cookies to the local Sonore app so you can sign in from your own browser. Cookies are sent only to 127.0.0.1 and are never stored by the extension.",
-  "permissions": ["cookies", "storage"],
+  "version": "1.1.0",
+  "description": "Hands your YouTube Music session to the local Sonore app automatically: sign in once in your own browser and the app picks it up. Cookies are sent only to 127.0.0.1 and are never stored by the extension.",
+  "permissions": ["cookies", "storage", "webNavigation", "alarms"],
   "host_permissions": [
     "https://music.youtube.com/*",
     "http://127.0.0.1/*"
   ],
   "action": {
-    "default_title": "Sign in to Sonore",
+    "default_title": "Sonore Helper",
     "default_popup": "popup.html"
   },
   "background": {

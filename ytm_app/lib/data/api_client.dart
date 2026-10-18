@@ -186,7 +186,8 @@ class YtmApiClient {
     Duration? timeout,
     Map<String, String> extraHeaders = const <String, String>{},
   }) async {
-    final http.Response response = await _send(      (String base) => _client.post(
+    final http.Response response = await _send(
+      (String base) => _client.post(
         Uri.parse('$base$path'),
         headers: <String, String>{
           'Content-Type': 'application/json',

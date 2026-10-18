@@ -101,6 +101,17 @@ _APP_DATA_DIR = os.path.join(
 )
 _AUTH_FILE = os.path.join(_APP_DATA_DIR, "auth_headers.dat")
 
+# Per-install sidecar state: the API token the app and the extension must send,
+# plus the small state file the update checker and the port publisher share.
+# %LOCALAPPDATA%\Sonore\ lives beside the user, not beside the app, so an
+# uninstall leaves it and an install for one account cannot read another's.
+_SONORE_DIR = os.path.join(
+    os.environ.get("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local")),
+    "Sonore",
+)
+INSTALL_TOKEN_FILE = os.path.join(_SONORE_DIR, "install_token.dat")
+UPDATE_STATE_FILE = os.path.join(_SONORE_DIR, "update_state.json")
+
 
 class _DATA_BLOB(ctypes.Structure):
     _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(wintypes.BYTE))]
@@ -515,3 +526,53 @@ class YtmusicService:
 
 # Single shared instance used by the FastAPI app.
 ytmusic_service = YtmusicService()
+
+
+# ---------- per-install API token (encrypted at rest) ----------
+
+
+def _install_token_path() -> str:
+    return os.path.join(_SONORE_DIR, "install_token.dat")
+
+
+def install_token_get() -> str | None:
+    """The per-install token, decrypted, or None when none exists yet."""
+    if not _DPAPI_AVAILABLE:
+        return None
+    path = _install_token_path()
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "rb") as f:
+            encrypted = f.read()
+        return _dpapi_decrypt(encrypted).decode("utf-8")
+    except StorageError as e:
+        logger.warning("Install token decryption failed: %s — removing stale file.", e)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return None
+    except OSError as e:
+        logger.warning("Could not read install token: %s.", e)
+        return None
+
+
+def install_token_set(value: str) -> None:
+    """Encrypt *value* with DPAPI and write it atomically."""
+    if not _DPAPI_AVAILABLE:
+        raise StorageError("DPAPI not available on this platform")
+    os.makedirs(_SONORE_DIR, exist_ok=True)
+    encrypted = _dpapi_encrypt(value.encode("utf-8"))
+    tmp_path = _install_token_path() + ".tmp"
+    with open(tmp_path, "wb") as f:
+        f.write(encrypted)
+    os.replace(tmp_path, _install_token_path())
+
+
+def install_token_delete() -> None:
+    try:
+        if os.path.exists(_install_token_path()):
+            os.remove(_install_token_path())
+    except OSError as e:
+        logger.warning("Could not remove install token: %s.", e)

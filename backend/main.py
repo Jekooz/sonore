@@ -61,6 +61,8 @@ from services.ytmusic_client import (
     AuthError,
     StorageError,
     cookies_from_cookie_header,
+    install_token_get,
+    install_token_set,
     sanitize_account,
     ytmusic_service,
 )
@@ -331,6 +333,65 @@ def _consume_pairing_token(provided: str | None) -> str | None:
     return None
 
 
+# ---------------- per-install API token ----------------
+
+# One random token per install, stored encrypted next to the session material.
+# Every endpoint that returns account data or a stream requires it (header
+# `X-Sonore-Token`), so a stray local caller or a forged web origin cannot
+# reach the account even when loopback itself is allowed. It never rotates
+# while the install exists; learning it requires reading the encrypted file or
+# being shown it in the app's Settings -> Account.
+_install_token: str | None = None
+_install_token_lock = threading.Lock()
+
+
+def _ensure_install_token() -> str:
+    """Generate the per-install token once and keep it encrypted at rest."""
+    global _install_token
+    with _install_token_lock:
+        if _install_token is None:
+            stored = install_token_get()
+            if stored:
+                _install_token = stored
+            else:
+                _install_token = secrets.token_urlsafe(32)
+                try:
+                    install_token_set(_install_token)
+                except StorageError as e:
+                    # Encryption cannot run here (or at all): keep the token in
+                    # memory for this session instead of refusing to start.
+                    logger.warning("Install token could not be stored (%s).", e)
+        return _install_token
+
+
+def _require_install_token(request: Request) -> str | None:
+    """Why this caller must not use a locked endpoint, or None."""
+    provided = request.headers.get("X-Sonore-Token")
+    if not provided:
+        return "The Sonore API token is required."
+    try:
+        expected = _ensure_install_token()
+    except StorageError:
+        return "The API token is unavailable."
+    if not secrets.compare_digest(provided, expected):
+        return "The Sonore API token is not valid."
+    return None
+
+
+def _locked(request: Request) -> tuple[int, str] | None:
+    """Locality first (Host + Origin), then the per-install token.
+
+    Returns (status, detail) when the caller must be refused, or None.
+    """
+    reason = _non_loopback_rejection(request)
+    if reason is not None:
+        return 403, reason
+    reason = _require_install_token(request)
+    if reason is not None:
+        return 401, reason
+    return None
+
+
 def _sign_in_pending() -> bool:
     """True while an attempt is actually waiting for a hand-off.
 
@@ -359,6 +420,24 @@ def auth_extension_folder():
     out with no explanation.
     """
     return JSONResponse(content={"folder": _EXTENSION_DIR})
+
+
+@app.get("/auth/install-token")
+def auth_install_token(request: Request):
+    """
+    The per-install API token, for bootstrapping callers.
+
+    No token is needed to read it -- it IS the secret being fetched -- so this
+    is the one endpoint the app calls before it knows the token (and the one
+    the Settings screen shows with a copy button). Locality is still enforced:
+    only this machine's loopback, or an extension origin, may ask.
+    """
+    reason = _non_loopback_rejection(request)
+    if reason is not None:
+        logger.warning("Rejected auth/install-token: %s", reason)
+        raise HTTPException(status_code=403, detail=reason)
+
+    return JSONResponse(content={"install_token": _ensure_install_token()})
 
 
 @app.post("/auth/browser/start")
@@ -445,6 +524,12 @@ def auth_extension(payload: dict, request: Request):
     if rejection is not None:
         logger.warning("Rejected extension hand-off: %s", rejection)
         raise HTTPException(status_code=401, detail=rejection)
+
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        logger.warning("Rejected extension hand-off: %s", detail)
+        raise HTTPException(status_code=status, detail=detail)
 
     # A present-but-EMPTY jar is not a malformed body. The extension always
     # sends {"cookies": {...}}, and it is empty exactly when the browser it is
@@ -650,6 +735,12 @@ async def auth_handoff(request: Request):
         logger.warning("Rejected hand-off: %s", rejection)
         raise HTTPException(status_code=401, detail=rejection)
 
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        logger.warning("Rejected hand-off: %s", detail)
+        raise HTTPException(status_code=status, detail=detail)
+
     if not cookies and "cookie" in headers:
         cookies = cookies_from_cookie_header(headers["cookie"])
     if not cookies and headers:
@@ -693,7 +784,11 @@ def _data(method: str, **kwargs):
 
 
 @app.get("/account")
-def account():
+def account(request: Request):
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     # Sanitized here as well as in verify_candidate: the service's `accountName`
     # has answered with one of its own chrome labels ("Home") on a real session,
     # and Settings must never show that as the signed-in account.
@@ -701,14 +796,22 @@ def account():
 
 
 @app.get("/home")
-def home():
+def home(request: Request):
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     rows = _data("get_home", limit=6)
     # Keep only rows that actually have content to render.
     return JSONResponse(content=[r for r in rows if r.get("contents")])
 
 
 @app.get("/library/playlists")
-def library_playlists():
+def library_playlists(request: Request):
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     playlists = _data("get_library_playlists", limit=50) or []
     normalized = []
     for p in playlists:
@@ -720,27 +823,47 @@ def library_playlists():
 
 
 @app.get("/library/artists")
-def library_artists():
+def library_artists(request: Request):
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     return JSONResponse(content=_data("get_library_artists", limit=50))
 
 
 @app.get("/library/albums")
-def library_albums():
+def library_albums(request: Request):
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     return JSONResponse(content=_data("get_library_albums", limit=50))
 
 
 @app.get("/library/songs")
-def library_songs():
+def library_songs(request: Request):
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     return JSONResponse(content=_data("get_library_songs", limit=100))
 
 
 @app.get("/library/subscriptions")
-def library_subscriptions():
+def library_subscriptions(request: Request):
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     return JSONResponse(content=_data("get_library_subscriptions", limit=50))
 
 
 @app.get("/library/liked")
-def library_liked():
+def library_liked(request: Request):
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     liked = _data("get_liked_songs", limit=300)
     return JSONResponse(content=liked.get("tracks", []))
 
@@ -806,8 +929,12 @@ def _collection(kind: str, title, subtitle, thumbnails, tracks) -> dict:
 # argument names must be its own (browseId / playlistId / channelId) — passing
 # positionally raises TypeError, which surfaces as a 500 rather than a 502.
 @app.get("/album/{browse_id}")
-def album_detail(browse_id: str):
+def album_detail(request: Request, browse_id: str):
     """An album as a collection: real metadata + real track list (get_album)."""
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     album = _data("get_album", browseId=browse_id) or {}
     tracks = [_normalize_album(t) for t in (album.get("tracks") or [])]
     subtitle = _credit_names(album.get("artists")) or _credit_names(album.get("artist"))
@@ -824,8 +951,12 @@ def album_detail(browse_id: str):
 
 
 @app.get("/playlist/{playlist_id}")
-def playlist_detail(playlist_id: str):
+def playlist_detail(request: Request, playlist_id: str):
     """A playlist as a collection: real metadata + real track list (get_playlist)."""
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     playlist = _data("get_playlist", playlistId=playlist_id) or {}
     tracks = playlist.get("tracks") or []
     subtitle = (
@@ -845,7 +976,7 @@ def playlist_detail(playlist_id: str):
 
 
 @app.get("/artist/{channel_id}")
-def artist_detail(channel_id: str):
+def artist_detail(request: Request, channel_id: str):
     """An artist as a collection: their real top songs, playable as a tracklist.
 
     get_artist() nests the songs under {"songs": {"results": [...]}}; each row
@@ -853,6 +984,10 @@ def artist_detail(channel_id: str):
     picks. Albums/singles live under their own keys and are not tracks, so they
     are not flattened in here.
     """
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     artist = _data("get_artist", channelId=channel_id) or {}
     songs = (artist.get("songs") or {}).get("results") or []
     tracks = [_normalize_album(t) for t in songs]
@@ -881,6 +1016,7 @@ SEARCH_FILTERS = {
 
 @app.get("/search")
 def search(
+    request: Request,
     q: str = Query(..., min_length=1),
     filter: str | None = Query(default=None),
 ):
@@ -893,6 +1029,10 @@ def search(
     returns the mixed result list (each item still carries its real
     resultType, which the frontend renders as a small type badge).
     """
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     kwargs = {"query": q, "limit": 20}
     if filter:
         if filter not in SEARCH_FILTERS:
@@ -1023,10 +1163,15 @@ def _ranked_candidates(seed: str, limit: int, exclude: set[str]) -> dict:
 
 @app.get("/radio")
 def radio(
+    request: Request,
     videoId: str = Query(..., description="Seed video id"),
     limit: int = Query(30, ge=1, le=MAX_CANDIDATES),
 ):
     """Start Radio: genuine YT Music radio (+ related) for one seed song."""
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     _validate_video_id(videoId)
     payload = _ranked_candidates(videoId, limit, exclude=set())
     payload["source"] = "radio"
@@ -1035,6 +1180,7 @@ def radio(
 
 @app.get("/recommendations")
 def recommendations(
+    request: Request,
     seed: str = Query(..., description="Current video id"),
     limit: int = Query(12, ge=1, le=MAX_CANDIDATES),
     exclude: str | None = Query(
@@ -1043,6 +1189,10 @@ def recommendations(
     ),
 ):
     """Autoplay: ranked candidates to append while the queue runs low."""
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     _validate_video_id(seed)
     blocked = _parse_exclude(exclude)
     payload = _ranked_candidates(seed, limit, exclude=blocked)
@@ -1051,11 +1201,15 @@ def recommendations(
 
 
 @app.post("/listening/events")
-def listening_events(event: ListeningEventIn):
+def listening_events(request: Request, event: ListeningEventIn):
     """
     Store one aggregated playback event (not a position tick). The store
     validates again, clamps numbers and caps growth; no secrets are kept.
     """
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     try:
         total = listening_store.record(event.model_dump())
     except ValueError as e:
@@ -1064,7 +1218,7 @@ def listening_events(event: ListeningEventIn):
 
 
 @app.get("/listening/history")
-def listening_history(limit: int = Query(30, ge=1, le=100)):
+def listening_history(request: Request, limit: int = Query(30, ge=1, le=100)):
     """
     The most recent distinct tracks this app played, newest first.
 
@@ -1072,18 +1226,26 @@ def listening_history(limit: int = Query(30, ge=1, le=100)):
     claim about the account's YouTube Music history, and it holds no session
     data — only video ids, titles, artists and playback numbers.
     """
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     entries = listening_store.recent_plays(limit)
     return JSONResponse(content={"entries": entries, "count": len(entries)})
 
 
 @app.post("/ratings")
-def ratings(payload: RatingIn):
+def ratings(request: Request, payload: RatingIn):
     """
     Genuine like / dislike / unlike via ytmusicapi's rate_song. The explicit
     rating is also remembered locally so the ranker can weigh it — distinct
     from adding/removing the song in the library (a different provider op
     this endpoint deliberately does not perform).
     """
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     _data("rate_song", videoId=payload.videoId, rating=payload.rating)
     try:
         listening_store.set_rating(payload.videoId, payload.rating)
@@ -1101,7 +1263,7 @@ def ratings(payload: RatingIn):
 # exist before FastAPI builds the route, and the model block sits after the
 # library reads.
 @app.post("/library/subscriptions")
-def set_subscription(payload: SubscriptionIn):
+def set_subscription(request: Request, payload: SubscriptionIn):
     """Follow or unfollow one artist channel.
 
     A genuine account change — the same operation the YouTube Music UI performs.
@@ -1110,6 +1272,10 @@ def set_subscription(payload: SubscriptionIn):
     library exposes. The plural subscribe form is deprecated upstream, so it is
     deliberately not used.
     """
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     if payload.subscribed:
         _data("subscribe_artist", channelId=payload.artistId)
     else:
@@ -1169,8 +1335,12 @@ _prefetch_lock = threading.Lock()
 
 
 @app.get("/prefetch/{video_id}")
-def prefetch(video_id: str):
+def prefetch(request: Request, video_id: str):
     """Warm the stream-URL cache for a video id (fire-and-forget, bounded)."""
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     if not _VIDEO_ID_RE.fullmatch(video_id):
         raise HTTPException(status_code=400, detail="Invalid video id.")
     # 202 Accepted: the work started (or already ran); the response does not
@@ -1274,8 +1444,12 @@ def _store_stream_url(video_id: str, url: str, expires_at: float) -> None:
 
 
 @app.get("/stream/{video_id}")
-def stream(video_id: str):
+def stream(request: Request, video_id: str):
     """Return a short-lived audio URL for the player to fetch directly."""
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     if not _VIDEO_ID_RE.fullmatch(video_id):
         raise HTTPException(status_code=400, detail="Invalid video id.")
     return JSONResponse(content={"videoId": video_id, "url": _resolve_stream(video_id)})
@@ -1378,13 +1552,17 @@ def _fetch_lyrics(video_id: str) -> dict:
 
 
 @app.get("/lyrics/{video_id}")
-def lyrics(video_id: str):
+def lyrics(request: Request, video_id: str):
     """Real lyrics for the current track.
 
     200  {available: true, synced, lines, source}  -- real lyrics
     404  YouTube Music has no lyrics for this track (an answer, not a failure)
     400  malformed video id
     """
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
     _validate_video_id(video_id)
     cached = _lyrics_cached(video_id)
     if cached is None:

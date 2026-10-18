@@ -39,6 +39,9 @@ if BACKEND_DIR not in sys.path:
 
 import main  # noqa: E402
 from services.ytmusic_client import AuthError  # noqa: E402
+from test_auth_pairing import TEST_PORT, isolated_env  # noqa: F401  (fixture)
+
+pytestmark = pytest.mark.usefixtures("isolated_env")
 
 
 ARTIST_ID = "UC5275386193416ad3d1be2f"
@@ -46,7 +49,11 @@ ARTIST_ID = "UC5275386193416ad3d1be2f"
 
 @pytest.fixture
 def client():
-    return TestClient(main.app)
+    # Loopback base_url + the per-install token: every data route requires
+    # both, and this suite is about the route's account behaviour, not the gate.
+    tc = TestClient(main.app, base_url=f"http://127.0.0.1:{TEST_PORT}")
+    tc.headers["X-Sonore-Token"] = tc.get("/auth/install-token").json()["install_token"]
+    return tc
 
 
 class FakeProvider:

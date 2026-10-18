@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from test_auth_pairing import (  # noqa: F401  (fixtures are picked up by name)
     GOOD_JAR,
     TEST_PORT,
+    api_token,
     isolated_env,
     start_sign_in,
     wait_for_session_to_settle,
@@ -54,8 +55,10 @@ def start(client, payload=None):
     return body["state"], body["token"]
 
 
-def post_handoff(client, body, token=None, extra_headers=None):
+def post_handoff(client, body, token=None, extra_headers=None, api_token=None):
     headers = dict(extra_headers or {})
+    if api_token is not None:
+        headers["X-Sonore-Token"] = api_token
     if token is not None:
         headers["X-Ytm-Token"] = token
     return client.post("/auth/handoff", json=body, headers=headers)
@@ -92,7 +95,7 @@ def good_jar():
 # ---------------------------------------------------------------- happy path
 
 
-def test_valid_hand_off_stores_and_settles_the_attempt(client, monkeypatch):
+def test_valid_hand_off_stores_and_settles_the_attempt(client, monkeypatch, api_token):
     seen = stub_verification(monkeypatch, with_headers=True)
     _, token = start(client)
 
@@ -103,6 +106,7 @@ def test_valid_hand_off_stores_and_settles_the_attempt(client, monkeypatch):
             "headers": {"user-agent": "UA-Handoff/1.0", "x-youtube-client-name": "67"},
         },
         token=token,
+        api_token=api_token,
     )
 
     assert resp.status_code == 200, resp.text
@@ -114,7 +118,7 @@ def test_valid_hand_off_stores_and_settles_the_attempt(client, monkeypatch):
     assert wait_for_session_to_settle(client)["state"] == "success"
 
 
-def test_hand_off_headers_are_normalised_before_use(client, monkeypatch):
+def test_hand_off_headers_are_normalised_before_use(client, monkeypatch, api_token):
     seen = stub_verification(monkeypatch, with_headers=True)
     _, token = start(client)
 
@@ -122,6 +126,7 @@ def test_hand_off_headers_are_normalised_before_use(client, monkeypatch):
         client,
         {"cookies": good_jar(), "headers": {"User-Agent": "UA-Caps/2.0"}},
         token=token,
+        api_token=api_token,
     )
 
     assert resp.status_code == 200, resp.text
@@ -131,50 +136,50 @@ def test_hand_off_headers_are_normalised_before_use(client, monkeypatch):
 # ---------------------------------------------------------- pairing / attempt
 
 
-def test_hand_off_rejected_with_no_attempt_in_progress(client):
-    resp = post_handoff(client, {"cookies": good_jar()}, token="whatever")
+def test_hand_off_rejected_with_no_attempt_in_progress(client, api_token):
+    resp = post_handoff(client, {"cookies": good_jar()}, token="whatever", api_token=api_token)
     assert resp.status_code == 409, resp.text
     assert "start sign-in" in resp.json()["detail"].lower()
 
 
-def test_hand_off_rejected_without_token(client):
+def test_hand_off_rejected_without_token(client, api_token):
     start(client)
-    resp = post_handoff(client, {"cookies": good_jar()})
+    resp = post_handoff(client, {"cookies": good_jar()}, api_token=api_token)
     assert resp.status_code == 401, resp.text
     assert "missing pairing token" in resp.json()["detail"].lower()
 
 
-def test_hand_off_rejected_with_wrong_token(client):
+def test_hand_off_rejected_with_wrong_token(client, api_token):
     start(client)
-    resp = post_handoff(client, {"cookies": good_jar()}, token="not-the-token")
+    resp = post_handoff(client, {"cookies": good_jar()}, token="not-the-token", api_token=api_token)
     assert resp.status_code == 401, resp.text
     assert "invalid pairing token" in resp.json()["detail"].lower()
 
 
-def test_expired_token_is_rejected(client):
+def test_expired_token_is_rejected(client, api_token):
     _, token = start(client)
     main._pairing_issued_at = time.monotonic() - (
         browser_auth.WAIT_TIMEOUT_SECONDS + 1
     )
 
-    resp = post_handoff(client, {"cookies": good_jar()}, token=token)
+    resp = post_handoff(client, {"cookies": good_jar()}, token=token, api_token=api_token)
     assert resp.status_code == 401, resp.text
     assert "expired" in resp.json()["detail"].lower()
 
 
-def test_token_is_single_use_for_hand_off(client, monkeypatch):
+def test_token_is_single_use_for_hand_off(client, monkeypatch, api_token):
     stub_verification(monkeypatch)
     _, token = start(client)
 
-    assert post_handoff(client, {"cookies": good_jar()}, token=token).status_code == 200
-    replay = post_handoff(client, {"cookies": good_jar()}, token=token)
+    assert post_handoff(client, {"cookies": good_jar()}, token=token, api_token=api_token).status_code == 200
+    replay = post_handoff(client, {"cookies": good_jar()}, token=token, api_token=api_token)
     assert replay.status_code in (401, 409), replay.text
 
 
 # ------------------------------------------------------------ non-loopback
 
 
-def test_non_loopback_origin_is_rejected_before_anything_else(client, monkeypatch):
+def test_non_loopback_origin_is_rejected_before_anything_else(client, monkeypatch, api_token):
     """A valid token must not matter: locality is checked first."""
     stub_verification(monkeypatch)  # would make a 200 possible if it got that far
     _, token = start(client)
@@ -183,6 +188,7 @@ def test_non_loopback_origin_is_rejected_before_anything_else(client, monkeypatc
         client,
         {"cookies": good_jar()},
         token=token,
+        api_token=api_token,
         extra_headers={"Origin": "https://evil.example"},
     )
     assert resp.status_code == 403, resp.text
@@ -191,7 +197,7 @@ def test_non_loopback_origin_is_rejected_before_anything_else(client, monkeypatc
     assert main._pairing_token == token
 
 
-def test_forged_null_origin_is_rejected(client, monkeypatch):
+def test_forged_null_origin_is_rejected(client, monkeypatch, api_token):
     stub_verification(monkeypatch)
     _, token = start(client)
 
@@ -199,12 +205,13 @@ def test_forged_null_origin_is_rejected(client, monkeypatch):
         client,
         {"cookies": good_jar()},
         token=token,
+        api_token=api_token,
         extra_headers={"Origin": "null"},
     )
     assert resp.status_code == 403, resp.text
 
 
-def test_loopback_origin_is_accepted(client, monkeypatch):
+def test_loopback_origin_is_accepted(client, monkeypatch, api_token):
     stub_verification(monkeypatch)
     _, token = start(client)
 
@@ -212,12 +219,13 @@ def test_loopback_origin_is_accepted(client, monkeypatch):
         client,
         {"cookies": good_jar()},
         token=token,
+        api_token=api_token,
         extra_headers={"Origin": "http://127.0.0.1:8123"},
     )
     assert resp.status_code == 200, resp.text
 
 
-def test_extension_origin_is_accepted(client, monkeypatch):
+def test_extension_origin_is_accepted(client, monkeypatch, api_token):
     stub_verification(monkeypatch)
     _, token = start(client)
 
@@ -225,6 +233,7 @@ def test_extension_origin_is_accepted(client, monkeypatch):
         client,
         {"cookies": good_jar()},
         token=token,
+        api_token=api_token,
         extra_headers={"Origin": "chrome-extension://abcdefghijklmnop"},
     )
     assert resp.status_code == 200, resp.text
@@ -256,61 +265,61 @@ def test_body_that_is_not_json_is_rejected(client):
     assert resp.status_code == 400, resp.text
 
 
-def test_cookies_that_are_not_an_object_are_rejected(client):
+def test_cookies_that_are_not_an_object_are_rejected(client, api_token):
     _, token = start(client)
-    resp = post_handoff(client, {"cookies": ["SID", "HSID"]}, token=token)
+    resp = post_handoff(client, {"cookies": ["SID", "HSID"]}, token=token, api_token=api_token)
     assert resp.status_code == 400, resp.text
     assert "JSON object" in resp.json()["detail"]
 
 
-def test_oversized_body_is_rejected_with_413(client):
+def test_oversized_body_is_rejected_with_413(client, api_token):
     _, token = start(client)
     big = "x" * (main._MAX_HANDOFF_BYTES + 1)
-    resp = post_handoff(client, {"headers": {"cookie": big}}, token=token)
+    resp = post_handoff(client, {"headers": {"cookie": big}}, token=token, api_token=api_token)
     assert resp.status_code == 413, resp.text
 
 
-def test_too_many_entries_are_rejected(client):
+def test_too_many_entries_are_rejected(client, api_token):
     _, token = start(client)
     jar = {f"c{i}": "v" for i in range(main._MAX_HANDOFF_ENTRIES + 1)}
-    resp = post_handoff(client, {"cookies": jar}, token=token)
+    resp = post_handoff(client, {"cookies": jar}, token=token, api_token=api_token)
     assert resp.status_code == 400, resp.text
     assert "Too many" in resp.json()["detail"]
 
 
-def test_oversized_single_value_is_rejected(client):
+def test_oversized_single_value_is_rejected(client, api_token):
     _, token = start(client)
     resp = post_handoff(
-        client, {"cookies": {"SID": "y" * (main._MAX_HANDOFF_VALUE + 1)}}, token=token
+        client, {"cookies": {"SID": "y" * (main._MAX_HANDOFF_VALUE + 1)}}, token=token, api_token=api_token
     )
     assert resp.status_code == 400, resp.text
 
 
-def test_malformed_body_does_not_burn_the_token(client, monkeypatch):
+def test_malformed_body_does_not_burn_the_token(client, monkeypatch, api_token):
     """Shape is checked before the token is spent, so a retry can still pair."""
     stub_verification(monkeypatch)
     _, token = start(client)
 
-    bad = post_handoff(client, {"cookies": "not-a-map"}, token=token)
+    bad = post_handoff(client, {"cookies": "not-a-map"}, token=token, api_token=api_token)
     assert bad.status_code == 400, bad.text
 
-    good = post_handoff(client, {"cookies": good_jar()}, token=token)
+    good = post_handoff(client, {"cookies": good_jar()}, token=token, api_token=api_token)
     assert good.status_code == 200, good.text
 
 
 # ----------------------------------------------------------------- rejections
 
 
-def test_empty_payload_is_reported_as_unsigned_in(client, monkeypatch):
+def test_empty_payload_is_reported_as_unsigned_in(client, monkeypatch, api_token):
     stub_verification(monkeypatch)
     _, token = start(client)
 
-    resp = post_handoff(client, {}, token=token)
+    resp = post_handoff(client, {}, token=token, api_token=api_token)
     assert resp.status_code == 422, resp.text
     assert "required session cookies" in resp.json()["detail"]
 
 
-def test_failed_hand_off_leaves_the_stored_session_untouched(client, monkeypatch):
+def test_failed_hand_off_leaves_the_stored_session_untouched(client, monkeypatch, api_token):
     stored = []
     monkeypatch.setattr(
         main.ytmusic_service,
@@ -326,7 +335,7 @@ def test_failed_hand_off_leaves_the_stored_session_untouched(client, monkeypatch
     )
     _, token = start(client)
 
-    resp = post_handoff(client, {"cookies": good_jar()}, token=token)
+    resp = post_handoff(client, {"cookies": good_jar()}, token=token, api_token=api_token)
     assert resp.status_code == 422, resp.text
     assert stored == []
     # The attempt is failed, not silently waiting.
@@ -361,7 +370,7 @@ def test_start_still_opens_the_browser_by_default(client, monkeypatch):
     assert opened == [browser_auth.MUSIC_URL]
 
 
-def test_pasted_headers_with_cookie_line_sign_in(client, monkeypatch):
+def test_pasted_headers_with_cookie_line_sign_in(client, monkeypatch, api_token):
     stub_verification(monkeypatch, with_headers=True)
     _, token = start(client, {"open_browser": False})
 
@@ -370,6 +379,7 @@ def test_pasted_headers_with_cookie_line_sign_in(client, monkeypatch):
         client,
         {"headers": {"cookie": cookie_line, "user-agent": "UA-Paste/3.0"}},
         token=token,
+        api_token=api_token,
     )
 
     assert resp.status_code == 200, resp.text
@@ -377,9 +387,11 @@ def test_pasted_headers_with_cookie_line_sign_in(client, monkeypatch):
     assert wait_for_session_to_settle(client)["state"] == "success"
 
 
-def test_pasted_headers_without_cookie_line_are_rejected(client):
+def test_pasted_headers_without_cookie_line_are_rejected(client, api_token):
     _, token = start(client, {"open_browser": False})
-    resp = post_handoff(client, {"headers": {"user-agent": "UA/1.0"}}, token=token)
+    resp = post_handoff(
+        client, {"headers": {"user-agent": "UA/1.0"}}, token=token, api_token=api_token
+    )
     assert resp.status_code == 400, resp.text
     assert "cookie:" in resp.json()["detail"]
 
@@ -387,7 +399,7 @@ def test_pasted_headers_without_cookie_line_are_rejected(client):
 # -------------------------------------------------------------------- secrecy
 
 
-def test_no_cookie_or_token_value_is_ever_logged(client, monkeypatch, caplog):
+def test_no_cookie_or_token_value_is_ever_logged(client, monkeypatch, caplog, api_token):
     stub_verification(monkeypatch, with_headers=True)
     _, token = start(client)
 
@@ -396,10 +408,14 @@ def test_no_cookie_or_token_value_is_ever_logged(client, monkeypatch, caplog):
             client,
             {"cookies": good_jar(), "headers": {"user-agent": SECRET_MARKER}},
             token=token,
+            api_token=api_token,
         )
-        post_handoff(client, {"cookies": good_jar()}, token="wrong-token-value")
+        post_handoff(
+            client, {"cookies": good_jar()}, token="wrong-token-value", api_token=api_token
+        )
 
     joined = json.dumps([r.getMessage() for r in caplog.records])
     assert SECRET_MARKER not in joined
     assert token not in joined
+    assert api_token not in joined
     assert "wrong-token-value" not in joined

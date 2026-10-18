@@ -37,6 +37,9 @@ import main  # noqa: E402
 from services import ranking, recommend  # noqa: E402
 from services import listening as listening_mod  # noqa: E402
 from services.ytmusic_client import AuthError  # noqa: E402
+from test_auth_pairing import TEST_PORT, isolated_env  # noqa: F401  (fixture)
+
+pytestmark = pytest.mark.usefixtures("isolated_env")
 
 
 VALID_ID = "dQw4w9WgXcQ"        # 11 chars, valid alphabet
@@ -57,7 +60,11 @@ def isolated(tmp_path, monkeypatch):
 
 @pytest.fixture
 def client():
-    return TestClient(main.app)
+    # Loopback base_url + the per-install token, so these tests exercise the
+    # ranking/route behaviour rather than re-testing the lockdown gate.
+    tc = TestClient(main.app, base_url=f"http://127.0.0.1:{TEST_PORT}")
+    tc.headers["X-Sonore-Token"] = tc.get("/auth/install-token").json()["install_token"]
+    return tc
 
 
 # ---------------------------------------------------------------- fakes

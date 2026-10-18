@@ -67,6 +67,24 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setattr(ytc, "_APP_DATA_DIR", str(sandbox))
     monkeypatch.setattr(ytc, "_AUTH_FILE", str(sandbox / "auth_headers.dat"))
 
+    # Per-install state (the API token, the update banner) lives in
+    # %LOCALAPPDATA%\Sonore. Keep it out of the real machine's copy and never
+    # let a test read or write the token the running app is using.
+    sonore = tmp_path / "sonore"
+    sonore.mkdir()
+    monkeypatch.setattr(ytc, "_SONORE_DIR", str(sonore))
+    monkeypatch.setattr(
+        main, "_YT_DLP_DIR", str(sonore / "bin"), raising=False
+    )
+    monkeypatch.setattr(
+        main, "_UPDATE_STATE_FILE", str(sonore / "update_state.json"), raising=False
+    )
+    monkeypatch.setattr(
+        main, "PORT_FILE", str(sonore / "sidecar_port.txt"), raising=False
+    )
+    monkeypatch.setattr(main, "_install_token", None, raising=False)
+    monkeypatch.setattr(main, "_updating", False, raising=False)
+
     # Guard: if this ever regresses, the tests would be writing to the real
     # credential file. Fail loudly instead.
     assert ytc._AUTH_FILE != REAL_SESSION_FILE
@@ -90,11 +108,23 @@ def isolated_env(tmp_path, monkeypatch):
 
     main._clear_browser_session()
     main._clear_pairing()
+    main._install_token = None
 
 
 @pytest.fixture
 def client():
-    return TestClient(main.app)
+    # Loopback base_url on purpose: the install-token endpoint (and every
+    # hand-off route) refuses a Host that is not 127.0.0.1/localhost, and
+    # TestClient's default "testserver" name is exactly what must be refused.
+    return TestClient(main.app, base_url=f"http://127.0.0.1:{TEST_PORT}")
+
+
+@pytest.fixture
+def api_token(client):
+    """The per-install token, bootstrapped the way the app bootstraps it."""
+    resp = client.get("/auth/install-token")
+    assert resp.status_code == 200, resp.text
+    return resp.json()["install_token"]
 
 
 def start_sign_in(client):
@@ -105,8 +135,10 @@ def start_sign_in(client):
     return main._pairing_token
 
 
-def hand_off(client, token=None, jar=None, headers=None):
+def hand_off(client, token=None, jar=None, headers=None, api_token=None):
     hdrs = dict(headers or {})
+    if api_token is not None:
+        hdrs["X-Sonore-Token"] = api_token
     if token is not None:
         hdrs["X-Ytm-Token"] = token
     return client.post("/auth/extension", json={"cookies": jar or GOOD_JAR}, headers=hdrs)
@@ -179,32 +211,32 @@ def test_hand_off_rejected_without_token(client):
     assert "missing pairing token" in resp.json()["detail"].lower()
 
 
-def test_hand_off_rejected_with_wrong_token(client):
+def test_hand_off_rejected_with_wrong_token(client, api_token):
     start_sign_in(client)
-    resp = hand_off(client, token="not-the-token")
+    resp = hand_off(client, token="not-the-token", api_token=api_token)
     assert resp.status_code == 401, resp.text
     assert "invalid pairing token" in resp.json()["detail"].lower()
 
 
-def test_wrong_token_does_not_burn_the_valid_one(client, monkeypatch):
+def test_wrong_token_does_not_burn_the_valid_one(client, monkeypatch, api_token):
     """Guessing must not lock out the legitimate popup click."""
     token = start_sign_in(client)
     monkeypatch.setattr(main.ytmusic_service, "verify_candidate", lambda c: {"accountName": "x"})
     monkeypatch.setattr(main.ytmusic_service, "store_session", lambda c: {"signed_in": True})
 
-    assert hand_off(client, token="guess").status_code == 401
-    assert hand_off(client, token=token).status_code == 200
+    assert hand_off(client, token="guess", api_token=api_token).status_code == 401
+    assert hand_off(client, token=token, api_token=api_token).status_code == 200
 
 
 # ------------------------------------------------------------ success / replay
 
 
-def test_valid_token_completes_sign_in(client, monkeypatch):
+def test_valid_token_completes_sign_in(client, monkeypatch, api_token):
     token = start_sign_in(client)
     monkeypatch.setattr(main.ytmusic_service, "verify_candidate", lambda c: {"accountName": "x"})
     monkeypatch.setattr(main.ytmusic_service, "store_session", lambda c: {"signed_in": True})
 
-    resp = hand_off(client, token=token)
+    resp = hand_off(client, token=token, api_token=api_token)
     assert resp.status_code == 200, resp.text
     assert resp.json()["signed_in"] is True
 
@@ -212,7 +244,7 @@ def test_valid_token_completes_sign_in(client, monkeypatch):
     assert wait_for_session_to_settle(client)["state"] == "success"
 
 
-def test_token_is_single_use_and_a_replay_is_rejected(client, monkeypatch):
+def test_token_is_single_use_and_a_replay_is_rejected(client, monkeypatch, api_token):
     token = start_sign_in(client)
     monkeypatch.setattr(main.ytmusic_service, "verify_candidate", lambda c: {"accountName": "x"})
 
@@ -227,14 +259,14 @@ def test_token_is_single_use_and_a_replay_is_rejected(client, monkeypatch):
 
     monkeypatch.setattr(main.ytmusic_service, "store_session", fake_store)
 
-    assert hand_off(client, token=token).status_code == 200
+    assert hand_off(client, token=token, api_token=api_token).status_code == 200
 
     # The sharp invariant: the token was already consumed BEFORE anything was
     # stored. That ordering is what makes a replay impossible.
     assert token_at_store == [None], "the token must be consumed before storage runs"
     assert main._pairing_token is None
 
-    replay = hand_off(client, token=token)
+    replay = hand_off(client, token=token, api_token=api_token)
     # The poll thread normally settles the attempt within ~100 ms, so the replay
     # is refused with 409 ("nothing is waiting"); if it has not caught up yet it
     # is 401 ("token already consumed"). Both are refusals, and this asserts the
@@ -243,17 +275,17 @@ def test_token_is_single_use_and_a_replay_is_rejected(client, monkeypatch):
     assert len(store_calls) == 1, "a replayed hand-off must not store a session again"
 
 
-def test_expired_token_is_rejected(client):
+def test_expired_token_is_rejected(client, api_token):
     token = start_sign_in(client)
     # Age the token past the attempt's own 3-minute window.
     main._pairing_issued_at = time.monotonic() - (browser_auth.WAIT_TIMEOUT_SECONDS + 1)
 
-    resp = hand_off(client, token=token)
+    resp = hand_off(client, token=token, api_token=api_token)
     assert resp.status_code == 401, resp.text
     assert "expired" in resp.json()["detail"].lower()
 
 
-def test_new_attempt_rotates_the_token(client, monkeypatch):
+def test_new_attempt_rotates_the_token(client, monkeypatch, api_token):
     first = start_sign_in(client)
     second = start_sign_in(client)
     assert first != second, "each attempt must get its own token"
@@ -261,22 +293,26 @@ def test_new_attempt_rotates_the_token(client, monkeypatch):
     monkeypatch.setattr(main.ytmusic_service, "verify_candidate", lambda c: {"accountName": "x"})
     monkeypatch.setattr(main.ytmusic_service, "store_session", lambda c: {"signed_in": True})
 
-    assert hand_off(client, token=first).status_code == 401, "the retired token must not work"
-    assert hand_off(client, token=second).status_code == 200
+    assert hand_off(client, token=first, api_token=api_token).status_code == 401, "the retired token must not work"
+    assert hand_off(client, token=second, api_token=api_token).status_code == 200
 
 
 # ----------------------------------------------------------------- malformed
 
 
 @pytest.mark.parametrize("body", [{}, {"cookies": "not-a-dict"}, {"cookies": []}])
-def test_malformed_body_rejected_with_a_valid_token(client, body):
+def test_malformed_body_rejected_with_a_valid_token(client, body, api_token):
     token = start_sign_in(client)
-    resp = client.post("/auth/extension", json=body, headers={"X-Ytm-Token": token})
+    resp = client.post(
+        "/auth/extension",
+        json=body,
+        headers={"X-Ytm-Token": token, "X-Sonore-Token": api_token},
+    )
     assert resp.status_code == 400, resp.text
     assert "cookies" in resp.json()["detail"].lower()
 
 
-def test_empty_jar_reports_the_unsigned_in_browser_and_ends_the_attempt(client, monkeypatch):
+def test_empty_jar_reports_the_unsigned_in_browser_and_ends_the_attempt(client, monkeypatch, api_token):
     """The extension in a browser with no YouTube Music session sends {}.
 
     Measured live, through the real extension in a real Chromium: that request
@@ -295,7 +331,7 @@ def test_empty_jar_reports_the_unsigned_in_browser_and_ends_the_attempt(client, 
     )
 
     resp = client.post(
-        "/auth/extension", json={"cookies": {}}, headers={"X-Ytm-Token": token}
+        "/auth/extension", json={"cookies": {}}, headers={"X-Ytm-Token": token, "X-Sonore-Token": api_token}
     )
 
     assert resp.status_code == 422, resp.text
@@ -404,7 +440,7 @@ def test_legacy_cookies_endpoint_also_preserves_a_valid_session(client, monkeypa
 # -------------------------------------------------------------- cancellation
 
 
-def test_cancel_invalidates_the_token_and_removes_the_file(client):
+def test_cancel_invalidates_the_token_and_removes_the_file(client, api_token):
     token = start_sign_in(client)
     assert os.path.exists(main.PAIRING_FILE)
 
@@ -412,7 +448,7 @@ def test_cancel_invalidates_the_token_and_removes_the_file(client):
 
     assert not os.path.exists(main.PAIRING_FILE), "the pairing file must not outlive the attempt"
     assert main._pairing_token is None
-    assert hand_off(client, token=token).status_code == 409
+    assert hand_off(client, token=token, api_token=api_token).status_code == 409
 
 
 def test_status_poll_cleans_up_after_a_terminal_state(client):
@@ -430,16 +466,17 @@ def test_status_poll_cleans_up_after_a_terminal_state(client):
 # ------------------------------------------------------------ secret handling
 
 
-def test_no_token_or_cookie_value_is_ever_logged(client, monkeypatch, caplog):
+def test_no_token_or_cookie_value_is_ever_logged(client, monkeypatch, caplog, api_token):
     token = start_sign_in(client)
     monkeypatch.setattr(main.ytmusic_service, "verify_candidate", lambda c: {"accountName": "x"})
     monkeypatch.setattr(main.ytmusic_service, "store_session", lambda c: {"signed_in": True})
 
     with caplog.at_level(logging.DEBUG):
-        hand_off(client, token=token)                    # success path
-        hand_off(client, token="wrong-token")            # rejection path
+        hand_off(client, token=token, api_token=api_token)                    # success path
+        hand_off(client, token="wrong-token", api_token=api_token)            # rejection path
         client.get("/auth/status")
 
     logged = "\n".join(record.getMessage() for record in caplog.records)
     assert token not in logged, "the pairing token must never reach the log"
+    assert api_token not in logged, "the install token must never reach the log"
     assert COOKIE_VALUE_MARKER not in logged, "cookie values must never reach the log"

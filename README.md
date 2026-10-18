@@ -2,14 +2,20 @@
 
 # Sonore
 
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
+![Frontend](https://img.shields.io/badge/frontend-Flutter%20desktop-02569B)
+![Backend](https://img.shields.io/badge/backend-Python%20%2F%20FastAPI-009688)
+[![Latest release](https://img.shields.io/github/v/release/Jekooz/sonore?include_prereleases&label=release)](https://github.com/Jekooz/sonore/releases)
+
 An unofficial YouTube Music client for Windows: a Flutter desktop app driven by
 a small local Python service. Playback, search, library and account data come
 from a FastAPI sidecar on `127.0.0.1`; the app never talks to YouTube directly
 and never ships credentials.
 
-Status: working desktop app, actively developed. The backend pairing gate and the
-light-palette redesign are work in progress on separate branches and are not
-part of this tree.
+Current version: **1.6.0** (tracked in `VERSION`). Status: working desktop app,
+actively developed — the latest GitHub release carries the single-file installer.
+The backend pairing gate and the light-palette redesign are work in progress on
+separate branches and are not part of this tree.
 
 ## Screenshots
 
@@ -39,6 +45,10 @@ Everything below is present in the code on this branch:
 - **Shuffle and repeat** — off / all / one, persisted between runs.
 - **Synced lyrics** — lyric lines with timestamps; the screen follows playback
   and seek-by-tap when a synced source is available.
+- **Sign-in** — sign in through your own browser with the bundled helper
+  extension (`browser-extension/`); the session the backend derives from it is
+  stored encrypted on this device, and an account is reported signed-out (not
+  broken) when the cookie jar is empty.
 - **Ten-band equalizer** — per-band gain on top of media_kit's audio bindings,
   with named presets and manual editing (`ytm_app/lib/audio/`,
   `ytm_app/lib/features/equalizer/`).
@@ -53,10 +63,11 @@ Everything below is present in the code on this branch:
 
 ## Installing
 
-Download `Sonore-Setup-<version>.exe` and run it. It installs for every account
-on the machine into `C:\Program Files\Sonore` (one UAC prompt, then an entry in
-**Add or remove programs** and an uninstaller), and it carries everything the
-app needs at run time — nothing has to be installed first:
+Grab `Sonore-Setup-<version>.exe` from
+[Releases](https://github.com/Jekooz/sonore/releases) and run it. It installs for
+every account on the machine into `C:\Program Files\Sonore` (one UAC prompt, then
+an entry in **Add or remove programs** and an uninstaller), and it carries
+everything the app needs at run time — nothing has to be installed first:
 
 - the Flutter app, its engine and its assets;
 - a private CPython 3.11 with `fastapi`, `uvicorn`, `ytmusicapi` and `keyring`
@@ -120,8 +131,8 @@ a stale port file is detected and a fresh backend is spawned in that case.
 ## Running the tests
 
 ```
-python -m pytest tests -q             # 85 backend/UI-pairing tests
-cd ytm_app && flutter test            # 326 widget and unit tests
+python -m pytest tests -q             # 86 backend/UI-pairing tests
+cd ytm_app && flutter test            # 341 widget and unit tests
 ```
 
 ## Architecture

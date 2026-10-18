@@ -1,4 +1,6 @@
-fastapi
-uvicorn
-ytmusicapi
-keyring
+# Pinned: these are the versions the app was built and tested against.
+# ytmusicapi must match the version the backend's behavior comments assume (1.12.3).
+fastapi==0.141.1
+uvicorn==0.54.0
+ytmusicapi==1.12.3
+keyring==24.2.0

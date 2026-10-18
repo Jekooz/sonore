@@ -242,8 +242,14 @@ void main() {
       );
     });
 
-    testWidgets('the real validator rejects an incomplete cookie hand-off '
-        'without storing it', (WidgetTester tester) async {
+    testWidgets('an unsolicited cookie hand-off is refused by the sign-in '
+        'gate and stores nothing', (WidgetTester tester) async {
+      // Audit finding 1: /auth/cookies now runs under the same pairing gate as
+      // /auth/extension. With no sign-in in progress the request is refused
+      // (409) before the cookie validator is reached, and nothing is stored.
+      // The validator's own 422 path needs a real handshake, so it is driven by
+      // the backend unit tests (tests/test_auth_pairing.py); wiring one up here
+      // would open a real browser.
       const String notARealCookie = 'not-a-real-session-value';
       final http.Response response = await http.post(
         Uri.parse('http://127.0.0.1:$sharedPort/auth/cookies'),
@@ -253,8 +259,12 @@ void main() {
         }),
       );
 
-      expect(response.statusCode, 422);
+      expect(response.statusCode, 409);
+      expect(response.body, contains('No sign-in is in progress'));
       expect(response.body, isNot(contains(notARealCookie)));
+      // Nothing was installed: whatever session the machine already had is
+      // untouched, and the bogus value never came back to the caller.
+      expect(await client.isSignedIn(), signedIn);
     });
 
     testWidgets('an unsolicited extension hand-off is rejected',

@@ -71,19 +71,35 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ytmusic-backend")
 
-# The published port file. Defaults to %TEMP%/ytmusic_sidecar_port.txt, the
-# production discovery contract the app (and the old WinUI sidecar launcher)
-# read. YTM_PORT_FILE overrides the path so an isolated instance -- a test, or a
-# second copy on the same machine -- can publish without touching the shared
-# file and without disturbing a live app.
+# The published port file. Defaults to %LOCALAPPDATA%\Sonore\sidecar_port.txt
+# (per-user, outside the app folder and %TEMP%, so a cleaner for temp files
+# cannot delete it while the service runs). YTM_PORT_FILE overrides the path so
+# an isolated instance -- a test, or a second copy on the same machine -- can
+# publish without touching the shared file and without disturbing a live app.
+_SONORE_STATE_DIR = os.path.join(
+    os.environ.get("LOCALAPPDATA", tempfile.gettempdir()), "Sonore"
+)
 PORT_FILE = os.environ.get("YTM_PORT_FILE") or os.path.join(
-    tempfile.gettempdir(), "ytmusic_sidecar_port.txt"
+    _SONORE_STATE_DIR, "sidecar_port.txt"
 )
 
 # The port this process is actually listening on. Set in __main__ before
 # uvicorn.run so the extension can be told where to call back; the request URL
 # is only a fallback for a backend started some other way.
 _BOUND_PORT = 0
+
+
+def _drop_stale_port_file() -> None:
+    """Remove a port file left behind by a previous run.
+
+    Best-effort, and deliberately run before uvicorn binds: a reader that finds
+    the old file must not be sent to a port this instance is not listening on.
+    """
+    try:
+        os.remove(PORT_FILE)
+    except OSError:
+        pass
+
 
 # Where the companion extension lives. This is the ONLY folder a pairing file
 # can work from: an extension page may fetch resources only from its own

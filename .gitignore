@@ -21,10 +21,16 @@ YTM Client UI.html
 # Temporary extraction folders used while auditing design exports
 .audit_design_extract/
 
-# ---- Regenerable build artifacts (never commit these again) ---------------
+# ---- Regenerable build artifacts (never commit these again) ---------------)
 build/
 dist/
 *.zip
 *.exe
+<<<<<<< HEAD
 proof/*.txt
 proof/golden_review/
+=======
+pytest_cache/
+__pycache__/
+*.pyc
+>>>>>>> 14a1ec6 (chore: ignore regenerable build artifacts and caches on main)

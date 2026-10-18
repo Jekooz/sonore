@@ -6,7 +6,6 @@
   "permissions": ["cookies", "storage"],
   "host_permissions": [
     "https://music.youtube.com/*",
-    "https://*.youtube.com/*",
     "http://127.0.0.1/*"
   ],
   "action": {

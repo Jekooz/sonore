@@ -26,7 +26,7 @@ function setStatus(text, tone) {
 /** Map a worker result onto something the user can act on. */
 function describe(result) {
     if (!result) {
-        return ["Ready. Press the button while the app is waiting for sign-in.", null];
+        return ["Ready. Press Connect while the app is waiting for sign-in.", null];
     }
     if (result.ok) {
         return ["Done. Your session is now in the app.", "ok"];
@@ -58,7 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 sendButton.addEventListener("click", () => {
     sendButton.disabled = true;
-    setStatus("Reading cookies and sending…", null);
+    setStatus("Connecting to Sonore…", null);
 
     chrome.runtime.sendMessage({ type: "sendCookies" }, (result) => {
         sendButton.disabled = false;

@@ -67,10 +67,12 @@ class OfflineState extends ConsumerWidget {
 /// The extension is not optional on this build. A browser only lets an extension
 /// read a pairing file inside its own installation, so a copy loaded from
 /// anywhere else can never hand the session over — and signing in to YouTube
-/// Music in the browser on its own changes nothing. The screen therefore names
-/// the folder the extension has to be loaded from and offers to open it;
-/// without that, the hand-off waits for three minutes and then times out, which
-/// reads as a sign-in screen that does not work.
+/// Music in the browser on its own changes nothing. Once it is loaded (a
+/// one-time step), the hand-off is automatic: the extension hands the session
+/// over the moment the browser has one, with no token to copy and nothing to
+/// press. The screen still names the folder and offers to open it, because
+/// without the extension the wait ends in a three-minute timeout that reads as
+/// a sign-in screen that does not work.
 class SignedOutState extends ConsumerWidget {
   const SignedOutState({super.key});
 
@@ -88,15 +90,13 @@ class SignedOutState extends ConsumerWidget {
 
     return switch (signIn.stage) {
       SignInStage.waiting => StateMessage(
-        message: 'Waiting for the helper extension…',
+        message: 'Waiting for you to sign in…',
         footnote: hasFolder
-            ? 'In the browser window that just opened, sign in to YouTube Music, '
-                  'then open the Sonore Helper extension and send your session to '
-                  'the app. Nothing arrives until you do. That extension loads '
-                  'from:\n$folder'
-            : 'Finish signing in to YouTube Music in the browser window, then send '
-                  'the session over from the Sonore Helper extension. Nothing '
-                  'arrives until you do.',
+            ? 'In the browser window that just opened, sign in to YouTube Music '
+                  'with Google. This finishes on its own — nothing else to press. '
+                  'The Sonore Helper extension that completes it loads from:\n$folder'
+            : 'Sign in to YouTube Music with Google in the browser window. This '
+                  'finishes on its own — nothing else to press.',
         actionLabel: 'Cancel',
         actionIcon: AppIcons.close,
         onAction: controller.cancel,
@@ -109,8 +109,8 @@ class SignedOutState extends ConsumerWidget {
       SignInStage.failed => StateMessage(
         message: signIn.detail ?? 'Sign-in did not complete.',
         footnote: hasFolder
-            ? 'You can start it again when you are ready. Sign-in only completes '
-                  'through the helper extension, which loads from:\n$folder'
+            ? 'You can start it again when you are ready. Sign-in finishes through '
+                  'the helper extension, which loads from:\n$folder'
             : 'You can start it again when you are ready.',
         actionLabel: 'Try again',
         actionIcon: AppIcons.arrowClockwise,
@@ -121,13 +121,12 @@ class SignedOutState extends ConsumerWidget {
       SignInStage.idle => StateMessage(
         message: 'Not signed in to YouTube Music.',
         footnote: hasFolder
-            ? 'Sign-in finishes in the helper extension that ships with this '
-                  'app, and it only works loaded from its own folder: open your '
-                  'browser\'s extension page, turn on Developer mode, choose '
-                  '"Load unpacked" and select:\n$folder\nThen sign in and send '
-                  'the session over from the extension.'
-            : 'Sign-in opens in your browser, and your session is kept by '
-                  'the local service — the app never stores it.',
+            ? 'Sign in with Google in your browser — the Sonore Helper extension '
+                  'hands the session to the app automatically, so there is no '
+                  'token to copy. Load it once from:\n$folder\nthen turn on '
+                  'Developer mode and choose "Load unpacked".'
+            : 'Sign-in opens in your browser and finishes on its own, and your '
+                  'session is kept by the local service — the app never stores it.',
         actionLabel: 'Sign in',
         actionIcon: AppIcons.user,
         onAction: controller.start,

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -151,7 +150,6 @@ class SettingsScreen extends ConsumerWidget {
                   const _Diagnostics(),
                   const _Section(title: 'Account'),
                   const _Account(),
-                  const _ApiTokenRow(),
                   const _Section(title: 'Privacy'),
                   const _Note(
                     'Your YouTube Music session is kept by the local service '
@@ -555,7 +553,8 @@ class _AccountState extends ConsumerState<_Account> {
         children: <Widget>[
           _LinkRow(
             title: 'Sign in',
-            subtitle: 'Opens the sign-in flow on your browser.',
+            subtitle: 'Opens Google sign-in in your browser — it finishes on '
+                'its own.',
             icon: AppIcons.user,
             onTap: () => context.go(AppDestination.home.path),
           ),
@@ -712,71 +711,6 @@ class _AccountState extends ConsumerState<_Account> {
     await ref.read(ytmRepositoryProvider).signOut();
     ref.invalidate(connectionProvider);
     if (context.mounted) context.go(AppDestination.home.path);
-  }
-}
-
-/// The per-install API token, shown once so the helper extension's popup can be
-/// given it. This is the only place in the UI the value appears; the app sends
-/// it automatically on every local request and never logs it. The row is shown
-/// whether or not a session exists, because the extension needs the token
-/// before the first sign-in.
-class _ApiTokenRow extends ConsumerWidget {
-  const _ApiTokenRow();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<String?> token = ref.watch(installTokenProvider);
-    final String? value = token.value;
-    final bool ready = value != null && value.isNotEmpty;
-
-    final String shown = switch (token) {
-      AsyncData() => ready ? value : 'Unavailable',
-      AsyncError() => 'Unavailable',
-      _ => 'Loading…',
-    };
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: Tokens.s4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(child: Text('API token', style: Tokens.subtitle)),
-              const SizedBox(width: Tokens.s8),
-              Flexible(
-                child: SelectableText(
-                  shown,
-                  style: Tokens.caption,
-                  textAlign: TextAlign.right,
-                  maxLines: 2,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (ready)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: PillButton(
-              icon: AppIcons.linkSimple,
-              label: 'Copy token',
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: value));
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('API token copied.')),
-                );
-              },
-            ),
-          ),
-        const _Note(
-          'The helper extension asks for this once so it can hand your session '
-          'to this app. Keep it private: it unlocks your local account data.',
-        ),
-      ],
-    );
   }
 }
 

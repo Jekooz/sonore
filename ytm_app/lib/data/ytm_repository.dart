@@ -391,8 +391,9 @@ class YtmRepository {
   /// itself never holds one, so there is nothing else to clear.
   Future<void> signOut() => _api.signOut();
 
-  /// The per-install API token, for Settings → Account to show and copy so the
-  /// extension popup can be given it once. Null when the sidecar cannot answer.
+  /// The per-install API token, for callers that need it directly. The app
+  /// sends it automatically on every locked request, and the helper extension
+  /// fetches its own copy, so nothing in the UI has to show or copy it.
   Future<String?> installToken() => _api.installToken();
 
   /// The playback engine (yt-dlp) in use: version, source and last update.
@@ -442,12 +443,6 @@ final FutureProvider<YtmConnection> connectionProvider =
 /// "show the generic wording" rather than a blank path.
 final FutureProvider<String> extensionFolderProvider = FutureProvider<String>(
   (ref) => ref.watch(ytmRepositoryProvider).extensionFolder(),
-);
-
-/// The per-install API token, for Settings → Account to show and copy so the
-/// extension popup can be given it once. Null when the sidecar cannot answer.
-final FutureProvider<String?> installTokenProvider = FutureProvider<String?>(
-  (ref) => ref.watch(ytmRepositoryProvider).installToken(),
 );
 
 /// The playback engine (yt-dlp) state, for Settings → Playback. The update is

@@ -143,7 +143,7 @@ class SignedOutState extends ConsumerWidget {
 /// The three failure kinds are shown differently on purpose: offline and
 /// signed-out are states the user can act on, while a request failure keeps the
 /// service's own words and offers a retry.
-class DataStateView<T> extends StatelessWidget {
+class DataStateView<T> extends ConsumerStatefulWidget {
   const DataStateView({
     super.key,
     required this.value,
@@ -164,13 +164,44 @@ class DataStateView<T> extends StatelessWidget {
   final String? emptyFootnote;
 
   @override
+  ConsumerState<DataStateView<T>> createState() =>
+      _DataStateViewState<T>();
+}
+
+class _DataStateViewState<T> extends ConsumerState<DataStateView<T>> {
+  /// The error instance whose session-expiry refresh already ran.
+  ///
+  /// One-shot on purpose: invalidating the connection rebuilds the gate,
+  /// which rebuilds this view, and doing that for every rebuild of the same
+  /// error would spin forever. A new error object means a new 401.
+  Object? _refreshedFor;
+
+  /// A 401/422 means the sidecar dropped the stored session, so the cached
+  /// connection — and with it "Signed in as" — is stale and the whole app
+  /// should flip to the sign-in prompt instead of showing empty lists. The
+  /// invalidation is deferred past the build phase because a provider may not
+  /// be modified while the tree is building.
+  void _refreshExpiredSession(Object? error) {
+    if (error is! YtmSignedOutException || identical(error, _refreshedFor)) {
+      return;
+    }
+    _refreshedFor = error;
+    Future<void>.microtask(() {
+      if (mounted) ref.invalidate(connectionProvider);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final AsyncValue<T> value = widget.value;
+
     if (value.isLoading && !value.hasValue) {
-      return loading ?? const ListSkeleton();
+      return widget.loading ?? const ListSkeleton();
     }
 
     if (value.hasError) {
-      return dataErrorState(context, value.error!, onRetry);
+      _refreshExpiredSession(value.error);
+      return dataErrorState(context, value.error!, widget.onRetry);
     }
 
     // `hasValue` — not `value == null` — is what distinguishes "the provider
@@ -178,15 +209,23 @@ class DataStateView<T> extends StatelessWidget {
     // nullable T (LyricsResult?), null IS the answer, and `isEmpty` decides
     // what to show for it.
     if (!value.hasValue) {
-      return dataErrorState(context, value.error ?? 'Unknown failure', onRetry);
+      _refreshExpiredSession(value.error);
+      return dataErrorState(
+        context,
+        value.error ?? 'Unknown failure',
+        widget.onRetry,
+      );
     }
 
     final T current = value.value as T;
-    if (isEmpty?.call(current) ?? false) {
-      return StateMessage(message: emptyMessage, footnote: emptyFootnote);
+    if (widget.isEmpty?.call(current) ?? false) {
+      return StateMessage(
+        message: widget.emptyMessage,
+        footnote: widget.emptyFootnote,
+      );
     }
 
-    return data(current);
+    return widget.data(current);
   }
 }
 

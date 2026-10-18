@@ -61,6 +61,7 @@ dependencies:
   # lib/audio/equalizer.dart uses its allocator alongside media_kit's generated
   # libmpv bindings.
   ffi: ^2.1.0
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

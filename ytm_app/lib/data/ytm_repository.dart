@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../audio/listening_event.dart';
 import '../audio/track.dart';
+import '../core/browser_opener.dart';
 import 'api_client.dart';
 import 'models.dart';
 
@@ -100,6 +101,11 @@ class YtmRepository {
         handle: account['channelHandle'] as String?,
         photoUrl: account['accountPhotoUrl'] as String?,
       );
+    } on YtmSignedOutException {
+      // The sidecar cleared the stored session while answering (expired or
+      // rejected): that is a signed-out state, not a flaky upstream, and
+      // "Signed in as" must not keep showing the old account.
+      return const YtmConnection(status: YtmStatus.signedOut);
     } on YtmException {
       // /account can fail while /auth/status still says signed in (a flaky
       // upstream). The session is usable either way, so this must not turn the
@@ -283,13 +289,65 @@ class YtmRepository {
   Future<void> setLike(String videoId, bool liked) =>
       _api.rate(videoId, liked ? 'LIKE' : 'INDIFFERENT');
 
-  /// POST /auth/browser/start — the project's established sign-in hand-off:
-  /// the sidecar opens music.youtube.com and waits for the companion
-  /// extension, with the pairing token written to the extension folder.
-  Future<String> startBrowserSignIn() => _api.startBrowserSignIn();
+  /// POST /auth/browser/start — the established sign-in hand-off: the
+  /// attempt waits (2 s poll, 3 min timeout) for the companion extension or
+  /// the paste-headers fallback, with the pairing token written to the
+  /// extension folder and returned to this loopback caller.
+  ///
+  /// [openBrowser] is false when the app has already opened
+  /// music.youtube.com itself with url_launcher, so exactly one tab appears.
+  Future<SignInAttempt> startBrowserSignIn({bool openBrowser = true}) async {
+    final Map<String, dynamic> body =
+        await _api.startBrowserSignIn(openBrowser: openBrowser);
+    return SignInAttempt(
+      state: (body['state'] as String?) ?? 'unknown',
+      token: body['token'] as String?,
+      error: body['error'] as String?,
+    );
+  }
 
-  /// GET /auth/browser/status -> idle | waiting | done | failed | cancelled
+  /// GET /auth/browser/status -> idle | waiting | success | failed | cancelled
   Future<String> browserSignInState() => _api.browserSignInState();
+
+  /// POST /auth/browser/cancel — retires the attempt server-side too, so its
+  /// single-use pairing token cannot outlive the screen that issued it.
+  Future<void> cancelBrowserSignIn() => _api.cancelBrowserSignIn();
+
+  /// POST /auth/handoff with pasted request headers — the fallback for a
+  /// machine where the helper extension cannot be loaded.
+  ///
+  /// Starts an attempt without opening a browser purely to obtain the
+  /// single-use pairing token, then feeds the pasted headers to the SAME
+  /// endpoint the extension uses; the sidecar recovers the cookie line,
+  /// validates the candidate against YouTube and stores it encrypted.
+  Future<void> signInWithPastedHeaders(String rawHeaders) async {
+    final Map<String, String> headers = parseRequestHeaders(rawHeaders);
+    if (headers['cookie'] == null || headers['cookie']!.isEmpty) {
+      throw const YtmSignedOutException(
+        "The pasted headers don't include a 'cookie:' line. Copy the full "
+        'request headers from your signed-in music.youtube.com tab.',
+      );
+    }
+
+    final SignInAttempt attempt = await startBrowserSignIn(openBrowser: false);
+    final String? token = attempt.token;
+    if (token == null) {
+      throw const YtmRequestException(
+        'The local service did not issue a sign-in token.',
+      );
+    }
+    try {
+      await _api.handoff(headers: headers, token: token);
+    } finally {
+      // Retire the attempt either way: a failed paste must not leave a token
+      // lying around, and a successful one has already been consumed.
+      try {
+        await _api.cancelBrowserSignIn();
+      } on YtmException {
+        // The sidecar times an abandoned attempt out on its own.
+      }
+    }
+  }
 
   /// GET /auth/extension/folder — the folder the helper extension has to be
   /// loaded from. The hand-off cannot complete from any other copy, so the
@@ -360,6 +418,11 @@ final collectionProvider = FutureProvider.family<Collection, CollectionRef>(
 );
 
 /// The signed-out state's one real action.
+///
+/// The failure this replaces: the sidecar reports "success" when the
+/// hand-off lands, but this controller only switched on "done" — so a
+/// successful sign-in fell through to the default branch, the screen spun
+/// on "waiting" forever, and the waiting guard made every retry a no-op.
 class SignInController extends Notifier<SignInState> {
   Timer? _poll;
 
@@ -372,24 +435,51 @@ class SignInController extends Notifier<SignInState> {
   /// Starts the browser hand-off and polls the sidecar until it finishes.
   Future<void> start() async {
     if (state.isWaiting) return;
+    _poll?.cancel();
+
+    // The app owns the browser experience: open music.youtube.com itself and
+    // tell the sidecar not to open a second tab. When the launch is refused
+    // (no handler, sandboxed test env), the sidecar falls back to opening it
+    // the way it always did, so sign-in still works.
+    final bool opened =
+        await ref.read(browserOpenerProvider)(signInMusicUrl);
+
+    final SignInAttempt attempt;
     try {
-      final String initial = await ref
+      attempt = await ref
           .read(ytmRepositoryProvider)
-          .startBrowserSignIn();
-      state = SignInState(stage: SignInStage.waiting, detail: initial);
+          .startBrowserSignIn(openBrowser: !opened);
     } on YtmException catch (error) {
       state = SignInState(stage: SignInStage.failed, detail: error.message);
       return;
     }
+    if (attempt.state == 'failed') {
+      state = SignInState(
+        stage: SignInStage.failed,
+        detail: attempt.error ?? 'Could not start sign-in.',
+      );
+      return;
+    }
+    state = SignInState(stage: SignInStage.waiting, detail: attempt.state);
 
-    _poll?.cancel();
-    // The sidecar's own timeout for the hand-off is three minutes; poll a
-    // little longer so its final state is observed rather than guessed.
+    // The sidecar times the attempt out at three minutes; wait a little
+    // longer so its final state — with its own wording — is observed rather
+    // than raced. The deadline is the app's own backstop for a sidecar that
+    // stopped answering without going offline.
+    final DateTime deadline = DateTime.now().add(_signInWaitTimeout);
     _poll = Timer.periodic(const Duration(seconds: 2), (Timer timer) async {
       if (!ref.mounted) {
         timer.cancel();
         return;
       }
+      if (DateTime.now().isAfter(deadline)) {
+        timer.cancel();
+        await _abandon(
+          'Sign-in timed out waiting for the helper extension.',
+        );
+        return;
+      }
+
       final String status;
       try {
         status = await ref.read(ytmRepositoryProvider).browserSignInState();
@@ -406,17 +496,19 @@ class SignInController extends Notifier<SignInState> {
         return;
       }
       switch (status) {
-        case 'done':
+        // "success" is what the sidecar actually reports on a completed
+        // hand-off; "done" is kept so an older sidecar still completes.
+        case 'success' || 'done':
           timer.cancel();
           state = const SignInState(stage: SignInStage.done);
           ref.invalidate(connectionProvider);
-        case 'failed':
+        case 'failed' || 'timeout':
           timer.cancel();
           state = const SignInState(
             stage: SignInStage.failed,
             detail: 'Sign-in was not completed.',
           );
-        case 'cancelled':
+        case 'cancelled' || 'idle':
           timer.cancel();
           state = const SignInState();
         default:
@@ -425,10 +517,62 @@ class SignInController extends Notifier<SignInState> {
     });
   }
 
-  void cancel() {
+  /// Cancel: reset the screen AND retire the attempt on the sidecar, so its
+  /// single-use pairing token does not outlive this screen.
+  Future<void> cancel() async {
     _poll?.cancel();
     state = const SignInState();
+    try {
+      await ref.read(ytmRepositoryProvider).cancelBrowserSignIn();
+    } on YtmException {
+      // A sidecar that cannot be reached times its own attempt out.
+    }
   }
+
+  /// The app's own timeout fired: retire the attempt, then say so.
+  Future<void> _abandon(String message) async {
+    try {
+      await ref.read(ytmRepositoryProvider).cancelBrowserSignIn();
+    } on YtmException {
+      // Best effort; the state below is what the user acts on.
+    }
+    state = SignInState(stage: SignInStage.failed, detail: message);
+  }
+}
+
+/// How long the app keeps waiting for the hand-off before giving up itself.
+const Duration _signInWaitTimeout = Duration(minutes: 3, seconds: 30);
+
+/// The page sign-in happens on; the app opens it in the default browser.
+final Uri signInMusicUrl = Uri.parse('https://music.youtube.com');
+
+/// What /auth/browser/start answered: the attempt's state, the single-use
+/// pairing token (for the paste-headers fallback) and any error text.
+@immutable
+class SignInAttempt {
+  const SignInAttempt({required this.state, this.token, this.error});
+
+  final String state;
+  final String? token;
+  final String? error;
+}
+
+/// Parses a pasted block of raw request headers ("Name: value" lines, as
+/// copied from a browser's devtools) into a lowercase name -> value map.
+///
+/// Blank lines and a leading request line ("GET /... HTTP/1.1") are skipped,
+/// and any line without a colon is ignored rather than throwing: this field
+/// is typed by hand and must degrade to "no cookie line" instead of a crash.
+Map<String, String> parseRequestHeaders(String raw) {
+  final Map<String, String> headers = <String, String>{};
+  for (final String line in raw.split(RegExp(r'\r?\n'))) {
+    final int colon = line.indexOf(':');
+    if (colon <= 0) continue;
+    final String name = line.substring(0, colon).trim().toLowerCase();
+    final String value = line.substring(colon + 1).trim();
+    if (name.isNotEmpty) headers[name] = value;
+  }
+  return headers;
 }
 
 enum SignInStage { idle, waiting, done, failed }

@@ -184,11 +184,14 @@ class YtmApiClient {
     String path,
     Map<String, dynamic> body, {
     Duration? timeout,
+    Map<String, String> extraHeaders = const <String, String>{},
   }) async {
-    final http.Response response = await _send(
-      (String base) => _client.post(
+    final http.Response response = await _send(      (String base) => _client.post(
         Uri.parse('$base$path'),
-        headers: const <String, String>{'Content-Type': 'application/json'},
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          ...extraHeaders,
+        },
         body: jsonEncode(body),
       ),
       timeout: timeout ?? _dataTimeout,
@@ -406,20 +409,48 @@ class YtmApiClient {
     }
   }
 
-  /// POST /auth/browser/start — opens music.youtube.com in the default browser
-  /// and begins the companion-extension hand-off on the sidecar
-  /// (2 s poll, 3 min timeout). Only the session state crosses the wire; no
-  /// cookie material ever reaches this client.
-  Future<String> startBrowserSignIn() async =>
-      _stateOf(await _postJson('/auth/browser/start', const <String, dynamic>{}));
+  /// POST /auth/browser/start — begins the browser hand-off (2 s poll,
+  /// 3 min timeout on the sidecar). The app opens music.youtube.com itself
+  /// with url_launcher and passes `openBrowser: false` so exactly one tab
+  /// appears; `openBrowser: true` keeps the sidecar's own fallback.
+  ///
+  /// The response carries the state, the sidecar's optional error text, and
+  /// the single-use pairing token the paste-headers fallback needs. Only
+  /// session state crosses the wire; no cookie material ever reaches this
+  /// client.
+  Future<Map<String, dynamic>> startBrowserSignIn({
+    bool openBrowser = true,
+  }) async =>
+      _asMap(
+        await _postJson(
+          '/auth/browser/start',
+          <String, dynamic>{'open_browser': openBrowser},
+        ),
+      );
 
-  /// GET /auth/browser/status -> {"state": idle|waiting|done|failed|cancelled}
+  /// GET /auth/browser/status -> idle|waiting|success|failed|cancelled
   Future<String> browserSignInState() async =>
       _stateOf(await _getJson('/auth/browser/status'));
 
   /// POST /auth/browser/cancel
   Future<void> cancelBrowserSignIn() async =>
       _postJson('/auth/browser/cancel', const <String, dynamic>{});
+
+  /// POST /auth/handoff — the Settings "paste request headers" fallback.
+  ///
+  /// Same endpoint the extension uses, authenticated by the attempt's
+  /// single-use pairing token. The sidecar recovers the cookie line from the
+  /// pasted headers, validates the candidate against YouTube and only then
+  /// stores it, exactly like the extension flow.
+  Future<void> handoff({
+    required Map<String, String> headers,
+    required String token,
+  }) async =>
+      _postJson(
+        '/auth/handoff',
+        <String, dynamic>{'headers': headers},
+        extraHeaders: <String, String>{'X-Ytm-Token': token},
+      );
 
   /// GET /auth/browser/info -> {"browser": name}
   Future<String> defaultBrowser() async {

@@ -128,7 +128,7 @@ void main() {
     // browser start, or not. Flattening that into a generic sentence is what
     // left the user with a "Try again" and nothing to act on.
     pollState = 'failed';
-    pollError = 'Comet: it did not open a debugging port in time';
+    pollError = 'Comet: it did not finish starting in time';
     await tester.pump(const Duration(seconds: 2));
     expect(container.read(signInProvider).stage, SignInStage.failed);
     expect(container.read(signInProvider).detail, pollError);
@@ -205,9 +205,14 @@ void main() {
     await tester.pump();
 
     // Sign-in can open a browser that is not the one the user is looking at,
-    // so the wait says which window it means.
+    // so the wait says which window it means -- and that closing it is what
+    // finishes the sign-in, since the session is read from its profile.
     expect(
       find.textContaining('Comet window that just opened'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Close that window when you are done'),
       findsOneWidget,
     );
 

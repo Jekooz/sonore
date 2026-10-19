@@ -51,15 +51,16 @@ Everything below is present in the code on this branch:
 - **Sign-in** — sign in with Google in your own browser, with **nothing to
   install**. The local service uses the browser you set as default in Windows:
   a Chromium one (Comet, Brave, Chrome, Edge, ...) is opened in a profile it
-  owns and the session is captured over the DevTools protocol the moment you
-  have signed in; if your default is Firefox, the page opens in the profile you
-  already use and the session is read from it — no window needed at all when you
-  were already signed in there. Edge or Chrome is used only if your own default
-  cannot be. There is no extension to load and no token to copy. A "paste
-  request headers" fallback in Settings → Account feeds the same loopback-only
-  endpoint when a machine cannot drive a browser. The session is stored
-  encrypted on this device, an expired session is reported as signed-out (not
-  broken), and a failed sign-in never damages a working one.
+  owns, and once you have signed in and closed that window the session is read
+  out of the profile itself (its key through Windows DPAPI, its cookies through
+  Windows' own crypto). If your default is Firefox, the page opens in the
+  profile you already use and the session is read from it — no window needed at
+  all when you were already signed in there. Edge or Chrome is used only if your
+  own default cannot be read. There is no extension to load and no token to
+  copy. A "paste request headers" fallback in Settings → Account feeds the same
+  loopback-only endpoint when a machine cannot read its browser. The session is
+  stored encrypted on this device, an expired session is reported as signed-out
+  (not broken), and a failed sign-in never damages a working one.
 - **Ten-band equalizer** — per-band gain on top of media_kit's audio bindings,
   with named presets and manual editing (`ytm_app/lib/audio/`,
   `ytm_app/lib/features/equalizer/`).

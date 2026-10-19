@@ -8,7 +8,8 @@ import 'package:ytm_app/data/api_client.dart';
 import 'package:ytm_app/data/ytm_repository.dart';
 import 'package:ytm_app/ui/data_states.dart';
 
-import 'support/recorded_sidecar.dart' show jsonOk;
+import 'support/harness.dart';
+import 'support/recorded_sidecar.dart' show jsonOk, testRepository;
 
 /// Drives the real SignInController against a scripted sidecar, through the
 /// same YtmApiClient the app uses.
@@ -65,6 +66,7 @@ void main() {
     // Waiting, with the sidecar told to run the browser flow itself: the app
     // must not open a window of its own, or two would appear.
     expect(container.read(signInProvider).stage, SignInStage.waiting);
+    expect(container.read(signInProvider).browser, 'Microsoft Edge');
     expect(startBodies.single, contains('"open_browser":true'));
 
     await tester.pump(const Duration(seconds: 2)); // first poll: still waiting
@@ -84,10 +86,12 @@ void main() {
     expect(connection.accountName, 'Test Account');
   });
 
-  testWidgets('a failed attempt surfaces and can be retried', (tester) async {
+  testWidgets('a failed attempt surfaces the sidecar reason and can be retried',
+      (tester) async {
     final List<String> requests = <String>[];
     int startCalls = 0;
     String pollState = 'waiting';
+    String? pollError;
 
     final ProviderContainer container = ProviderContainer(
       overrides: [
@@ -100,10 +104,11 @@ void main() {
                 '/health' => jsonOk('{"status": "ok"}'),
                 '/auth/status' => jsonOk('{"logged_in": false, "error": null}'),
                 '/auth/browser/start' => jsonOk(
-                    '{"state": "waiting", "browser": "Microsoft Edge", '
+                    '{"state": "waiting", "browser": "Comet", '
                     '"error": null}'),
                 '/auth/browser/status' => jsonOk('{"state": "$pollState", '
-                    '"browser": "Microsoft Edge", "error": null}'),
+                    '"browser": "Comet", '
+                    '"error": ${pollError == null ? 'null' : '"$pollError"'}}'),
                 _ => jsonOk('{}'),
               };
             }),
@@ -119,12 +124,18 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    // The sidecar is the one that knows why an attempt failed — it watched the
+    // browser start, or not. Flattening that into a generic sentence is what
+    // left the user with a "Try again" and nothing to act on.
     pollState = 'failed';
+    pollError = 'Comet: it did not open a debugging port in time';
     await tester.pump(const Duration(seconds: 2));
     expect(container.read(signInProvider).stage, SignInStage.failed);
-    expect(container.read(signInProvider).detail, 'Sign-in was not completed.');
+    expect(container.read(signInProvider).detail, pollError);
 
     // Retry from the failed state starts a fresh attempt.
+    pollState = 'waiting';
+    pollError = null;
     controller.start();
     await tester.pump();
     await tester.pump();
@@ -133,6 +144,76 @@ void main() {
 
     // Leave no poll running when the test ends.
     await controller.cancel();
+  });
+
+  testWidgets('a failure with no reason from the sidecar still says something',
+      (tester) async {
+    final ProviderContainer container = ProviderContainer(
+      overrides: [
+        apiClientProvider.overrideWithValue(
+          YtmApiClient(
+            client: MockClient((http.Request request) async {
+              return switch (request.url.path) {
+                '/health' => jsonOk('{"status": "ok"}'),
+                '/auth/status' => jsonOk('{"logged_in": false, "error": null}'),
+                '/auth/browser/start' => jsonOk(
+                    '{"state": "waiting", "browser": "Comet", "error": null}'),
+                '/auth/browser/status' => jsonOk(
+                    '{"state": "failed", "browser": "Comet", "error": null}'),
+                _ => jsonOk('{}'),
+              };
+            }),
+            readPortFile: () async => null,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    container.read(signInProvider.notifier).start();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+
+    // A failure must never be a blank the user cannot read.
+    expect(
+      container.read(signInProvider).detail,
+      'Sign-in was not completed.',
+    );
+  });
+
+  testWidgets('the waiting screen names the browser sign-in is using',
+      (tester) async {
+    await tester.pumpWidget(
+      appScope(
+        initialLocation: '/home',
+        repository: testRepository(
+          responses: <String, http.Response>{
+            '/auth/status': jsonOk('{"logged_in":false,"error":null}'),
+            '/auth/browser/start': jsonOk(
+                '{"state":"waiting","browser":"Comet","error":null}'),
+            '/auth/browser/status': jsonOk(
+                '{"state":"waiting","browser":"Comet","error":null}'),
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sign in'));
+    await tester.pump();
+    await tester.pump();
+
+    // Sign-in can open a browser that is not the one the user is looking at,
+    // so the wait says which window it means.
+    expect(
+      find.textContaining('Comet window that just opened'),
+      findsOneWidget,
+    );
+
+    // Retire the attempt so no poll outlives the test.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('cancel retires the attempt on the sidecar and allows a retry',

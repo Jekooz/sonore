@@ -334,12 +334,25 @@ class YtmRepository {
         await _api.startBrowserSignIn(openBrowser: openBrowser);
     return SignInAttempt(
       state: (body['state'] as String?) ?? 'unknown',
+      browser: body['browser'] as String?,
       error: body['error'] as String?,
     );
   }
 
-  /// GET /auth/browser/status -> idle | waiting | success | failed | cancelled
-  Future<String> browserSignInState() => _api.browserSignInState();
+  /// GET /auth/browser/status — the attempt's state, the browser sign-in is
+  /// using, and the sidecar's own reason when the attempt failed.
+  ///
+  /// [browser] is what the waiting screen names, so the user knows which window
+  /// to look for — this app can open one that is not their usual browser, and
+  /// saying so is cheaper than them guessing.
+  Future<BrowserSignInStatus> browserSignInStatus() async {
+    final Map<String, dynamic> body = await _api.browserSignInStatus();
+    return BrowserSignInStatus(
+      state: (body['state'] as String?) ?? 'unknown',
+      browser: body['browser'] as String?,
+      error: body['error'] as String?,
+    );
+  }
 
   /// POST /auth/browser/cancel — retires the attempt server-side too, so it
   /// cannot outlive the screen that started it.
@@ -497,11 +510,15 @@ class SignInController extends Notifier<SignInState> {
     if (attempt.state == 'failed') {
       state = SignInState(
         stage: SignInStage.failed,
-        detail: attempt.error ?? 'Could not start sign-in.',
+        detail: attempt.error ?? _signInNotCompleted,
       );
       return;
     }
-    state = SignInState(stage: SignInStage.waiting, detail: attempt.state);
+    state = SignInState(
+      stage: SignInStage.waiting,
+      detail: attempt.state,
+      browser: attempt.browser,
+    );
 
     // The sidecar times the attempt out at three minutes; wait a little
     // longer so its final state — with its own wording — is observed rather
@@ -523,9 +540,9 @@ class SignInController extends Notifier<SignInState> {
         return;
       }
 
-      final String status;
+      final BrowserSignInStatus status;
       try {
-        status = await ref.read(ytmRepositoryProvider).browserSignInState();
+        status = await ref.read(ytmRepositoryProvider).browserSignInStatus();
       } on YtmException catch (error) {
         timer.cancel();
         state = SignInState(
@@ -538,7 +555,7 @@ class SignInController extends Notifier<SignInState> {
         timer.cancel();
         return;
       }
-      switch (status) {
+      switch (status.state) {
         // "success" is what the sidecar actually reports on a completed
         // hand-off; "done" is kept so an older sidecar still completes.
         case 'success' || 'done':
@@ -547,15 +564,23 @@ class SignInController extends Notifier<SignInState> {
           ref.invalidate(connectionProvider);
         case 'failed' || 'timeout':
           timer.cancel();
-          state = const SignInState(
+          // The sidecar's wording, not a generic one: it knows whether the
+          // browser would not start, whether YouTube refused the session, or
+          // whether nobody signed in in time, and each of those needs a
+          // different thing from the user.
+          state = SignInState(
             stage: SignInStage.failed,
-            detail: 'Sign-in was not completed.',
+            detail: status.error ?? _signInNotCompleted,
           );
         case 'cancelled' || 'idle':
           timer.cancel();
           state = const SignInState();
         default:
-          state = SignInState(stage: SignInStage.waiting, detail: status);
+          state = SignInState(
+            stage: SignInStage.waiting,
+            detail: status.state,
+            browser: status.browser ?? state.browser,
+          );
       }
     });
   }
@@ -588,12 +613,25 @@ class SignInController extends Notifier<SignInState> {
 /// own three-minute timeout.
 const int _signInWaitPollTicks = 105;
 
-/// What /auth/browser/start answered: the attempt's state and any error text.
+/// What GET /auth/browser/start answered: the attempt's state, the browser it
+/// is using, and any error text.
 @immutable
 class SignInAttempt {
-  const SignInAttempt({required this.state, this.error});
+  const SignInAttempt({required this.state, this.browser, this.error});
 
   final String state;
+  final String? browser;
+  final String? error;
+}
+
+/// What GET /auth/browser/status answered: the attempt's state, the browser it
+/// is using, and — when it failed — the sidecar's explanation of why.
+@immutable
+class BrowserSignInStatus {
+  const BrowserSignInStatus({required this.state, this.browser, this.error});
+
+  final String state;
+  final String? browser;
   final String? error;
 }
 
@@ -617,12 +655,19 @@ Map<String, String> parseRequestHeaders(String raw) {
 
 enum SignInStage { idle, waiting, done, failed }
 
+/// Shown when the sidecar fails an attempt without saying why. It normally
+/// supplies its own wording; this is only a floor, so a failure is never blank.
+const String _signInNotCompleted = 'Sign-in was not completed.';
+
 @immutable
 class SignInState {
-  const SignInState({this.stage = SignInStage.idle, this.detail});
+  const SignInState({this.stage = SignInStage.idle, this.detail, this.browser});
 
   final SignInStage stage;
   final String? detail;
+
+  /// The browser the sidecar said it is using, for the waiting copy.
+  final String? browser;
 
   bool get isWaiting => stage == SignInStage.waiting;
 }

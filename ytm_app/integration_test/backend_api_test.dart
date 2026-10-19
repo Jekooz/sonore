@@ -102,7 +102,8 @@ void main() {
 
     testWidgets('the browser sign-in state is idle with nothing pending',
         (WidgetTester tester) async {
-      expect(await repository.browserSignInState(), 'idle');
+      final BrowserSignInStatus status = await repository.browserSignInStatus();
+      expect(status.state, 'idle');
     });
 
     testWidgets('protected routes behave according to the real session',

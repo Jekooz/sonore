@@ -511,9 +511,14 @@ class YtmApiClient {
         ),
       );
 
-  /// GET /auth/browser/status -> idle|waiting|success|failed|cancelled
-  Future<String> browserSignInState() async =>
-      _stateOf(await _getJson('/auth/browser/status'));
+  /// GET /auth/browser/status -> {"state", "browser", "error"}
+  ///
+  /// The whole answer, not only the state: when an attempt fails, the sidecar is
+  /// the one that knows why — the browser would not start, YouTube refused the
+  /// session it read, or nobody signed in before the deadline — so the screen
+  /// shows its words instead of a vaguer failure of its own.
+  Future<Map<String, dynamic>> browserSignInStatus() async =>
+      _asMap(await _getJson('/auth/browser/status'));
 
   /// POST /auth/browser/cancel
   Future<void> cancelBrowserSignIn() async =>
@@ -546,13 +551,6 @@ class YtmApiClient {
       // A friendly name is cosmetic; the flow does not depend on it.
     }
     return 'your browser';
-  }
-
-  String _stateOf(dynamic body) {
-    if (body is Map<String, dynamic>) {
-      return (body['state'] as String?) ?? 'unknown';
-    }
-    return 'unknown';
   }
 
   /// GET /lyrics/{videoId} -> real lyrics, timestamped when YouTube supplies

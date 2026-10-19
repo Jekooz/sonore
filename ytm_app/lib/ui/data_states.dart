@@ -79,8 +79,9 @@ class SignedOutState extends ConsumerWidget {
     return switch (signIn.stage) {
       SignInStage.waiting => StateMessage(
         message: 'Waiting for you to sign in…',
-        footnote: 'Sign in to YouTube Music with Google in the browser window '
-            'that just opened. This finishes on its own — nothing else to press.',
+        footnote: 'Sign in to YouTube Music with Google in '
+            '${_signInWindow(signIn.browser)}. This finishes on its own — '
+            'nothing else to press.',
         actionLabel: 'Cancel',
         actionIcon: AppIcons.close,
         onAction: controller.cancel,
@@ -106,6 +107,19 @@ class SignedOutState extends ConsumerWidget {
       ),
     };
   }
+}
+
+/// The window to name in the waiting copy: the browser the sidecar said it is
+/// using, or a plain "browser window" when it has no opinion.
+///
+/// Worth naming, because sign-in can open a browser that is not the one the
+/// user is looking at — a controlled window rather than their everyday session
+/// — and "the browser window" leaves them wondering which.
+String _signInWindow(String? browser) {
+  if (browser == null || browser.isEmpty || browser == 'your browser') {
+    return 'the browser window that just opened';
+  }
+  return 'the $browser window that just opened';
 }
 
 /// Renders loading / empty / error / populated for a data-backed screen.

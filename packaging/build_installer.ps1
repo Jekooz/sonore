@@ -51,7 +51,6 @@ function Assert-ExitCode([string] $What) {
 $RepoRoot     = Split-Path -Parent $PSScriptRoot
 $AppProject   = Join-Path $RepoRoot 'ytm_app'
 $BackendDir   = Join-Path $RepoRoot 'backend'
-$ExtensionDir = Join-Path $RepoRoot 'browser-extension'
 $IssFile      = Join-Path $PSScriptRoot 'sonore.iss'
 $WorkDir      = Join-Path $RepoRoot 'build\packaging'
 $CacheDir     = Join-Path $WorkDir 'cache'
@@ -216,18 +215,14 @@ New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
 Copy-Item -Path (Join-Path $AppBuildDir '*') -Destination $StageDir -Recurse -Force
 Copy-Item -LiteralPath $RuntimeDir -Destination (Join-Path $StageDir 'python') -Recurse -Force
 Copy-Item -LiteralPath $BackendDir -Destination (Join-Path $StageDir 'backend') -Recurse -Force
-Copy-Item -LiteralPath $ExtensionDir -Destination (Join-Path $StageDir 'browser-extension') -Recurse -Force
 Copy-Item -LiteralPath (Get-Download $YtDlpUrl (Join-Path $CacheDir 'yt-dlp.exe')) -Destination (Join-Path $StageDir 'yt-dlp.exe') -Force
 Copy-Item -LiteralPath (Get-Download $VcRedistUrl (Join-Path $CacheDir 'vc_redist.x64.exe')) -Destination (Join-Path $StageDir 'vc_redist.x64.exe') -Force
 
-# Nothing this machine generated may ship: the backend's own bytecode caches and
-# the pairing file a sign-in on this machine left behind. The installed packages'
-# caches stay, because they are what keeps the sidecar's start fast.
+# Nothing this machine generated may ship: the backend's own bytecode caches.
+# The installed packages' caches stay, because they are what keeps the sidecar's
+# start fast.
 Get-ChildItem -Path (Join-Path $StageDir 'backend') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
     Remove-Item -Recurse -Force
-foreach ($leftover in @('sidecar.json', 'sidecar.json.tmp')) {
-    Remove-Item -LiteralPath (Join-Path $StageDir "browser-extension\$leftover") -Force -ErrorAction SilentlyContinue
-}
 Get-ChildItem -Path $StageDir -Filter '*.pdb' -ErrorAction SilentlyContinue | Remove-Item -Force
 
 Write-Step 'Checking the staged layout'
@@ -237,8 +232,7 @@ $required = @(
     'data',
     'backend\main.py',
     'backend\services\ytmusic_client.py',
-    'browser-extension\manifest.json',
-    'browser-extension\service_worker.js',
+    'backend\services\browser_cookies.py',
     'python\python.exe',
     'yt-dlp.exe',
     'vc_redist.x64.exe'

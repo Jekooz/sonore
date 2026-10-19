@@ -48,16 +48,15 @@ Everything below is present in the code on this branch:
 - **Shuffle and repeat** — off / all / one, persisted between runs.
 - **Synced lyrics** — lyric lines with timestamps; the screen follows playback
   and seek-by-tap when a synced source is available.
-- **Sign-in** — sign in through your own browser with the bundled helper
-  extension (`browser-extension/`). The app opens music.youtube.com and the
-  extension hands the session to the local service over a loopback-only endpoint
-  (`POST /auth/handoff`) on its own — there is no token to copy and nothing to
-  press, once it is loaded. Only one pairing attempt can be in flight per
-  session, so a stale attempt can never steal the hand-off. A "paste request
-  headers" fallback in Settings → Account feeds the same endpoint when the
-  extension cannot be loaded. The session is stored encrypted on this device, an
-  expired session is reported as signed-out (not broken), and a failed sign-in
-  never damages a working one.
+- **Sign-in** — sign in with Google in a browser window, with **nothing to
+  install**: the local service either reads an already signed-in Firefox profile
+  directly (no window, no click) or opens Microsoft Edge (or Chrome) in a profile
+  it owns, and captures the session over the DevTools protocol the moment the
+  user has signed in. There is no extension to load and no token to copy. A
+  "paste request headers" fallback in Settings → Account feeds the same
+  loopback-only endpoint when a machine cannot drive a browser. The session is
+  stored encrypted on this device, an expired session is reported as signed-out
+  (not broken), and a failed sign-in never damages a working one.
 - **Ten-band equalizer** — per-band gain on top of media_kit's audio bindings,
   with named presets and manual editing (`ytm_app/lib/audio/`,
   `ytm_app/lib/features/equalizer/`).
@@ -86,15 +85,12 @@ everything the app needs at run time — nothing has to be installed first:
 - the backend itself (`backend/main.py` and its services);
 - `yt-dlp.exe`, the binary the backend uses for the `/stream/{video_id}`
   endpoint. It can also update itself into `%LOCALAPPDATA%\Sonore\bin\`
-  (see **Settings → Playback → Update playback engine**);
-- the sign-in helper extension, in the `browser-extension` folder beside the
-  app. **Sign-in cannot complete without it**: a browser only lets an extension
-  read a file inside its own folder, so a copy loaded from anywhere else can
-  never hand the session over. Load it unpacked from that folder once (your
-  browser's extension page, Developer mode, "Load unpacked"); after that, signing
-  in is automatic — the extension catches the session the moment your browser has
-  one. The sign-in screen and the Setup wizard's last page both name the folder,
-  and the sign-in screen can open it.
+  (see **Settings → Playback → Update playback engine**).
+
+Sign-in needs none of the user's tooling: the app drives the Edge (or Chrome)
+that ships with Windows in a profile of its own under
+`%LOCALAPPDATA%\Sonore\sign-in-browser`, so it never touches the default
+browser's profile or its stored passwords. Signing out removes that profile.
 
 The app starts the Python it shipped with rather than whatever happens to be on
 the machine, so the packages it runs against are fixed by the installer. Setting
@@ -163,13 +159,13 @@ cd ytm_app && flutter test            # 354 widget and unit tests
 
 Flutter (Riverpod + go_router, media_kit for playback) talking over `http` to a
 local FastAPI service that wraps `ytmusicapi` and `yt-dlp` on `127.0.0.1`.
-Sign-in is performed in your own browser; the session the backend derives from
-it is stored **encrypted on this device** and token/cookie values are never
-logged (the Settings page states this too). The service binds to loopback only,
-rejects non-loopback callers and foreign web origins, and requires a per-install
-**API token** (`X-Sonore-Token`) on every account, library and stream route — the
-app fetches its own copy, and the helper extension fetches its own — so a stray
-local process or web page cannot read your account even on the same machine.
+Sign-in is performed in a browser window the local service drives; the session it
+derives from that window is stored **encrypted on this device** and token/cookie
+values are never logged (the Settings page states this too). The service binds to
+loopback only, rejects non-loopback callers and foreign web origins, and requires
+a per-install **API token** (`X-Sonore-Token`) on every account, library and
+stream route — the app fetches its own copy — so a stray local process or web
+page cannot read your account even on the same machine.
 
 ## Building the installer
 

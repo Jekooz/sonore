@@ -9,7 +9,7 @@
 ; quoting can go wrong.
 
 #define AppName "Sonore"
-#define AppVersion "1.6.3"
+#define AppVersion "1.6.4"
 #define AppExeName "sonore.exe"
 #define AppPublisher "Jekooz"
 #define AppUrl "https://github.com/Jekooz/sonore"
@@ -20,7 +20,6 @@
 ;   ..\build\packaging\stage\data\                   Flutter assets and the engine's data
 ;   ..\build\packaging\stage\backend\main.py         the FastAPI sidecar
 ;   ..\build\packaging\stage\python\python.exe       a private CPython with the sidecar's packages
-;   ..\build\packaging\stage\browser-extension\      the sign-in helper
 ;   ..\build\packaging\stage\yt-dlp.exe              the tool the sidecar shells out to
 ;   ..\build\packaging\stage\vc_redist.x64.exe       Microsoft's VC++ runtime, installed only if missing
 #define StageDir "..\build\packaging\stage"
@@ -71,14 +70,21 @@ Source: "{#StageDir}\*"; DestDir: "{app}"; Excludes: "vc_redist.x64.exe"; Flags:
 Source: "{#StageDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedsVcRedist
 
 [Dirs]
-; Sign-in writes a short-lived pairing token into the extension folder, and an
-; extension page can only read a file from inside its own folder - so this folder
-; has to be writable by the account that runs the app, while the installer itself
-; runs elevated and creates it under Program Files, where a standard account has
-; no write access. The sidecar also gets to write its bytecode cache, which keeps
-; its start-up fast.
-Name: "{app}\browser-extension"; Permissions: users-modify
+; The installer runs elevated and creates this under Program Files, where a
+; standard account has no write access, but the sidecar gets to write its own
+; bytecode cache there - which is what keeps its start-up fast. Sign-in needs no
+; writable folder of its own: the browser profile it uses lives per-user under
+; %LOCALAPPDATA%\Sonore.
 Name: "{app}\backend"; Permissions: users-modify
+
+[InstallDelete]
+; 1.6.3 and earlier shipped a helper extension the user had to load by hand.
+; This build uses none, so neither the folder nor the pairing file a previous
+; sign-in left in it may survive an in-place upgrade.
+Type: filesandordirs; Name: "{app}\browser-extension"
+; url_launcher was only there for the old "open the default browser" step.
+; Inno leaves files it no longer ships in place, so name it explicitly.
+Type: files; Name: "{app}\url_launcher_windows_plugin.dll"
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
@@ -93,8 +99,6 @@ Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; F
 
 [UninstallDelete]
 ; Written while the app runs, so the uninstaller has no record of them.
-Type: files; Name: "{app}\browser-extension\sidecar.json"
-Type: files; Name: "{app}\browser-extension\sidecar.json.tmp"
 Type: filesandordirs; Name: "{app}\backend\__pycache__"
 Type: filesandordirs; Name: "{app}\backend\services\__pycache__"
 
@@ -115,14 +119,13 @@ procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = wpFinished then
   begin
-    { Sign-in depends on the bundled extension, so its folder is named on the
-      page the user actually reads. }
+    { There is no extension to load any more, which is the point of this build:
+      signing in just opens a browser window. The finished page says so, so no
+      one goes looking for a setup step that no longer exists. }
     WizardForm.FinishedLabel.Caption :=
       'Setup has finished installing {#AppName}.' + #13#10 + #13#10 +
-      'To sign in to YouTube Music, load the helper extension that shipped with the app: ' +
-      'open your browser''s extension page (chrome://extensions in Chrome, Edge or Brave), ' +
-      'turn on Developer mode, choose "Load unpacked" and select' + #13#10 +
-      ExpandConstant('{app}\browser-extension') + #13#10 + #13#10 +
-      'After that, signing in is automatic - there is no token to copy.';
+      'To sign in to YouTube Music, open Sonore and choose Sign in. ' +
+      'A browser window opens for your Google account and the app takes over ' +
+      'on its own - there is nothing to install and no token to copy.';
   end;
 end;

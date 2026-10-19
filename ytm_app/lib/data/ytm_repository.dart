@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../audio/listening_event.dart';
 import '../audio/track.dart';
-import '../core/browser_opener.dart';
 import 'api_client.dart';
 import 'models.dart';
 
@@ -322,19 +321,18 @@ class YtmRepository {
   Future<void> setLike(String videoId, bool liked) =>
       _api.rate(videoId, liked ? 'LIKE' : 'INDIFFERENT');
 
-  /// POST /auth/browser/start — the established sign-in hand-off: the
-  /// attempt waits (2 s poll, 3 min timeout) for the companion extension or
-  /// the paste-headers fallback, with the pairing token written to the
-  /// extension folder and returned to this loopback caller.
+  /// POST /auth/browser/start — begins a sign-in. The sidecar owns the whole
+  /// flow: it signs in from an already signed-in Firefox with no window at
+  /// all, or opens Edge/Chrome in a profile it owns for the user to sign in
+  /// there. Nothing is installed and no extension is involved.
   ///
-  /// [openBrowser] is false when the app has already opened
-  /// music.youtube.com itself with url_launcher, so exactly one tab appears.
+  /// [openBrowser] is false when the caller only needs an attempt to hand
+  /// cookies to, which is what the paste-headers fallback does.
   Future<SignInAttempt> startBrowserSignIn({bool openBrowser = true}) async {
     final Map<String, dynamic> body =
         await _api.startBrowserSignIn(openBrowser: openBrowser);
     return SignInAttempt(
       state: (body['state'] as String?) ?? 'unknown',
-      token: body['token'] as String?,
       error: body['error'] as String?,
     );
   }
@@ -342,16 +340,15 @@ class YtmRepository {
   /// GET /auth/browser/status -> idle | waiting | success | failed | cancelled
   Future<String> browserSignInState() => _api.browserSignInState();
 
-  /// POST /auth/browser/cancel — retires the attempt server-side too, so its
-  /// single-use pairing token cannot outlive the screen that issued it.
+  /// POST /auth/browser/cancel — retires the attempt server-side too, so it
+  /// cannot outlive the screen that started it.
   Future<void> cancelBrowserSignIn() => _api.cancelBrowserSignIn();
 
   /// POST /auth/handoff with pasted request headers — the fallback for a
-  /// machine where the helper extension cannot be loaded.
+  /// machine where the app cannot drive a browser of its own.
   ///
-  /// Starts an attempt without opening a browser purely to obtain the
-  /// single-use pairing token, then feeds the pasted headers to the SAME
-  /// endpoint the extension uses; the sidecar recovers the cookie line,
+  /// Starts an attempt without opening a browser, then feeds the pasted
+  /// headers to the loopback endpoint; the sidecar recovers the cookie line,
   /// validates the candidate against YouTube and stores it encrypted.
   Future<void> signInWithPastedHeaders(String rawHeaders) async {
     final Map<String, String> headers = parseRequestHeaders(rawHeaders);
@@ -362,18 +359,12 @@ class YtmRepository {
       );
     }
 
-    final SignInAttempt attempt = await startBrowserSignIn(openBrowser: false);
-    final String? token = attempt.token;
-    if (token == null) {
-      throw const YtmRequestException(
-        'The local service did not issue a sign-in token.',
-      );
-    }
+    await startBrowserSignIn(openBrowser: false);
     try {
-      await _api.handoff(headers: headers, token: token);
+      await _api.handoff(headers: headers);
     } finally {
-      // Retire the attempt either way: a failed paste must not leave a token
-      // lying around, and a successful one has already been consumed.
+      // Retire the attempt either way: a failed paste must not leave one
+      // waiting, and a successful one has already been consumed.
       try {
         await _api.cancelBrowserSignIn();
       } on YtmException {
@@ -382,18 +373,13 @@ class YtmRepository {
     }
   }
 
-  /// GET /auth/extension/folder — the folder the helper extension has to be
-  /// loaded from. The hand-off cannot complete from any other copy, so the
-  /// signed-out screen names this path.
-  Future<String> extensionFolder() => _api.extensionFolder();
-
   /// POST /auth/signout — the sidecar forgets the stored session. The app
   /// itself never holds one, so there is nothing else to clear.
   Future<void> signOut() => _api.signOut();
 
   /// The per-install API token, for callers that need it directly. The app
-  /// sends it automatically on every locked request, and the helper extension
-  /// fetches its own copy, so nothing in the UI has to show or copy it.
+  /// sends it automatically on every locked request, so nothing in the UI has
+  /// to show or copy it.
   Future<String?> installToken() => _api.installToken();
 
   /// The playback engine (yt-dlp) in use: version, source and last update.
@@ -436,13 +422,6 @@ final Provider<YtmRepository> ytmRepositoryProvider = Provider<YtmRepository>(
 final FutureProvider<YtmConnection> connectionProvider =
     FutureProvider<YtmConnection>(
   (ref) => ref.watch(ytmRepositoryProvider).connection(),
-);
-
-/// The folder the helper extension is installed from, for the signed-out
-/// screen. Empty when the sidecar cannot answer, which the screen treats as
-/// "show the generic wording" rather than a blank path.
-final FutureProvider<String> extensionFolderProvider = FutureProvider<String>(
-  (ref) => ref.watch(ytmRepositoryProvider).extensionFolder(),
 );
 
 /// The playback engine (yt-dlp) state, for Settings → Playback. The update is
@@ -497,23 +476,19 @@ class SignInController extends Notifier<SignInState> {
     return const SignInState();
   }
 
-  /// Starts the browser hand-off and polls the sidecar until it finishes.
+  /// Starts the sign-in and polls the sidecar until it finishes.
+  ///
+  /// The sidecar owns the whole browser flow — it signs in from an existing
+  /// Firefox session with no window at all, or opens a window of its own for
+  /// the user to sign in — so the app opens nothing itself and exactly one
+  /// window appears.
   Future<void> start() async {
     if (state.isWaiting) return;
     _poll?.cancel();
 
-    // The app owns the browser experience: open music.youtube.com itself and
-    // tell the sidecar not to open a second tab. When the launch is refused
-    // (no handler, sandboxed test env), the sidecar falls back to opening it
-    // the way it always did, so sign-in still works.
-    final bool opened =
-        await ref.read(browserOpenerProvider)(signInMusicUrl);
-
     final SignInAttempt attempt;
     try {
-      attempt = await ref
-          .read(ytmRepositoryProvider)
-          .startBrowserSignIn(openBrowser: !opened);
+      attempt = await ref.read(ytmRepositoryProvider).startBrowserSignIn();
     } on YtmException catch (error) {
       state = SignInState(stage: SignInStage.failed, detail: error.message);
       return;
@@ -542,7 +517,7 @@ class SignInController extends Notifier<SignInState> {
       if (++elapsedPolls > _signInWaitPollTicks) {
         timer.cancel();
         await _abandon(
-          'Sign-in timed out waiting for the helper extension.',
+          'Sign-in timed out waiting for the browser window.',
         );
         return;
       }
@@ -584,8 +559,8 @@ class SignInController extends Notifier<SignInState> {
     });
   }
 
-  /// Cancel: reset the screen AND retire the attempt on the sidecar, so its
-  /// single-use pairing token does not outlive this screen.
+  /// Cancel: reset the screen AND retire the attempt on the sidecar, so it
+  /// does not outlive this screen.
   Future<void> cancel() async {
     _poll?.cancel();
     state = const SignInState();
@@ -612,17 +587,12 @@ class SignInController extends Notifier<SignInState> {
 /// own three-minute timeout.
 const int _signInWaitPollTicks = 105;
 
-/// The page sign-in happens on; the app opens it in the default browser.
-final Uri signInMusicUrl = Uri.parse('https://music.youtube.com');
-
-/// What /auth/browser/start answered: the attempt's state, the single-use
-/// pairing token (for the paste-headers fallback) and any error text.
+/// What /auth/browser/start answered: the attempt's state and any error text.
 @immutable
 class SignInAttempt {
-  const SignInAttempt({required this.state, this.token, this.error});
+  const SignInAttempt({required this.state, this.error});
 
   final String state;
-  final String? token;
   final String? error;
 }
 

@@ -11,8 +11,6 @@ import 'audio/playback_service.dart';
 import 'audio/track.dart';
 import 'core/app_identity.dart';
 import 'core/app_settings.dart';
-import 'core/browser_opener.dart';
-import 'core/folder_reveal.dart';
 import 'core/settings_persistence.dart';
 import 'core/sidecar/sidecar_io.dart';
 import 'core/sidecar/sidecar_providers.dart';
@@ -83,12 +81,6 @@ Future<void> main() async {
         // so no platform-specific spawn assumption is made.
         if (Platform.isWindows)
           sidecarLauncherProvider.overrideWithValue(createSidecarLauncher()),
-        // Opening the helper-extension folder: the one manual step the sign-in
-        // hand-off needs. The default is a no-op so no test opens a window.
-        folderRevealerProvider.overrideWithValue(revealFolder),
-        // Sign-in opens music.youtube.com in the user's default browser; the
-        // default is a no-op so no test ever launches one.
-        browserOpenerProvider.overrideWithValue(launchInBrowser),
         // Real persistence for appearance, lyrics and equalizer preferences.
         settingsStoreProvider.overrideWithValue(settingsStore),
         initialAppSettingsProvider.overrideWithValue(initialSettings),
@@ -96,21 +88,6 @@ Future<void> main() async {
       child: YtmApp(router: createAppRouter(titleBar: titleBar)),
     ),
   );
-}
-
-/// Opens [path] in the file manager.
-///
-/// `explorer` is the Windows shell's own way in and needs no plugin; elsewhere
-/// there is no such program, which is why a failure stays silent. The button is
-/// a convenience for a manual step rather than part of sign-in itself, so it
-/// must never become an error the user has to dismiss.
-Future<void> revealFolder(String path) async {
-  if (!Platform.isWindows) return;
-  try {
-    await Process.run('explorer', <String>[path]);
-  } catch (_) {
-    // Ignored on purpose: see above.
-  }
 }
 
 Future<SettingsStore> _openSettingsStore() async {

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.6.3+3
+version: 1.6.4+4
 
 environment:
   sdk: ^3.13.5
@@ -50,7 +50,7 @@ dependencies:
   media_kit_libs_windows_audio: ^1.0.9
 
   # Talks to the existing FastAPI sidecar (backend/main.py) over the local
-  # port it publishes to %TEMP%/ytmusic_sidecar_port.txt.
+  # port it publishes to %LOCALAPPDATA%\Sonore\sidecar_port.txt.
   http: ^1.6.0
 
   # Persisted preferences (appearance, playback, equalizer). Explicitly chosen
@@ -61,7 +61,6 @@ dependencies:
   # lib/audio/equalizer.dart uses its allocator alongside media_kit's generated
   # libmpv bindings.
   ffi: ^2.1.0
-  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

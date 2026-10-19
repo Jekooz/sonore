@@ -518,7 +518,7 @@ class _KeyValueRow extends StatelessWidget {
 }
 
 /// Sign-in state and the account actions the service supports: the browser
-/// flow, and — for a machine where the helper extension cannot be loaded — a
+/// flow the sidecar drives, and — for a machine where that cannot work — a
 /// "paste request headers" fallback feeding the same hand-off endpoint.
 class _Account extends ConsumerStatefulWidget {
   const _Account();
@@ -562,7 +562,7 @@ class _AccountState extends ConsumerState<_Account> {
             title: _showPasteField
                 ? 'Hide pasted headers'
                 : 'Paste request headers',
-            subtitle: 'No helper extension on this machine? Paste the request '
+            subtitle: 'If the sign-in window cannot be used, paste the request '
                 'headers from a signed-in music.youtube.com tab instead.',
             icon: AppIcons.linkSimple,
             onTap: () => setState(() {
@@ -644,10 +644,10 @@ class _AccountState extends ConsumerState<_Account> {
     );
   }
 
-  /// Feeds the pasted headers to the same /auth/handoff endpoint the
-  /// extension uses: the sidecar recovers the cookie line, validates the
-  /// candidate against YouTube and only then stores it — so the account shown
-  /// afterwards is the validated one or nothing.
+  /// Feeds the pasted headers to the loopback /auth/handoff endpoint: the
+  /// sidecar recovers the cookie line, validates the candidate against YouTube
+  /// and only then stores it — so the account shown afterwards is the validated
+  /// one or nothing.
   Future<void> _submitPastedHeaders() async {
     setState(() {
       _pastingIn = true;

@@ -257,14 +257,27 @@ void main() {
       expect(response.body, isNot(contains(notARealCookie)));
     });
 
-    testWidgets('an unsolicited extension hand-off is rejected',
+    testWidgets('an unsolicited hand-off is rejected while nothing is waiting',
+        (WidgetTester tester) async {
+      // The extension entry point is gone; the loopback hand-off that remains
+      // is refused unless an attempt is actually in progress, so a stray local
+      // caller cannot store a session on its own.
+      final http.Response response = await http.post(
+        Uri.parse('http://127.0.0.1:$sharedPort/auth/handoff'),
+        headers: const <String, String>{'content-type': 'application/json'},
+        body: jsonEncode(<String, dynamic>{'cookies': <String, String>{}}),
+      );
+      expect(response.statusCode, 409);
+    });
+
+    testWidgets('the browser-extension endpoints no longer exist',
         (WidgetTester tester) async {
       final http.Response response = await http.post(
         Uri.parse('http://127.0.0.1:$sharedPort/auth/extension'),
         headers: const <String, String>{'content-type': 'application/json'},
         body: jsonEncode(<String, dynamic>{'cookies': <String, String>{}}),
       );
-      expect(response.statusCode, 409);
+      expect(response.statusCode, 404);
     });
 
     testWidgets('the shared production port file was never disturbed',

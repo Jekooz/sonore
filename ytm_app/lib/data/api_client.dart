@@ -176,7 +176,7 @@ class YtmApiClient {
   }
 
   /// The per-install token, fetched if needed. Used by Settings to show and
-  /// copy the value so the extension popup can be given it once.
+  /// copy the value, and attached automatically to every locked route.
   Future<String?> installToken() async {
     if (_baseUrl == null) await connect();
     await _ensureToken();
@@ -488,15 +488,18 @@ class YtmApiClient {
     }
   }
 
-  /// POST /auth/browser/start — begins the browser hand-off (2 s poll,
-  /// 3 min timeout on the sidecar). The app opens music.youtube.com itself
-  /// with url_launcher and passes `openBrowser: false` so exactly one tab
-  /// appears; `openBrowser: true` keeps the sidecar's own fallback.
+  /// POST /auth/browser/start — begins a sign-in (2 s poll, 3 min timeout on
+  /// the sidecar). The sidecar owns the whole flow: it signs in from an
+  /// already signed-in Firefox with no window at all, or opens Edge/Chrome in
+  /// a profile it owns for the user to sign in there. Nothing is installed and
+  /// no extension is involved.
   ///
-  /// The response carries the state, the sidecar's optional error text, and
-  /// the single-use pairing token the paste-headers fallback needs. Only
-  /// session state crosses the wire; no cookie material ever reaches this
-  /// client.
+  /// `openBrowser: false` starts an attempt that only waits for a hand-off,
+  /// which is what the paste-headers fallback needs.
+  ///
+  /// The response carries the state, the browser in use and the sidecar's
+  /// optional error text. Only session state crosses the wire; no cookie
+  /// material ever reaches this client.
   Future<Map<String, dynamic>> startBrowserSignIn({
     bool openBrowser = true,
   }) async =>
@@ -517,21 +520,21 @@ class YtmApiClient {
 
   /// POST /auth/handoff — the Settings "paste request headers" fallback.
   ///
-  /// Same endpoint the extension uses, authenticated by the attempt's
-  /// single-use pairing token. The sidecar recovers the cookie line from the
-  /// pasted headers, validates the candidate against YouTube and only then
-  /// stores it, exactly like the extension flow.
-  Future<void> handoff({
-    required Map<String, String> headers,
-    required String token,
-  }) async =>
+  /// The sidecar recovers the cookie line from the pasted headers, validates
+  /// the candidate against YouTube and only then stores it, exactly like a
+  /// session it captured itself. Authenticated by the per-install token, which
+  /// [_authHeaders] already attaches.
+  Future<void> handoff({required Map<String, String> headers}) async =>
       _postJson(
         '/auth/handoff',
         <String, dynamic>{'headers': headers},
-        extraHeaders: <String, String>{'X-Ytm-Token': token},
       );
 
   /// GET /auth/browser/info -> {"browser": name}
+  ///
+  /// The browser sign-in will drive (a controlled Edge/Chrome, or the default
+  /// browser on a machine that has neither). Cosmetic: it only message-brands
+  /// the wait.
   Future<String> defaultBrowser() async {
     try {
       final dynamic body = await _getJson('/auth/browser/info');
@@ -542,25 +545,6 @@ class YtmApiClient {
       // A friendly name is cosmetic; the flow does not depend on it.
     }
     return 'your browser';
-  }
-
-  /// GET /auth/extension/folder -> `{"folder": "..."}`, an absolute path.
-  ///
-  /// The one folder the helper extension can be installed from, because a
-  /// browser only lets an extension read a pairing file inside its own
-  /// installation. The sign-in screen names it and can open it, since sign-in
-  /// cannot finish until the user has loaded the extension from there.
-  Future<String> extensionFolder() async {
-    try {
-      final dynamic body = await _getJson('/auth/extension/folder');
-      if (body is Map<String, dynamic>) {
-        return (body['folder'] as String?) ?? '';
-      }
-    } on YtmException {
-      // Guidance for a manual step, not part of sign-in itself: a sidecar that
-      // cannot answer leaves the screen on its generic wording.
-    }
-    return '';
   }
 
   String _stateOf(dynamic body) {

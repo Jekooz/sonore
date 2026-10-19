@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/folder_reveal.dart';
 import '../data/api_client.dart';
 import '../data/ytm_repository.dart';
 import '../theme/icons.dart';
@@ -60,19 +59,15 @@ class OfflineState extends ConsumerWidget {
   }
 }
 
-/// The sidecar is running but has no session. The one real action is the
-/// project's established sign-in hand-off: the sidecar opens music.youtube.com
-/// and waits for the companion extension.
+/// The sidecar is running but has no session. The one real action starts a
+/// sign-in the sidecar owns end to end: it either reads an already signed-in
+/// Firefox profile straight from disk — no window, no click — or opens
+/// Edge/Chrome in a profile it owns at music.youtube.com and reads the session
+/// the moment the user has signed in.
 ///
-/// The extension is not optional on this build. A browser only lets an extension
-/// read a pairing file inside its own installation, so a copy loaded from
-/// anywhere else can never hand the session over — and signing in to YouTube
-/// Music in the browser on its own changes nothing. Once it is loaded (a
-/// one-time step), the hand-off is automatic: the extension hands the session
-/// over the moment the browser has one, with no token to copy and nothing to
-/// press. The screen still names the folder and offers to open it, because
-/// without the extension the wait ends in a three-minute timeout that reads as
-/// a sign-in screen that does not work.
+/// Nothing is installed and no extension is involved, which is the point: the
+/// old helper extension was a step only a technical user would take, and
+/// leaving it out is what makes sign-in work for everyone else.
 class SignedOutState extends ConsumerWidget {
   const SignedOutState({super.key});
 
@@ -80,58 +75,34 @@ class SignedOutState extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final SignInState signIn = ref.watch(signInProvider);
     final SignInController controller = ref.read(signInProvider.notifier);
-    // Empty when the sidecar cannot answer, in which case the screen keeps its
-    // generic wording instead of printing a blank path.
-    final String folder = ref.watch(extensionFolderProvider).value ?? '';
-    final bool hasFolder = folder.isNotEmpty;
-    final VoidCallback? openFolder = hasFolder
-        ? () => ref.read(folderRevealerProvider)(folder)
-        : null;
 
     return switch (signIn.stage) {
       SignInStage.waiting => StateMessage(
         message: 'Waiting for you to sign in…',
-        footnote: hasFolder
-            ? 'In the browser window that just opened, sign in to YouTube Music '
-                  'with Google. This finishes on its own — nothing else to press. '
-                  'The Sonore Helper extension that completes it loads from:\n$folder'
-            : 'Sign in to YouTube Music with Google in the browser window. This '
-                  'finishes on its own — nothing else to press.',
+        footnote: 'Sign in to YouTube Music with Google in the browser window '
+            'that just opened. This finishes on its own — nothing else to press.',
         actionLabel: 'Cancel',
         actionIcon: AppIcons.close,
         onAction: controller.cancel,
-        secondaryLabel: hasFolder ? 'Open extension folder' : null,
-        onSecondary: openFolder,
       ),
       SignInStage.done => const StateMessage(
         message: 'Signed in. Loading your music…',
       ),
       SignInStage.failed => StateMessage(
         message: signIn.detail ?? 'Sign-in did not complete.',
-        footnote: hasFolder
-            ? 'You can start it again when you are ready. Sign-in finishes through '
-                  'the helper extension, which loads from:\n$folder'
-            : 'You can start it again when you are ready.',
+        footnote: 'You can start it again when you are ready.',
         actionLabel: 'Try again',
         actionIcon: AppIcons.arrowClockwise,
         onAction: controller.start,
-        secondaryLabel: hasFolder ? 'Open extension folder' : null,
-        onSecondary: openFolder,
       ),
       SignInStage.idle => StateMessage(
         message: 'Not signed in to YouTube Music.',
-        footnote: hasFolder
-            ? 'Sign in with Google in your browser — the Sonore Helper extension '
-                  'hands the session to the app automatically, so there is no '
-                  'token to copy. Load it once from:\n$folder\nthen turn on '
-                  'Developer mode and choose "Load unpacked".'
-            : 'Sign-in opens in your browser and finishes on its own, and your '
-                  'session is kept by the local service — the app never stores it.',
+        footnote: 'Sign in with Google in the browser window that opens. Your '
+            'session is kept by the local service — the app itself never stores '
+            'it, and there is nothing to install.',
         actionLabel: 'Sign in',
         actionIcon: AppIcons.user,
         onAction: controller.start,
-        secondaryLabel: hasFolder ? 'Open extension folder' : null,
-        onSecondary: openFolder,
       ),
     };
   }

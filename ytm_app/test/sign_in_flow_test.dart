@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import 'package:ytm_app/core/browser_opener.dart';
-import 'package:ytm_app/core/folder_reveal.dart';
 import 'package:ytm_app/data/api_client.dart';
 import 'package:ytm_app/data/ytm_repository.dart';
 import 'package:ytm_app/ui/data_states.dart';
@@ -13,15 +11,17 @@ import 'package:ytm_app/ui/data_states.dart';
 import 'support/recorded_sidecar.dart' show jsonOk;
 
 /// Drives the real SignInController against a scripted sidecar, through the
-/// same YtmApiClient the app uses. These tests pin the failure this branch
-/// fixes: a completed hand-off reports "success", which the controller used
-/// to ignore — leaving the screen waiting forever and every retry a no-op.
+/// same YtmApiClient the app uses.
+///
+/// The sidecar now owns the whole browser flow — no extension, and the app
+/// opens nothing itself — so what these tests pin is the contract with it: the
+/// app asks for a sign-in, polls the status endpoint, and finishes on the
+/// sidecar's word rather than waiting forever.
 void main() {
-  testWidgets('a successful hand-off reaches done, not an endless wait',
+  testWidgets('a successful sign-in reaches done, not an endless wait',
       (tester) async {
     final List<String> requests = <String>[];
     final List<String> startBodies = <String>[];
-    final List<Uri> opened = <Uri>[];
     bool signedIn = false;
     int statusPolls = 0;
 
@@ -39,11 +39,11 @@ void main() {
                 '/auth/status' =>
                   jsonOk('{"logged_in": $signedIn, "error": null}'),
                 '/auth/browser/start' => jsonOk(
-                    '{"state": "waiting", "browser": "Edge", "error": null, '
-                    '"token": "tok-1"}'),
+                    '{"state": "waiting", "browser": "Microsoft Edge", '
+                    '"error": null}'),
                 '/auth/browser/status' => jsonOk(
                     '{"state": "${statusPolls++ == 0 ? 'waiting' : 'success'}", '
-                    '"browser": "Edge", "error": null}'),
+                    '"browser": "Microsoft Edge", "error": null}'),
                 '/auth/browser/cancel' => jsonOk('{"state": "cancelled"}'),
                 '/account' => jsonOk('{"accountName": "Test Account", '
                     '"channelHandle": "@tester", "accountPhotoUrl": null}'),
@@ -53,11 +53,6 @@ void main() {
             readPortFile: () async => null,
           ),
         ),
-        browserOpenerProvider.overrideWithValue((Uri uri) async {
-          opened.add(uri);
-          return true;
-        }),
-        folderRevealerProvider.overrideWithValue((String path) async {}),
       ],
     );
     addTearDown(container.dispose);
@@ -67,11 +62,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Waiting state, the browser opened by the app, and the sidecar told not
-    // to open a second tab.
+    // Waiting, with the sidecar told to run the browser flow itself: the app
+    // must not open a window of its own, or two would appear.
     expect(container.read(signInProvider).stage, SignInStage.waiting);
-    expect(opened, <Uri>[signInMusicUrl]);
-    expect(startBodies.single, contains('"open_browser":false'));
+    expect(startBodies.single, contains('"open_browser":true'));
 
     await tester.pump(const Duration(seconds: 2)); // first poll: still waiting
     expect(container.read(signInProvider).stage, SignInStage.waiting);
@@ -101,22 +95,21 @@ void main() {
           YtmApiClient(
             client: MockClient((http.Request request) async {
               requests.add('${request.method} ${request.url.path}');
+              if (request.url.path == '/auth/browser/start') startCalls += 1;
               return switch (request.url.path) {
                 '/health' => jsonOk('{"status": "ok"}'),
                 '/auth/status' => jsonOk('{"logged_in": false, "error": null}'),
                 '/auth/browser/start' => jsonOk(
-                    '{"state": "waiting", "browser": "Edge", "error": null, '
-                    '"token": "tok-${startCalls++}"}'),
+                    '{"state": "waiting", "browser": "Microsoft Edge", '
+                    '"error": null}'),
                 '/auth/browser/status' => jsonOk('{"state": "$pollState", '
-                    '"browser": "Edge", "error": null}'),
+                    '"browser": "Microsoft Edge", "error": null}'),
                 _ => jsonOk('{}'),
               };
             }),
             readPortFile: () async => null,
           ),
         ),
-        browserOpenerProvider.overrideWithValue((Uri uri) async => true),
-        folderRevealerProvider.overrideWithValue((String path) async {}),
       ],
     );
     addTearDown(container.dispose);
@@ -157,8 +150,8 @@ void main() {
                 '/health' => jsonOk('{"status": "ok"}'),
                 '/auth/status' => jsonOk('{"logged_in": false, "error": null}'),
                 '/auth/browser/start' => jsonOk(
-                    '{"state": "waiting", "browser": "Edge", "error": null, '
-                    '"token": "tok-${startCalls++}"}'),
+                    '{"state": "waiting", "browser": "Microsoft Edge", '
+                    '"error": null}'),
                 '/auth/browser/cancel' => jsonOk('{"state": "cancelled"}'),
                 _ => jsonOk('{"state": "waiting"}'),
               };
@@ -166,8 +159,6 @@ void main() {
             readPortFile: () async => null,
           ),
         ),
-        browserOpenerProvider.overrideWithValue((Uri uri) async => true),
-        folderRevealerProvider.overrideWithValue((String path) async {}),
       ],
     );
     addTearDown(container.dispose);
@@ -180,15 +171,16 @@ void main() {
 
     await controller.cancel();
     expect(container.read(signInProvider).stage, SignInStage.idle);
-    // The sidecar is told, so its single-use pairing token dies with the
-    // screen instead of outliving it.
+    // The sidecar is told, so its attempt dies with the screen instead of
+    // outliving it.
     expect(requests, contains('POST /auth/browser/cancel'));
 
+    startCalls = 1;
     controller.start();
     await tester.pump();
     await tester.pump();
     expect(container.read(signInProvider).stage, SignInStage.waiting);
-    expect(startCalls, 2);
+    expect(startCalls, 1);
 
     // Leave no poll running when the test ends.
     await controller.cancel();
@@ -208,8 +200,8 @@ void main() {
                 '/health' => jsonOk('{"status": "ok"}'),
                 '/auth/status' => jsonOk('{"logged_in": false, "error": null}'),
                 '/auth/browser/start' => jsonOk(
-                    '{"state": "waiting", "browser": "Edge", "error": null, '
-                    '"token": "tok"}'),
+                    '{"state": "waiting", "browser": "Microsoft Edge", '
+                    '"error": null}'),
                 '/auth/browser/cancel' => jsonOk('{"state": "cancelled"}'),
                 _ => jsonOk('{"state": "waiting"}'),
               };
@@ -217,8 +209,6 @@ void main() {
             readPortFile: () async => null,
           ),
         ),
-        browserOpenerProvider.overrideWithValue((Uri uri) async => true),
-        folderRevealerProvider.overrideWithValue((String path) async {}),
       ],
     );
     addTearDown(container.dispose);
@@ -262,7 +252,6 @@ void main() {
             readPortFile: () async => null,
           ),
         ),
-        folderRevealerProvider.overrideWithValue((String path) async {}),
       ],
     );
     addTearDown(container.dispose);
@@ -305,9 +294,10 @@ void main() {
     expect(find.text('Not signed in to YouTube Music.'), findsOneWidget);
   });
 
-  testWidgets('paste fallback feeds the handoff endpoint with the token',
+  testWidgets('paste fallback feeds the handoff endpoint and retires the attempt',
       (tester) async {
     final List<String> requests = <String>[];
+    final List<String> startBodies = <String>[];
     final List<http.Request> handoffs = <http.Request>[];
 
     final ProviderContainer container = ProviderContainer(
@@ -316,13 +306,16 @@ void main() {
           YtmApiClient(
             client: MockClient((http.Request request) async {
               requests.add('${request.method} ${request.url.path}');
+              if (request.url.path == '/auth/browser/start') {
+                startBodies.add(request.body);
+              }
               if (request.url.path == '/auth/handoff') handoffs.add(request);
               return switch (request.url.path) {
                 '/health' => jsonOk('{"status": "ok"}'),
                 '/auth/status' => jsonOk('{"logged_in": false, "error": null}'),
                 '/auth/browser/start' => jsonOk(
-                    '{"state": "waiting", "browser": "Edge", "error": null, '
-                    '"token": "tok-paste"}'),
+                    '{"state": "waiting", "browser": "Microsoft Edge", '
+                    '"error": null}'),
                 '/auth/handoff' => jsonOk('{"signed_in": true, "account": null}'),
                 _ => jsonOk('{"state": "cancelled"}'),
               };
@@ -330,7 +323,6 @@ void main() {
             readPortFile: () async => null,
           ),
         ),
-        folderRevealerProvider.overrideWithValue((String path) async {}),
       ],
     );
     addTearDown(container.dispose);
@@ -343,8 +335,10 @@ void main() {
         );
 
     expect(requests, contains('POST /auth/browser/start'));
+    // The paste flow asks for an attempt that only waits: no window, no
+    // capture, because the headers are the session.
+    expect(startBodies.single, contains('"open_browser":false'));
     expect(handoffs, hasLength(1));
-    expect(handoffs.single.headers['X-Ytm-Token'], 'tok-paste');
     expect(handoffs.single.body, contains('SID=1'));
     expect(handoffs.single.body, contains('Mozilla/5.0 (Test)'));
     // The attempt is retired once the paste is done, either way.
@@ -366,7 +360,6 @@ void main() {
             readPortFile: () async => null,
           ),
         ),
-        folderRevealerProvider.overrideWithValue((String path) async {}),
       ],
     );
     addTearDown(container.dispose);

@@ -64,6 +64,10 @@ _COOKIE_DOMAINS = ("youtube.com", "google.com")
 # slow disk is not quick, and this happens before the profile has even loaded.
 _PROFILE_READY_TIMEOUT = 25.0
 
+# How long to wait for a started browser to put a window on screen before
+# deciding there is none to close.
+_WINDOW_WAIT_SECONDS = 10.0
+
 # The browsers that are looked for when the user's own default cannot be read,
 # in preference order. Both are Chromium builds, so both keep a profile this app
 # can read, and every Windows machine has at least one of them.
@@ -433,17 +437,30 @@ def _windows_of(pid):
     return found
 
 
-def close_browser_window(process):
+def close_browser_window(process, wait_seconds=_WINDOW_WAIT_SECONDS):
     """Ask the sign-in window to close, so it flushes its cookie store.
 
     A window message, not a kill: Chromium commits cookies on a timer, so a
     window that is terminated can take the session it just received with it.
+
+    The window does not exist the instant its process does -- it takes a few
+    seconds -- so this waits for one rather than concluding there is nothing to
+    close. That is what lets a cancel issued while the browser is still starting
+    take the window with it instead of leaving it on the user's screen.
     """
     if process is None or process.poll() is not None:
         return
     user32 = ctypes.windll.user32
-    for hwnd in _windows_of(process.pid):
-        user32.PostMessageW(hwnd, _WM_CLOSE, 0, 0)
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        windows = _windows_of(process.pid)
+        if windows:
+            for hwnd in windows:
+                user32.PostMessageW(hwnd, _WM_CLOSE, 0, 0)
+            return
+        if process.poll() is not None or time.monotonic() >= deadline:
+            return
+        time.sleep(0.25)
 
 
 def _close_stale_window(profile_dir):

@@ -22,6 +22,7 @@ Safety, enforced before anything else:
 import logging
 import os
 import sys
+import threading
 import time
 import types
 
@@ -502,6 +503,41 @@ def test_cancel_stops_the_attempt(client):
     # Cancelling retires the attempt, so status falls back to idle rather than
     # leaving a stale object the app would poll forever.
     assert client.get("/auth/browser/status").json()["state"] == "idle"
+
+
+def test_cancel_while_the_window_is_still_starting_still_closes_it(client, monkeypatch):
+    """A window nobody can close yet is still closed once there is one.
+
+    Cancel arrives while the browser is starting, so there is no process for it
+    to close -- the launch has to notice it is no longer wanted and take the
+    window with it, or the user is left with a browser they cancelled.
+    """
+    closed = []
+    opening = threading.Event()
+    release = threading.Event()
+    process = FakeProcess(live=True)
+
+    def slow_launch(url, profile):
+        opening.set()
+        release.wait(5)  # the cancel lands while this is in flight
+        return "Microsoft Edge", str(profile), process
+
+    monkeypatch.setattr(browser_auth, "launch_readable_browser", slow_launch)
+    monkeypatch.setattr(
+        browser_auth, "close_browser_window", lambda p: closed.append(p)
+    )
+
+    start_sign_in(client)
+    assert opening.wait(5), "the launch never started"
+
+    assert client.post("/auth/browser/cancel").json()["state"] == "cancelled"
+    assert closed == [], "there was nothing to close yet"
+
+    release.set()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not closed:
+        time.sleep(0.05)
+    assert closed == [process], "the window of a cancelled attempt stayed open"
 
 
 def test_status_is_idle_before_any_attempt(client):

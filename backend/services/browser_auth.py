@@ -136,7 +136,13 @@ class BrowserAuthSession:
         # Take the window with it: left open, it would hold its profile locked
         # (so the next attempt could not read it) and Chromium would hand the
         # next launch off to it and exit, which reads as an instant failure.
-        close_browser_window(self._process)
+        # On a thread because the window may still be starting, and this answers
+        # the Cancel button -- the launch reports back to _close_if_superseded.
+        process = self._process
+        if process is not None:
+            threading.Thread(
+                target=close_browser_window, args=(process,), daemon=True
+            ).start()
 
     def complete_with_cookies(self, source_name):
         """Cookie hand-off arrived (main.py validates + stores, then calls this)."""
@@ -223,6 +229,7 @@ class BrowserAuthSession:
                 self._browser = name
                 self._profile_dir = profile_dir
                 self._process = process
+            self._close_if_superseded(process)
             return True
 
         # Nothing on this machine can be read, so an attempt could only ever
@@ -248,6 +255,19 @@ class BrowserAuthSession:
         except Exception as e:  # noqa: BLE001
             self.fail(f"Could not open your browser to sign in: {e}")
         return False
+
+    def _close_if_superseded(self, process):
+        """Close a window that was opened for an attempt that is already over.
+
+        A cancel can land while the launch is still in flight -- before there is
+        a process object for cancel() to close -- and then nobody else knows
+        this window is unwanted. It waits for the window to appear, so the user
+        is not left with a browser they cancelled.
+        """
+        if self._is_waiting():
+            return
+        logger.info("browser auth: closing the window of a superseded attempt")
+        close_browser_window(process)
 
     def _poll_loop(self):
         deadline = time.monotonic() + WAIT_TIMEOUT_SECONDS

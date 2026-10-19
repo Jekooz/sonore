@@ -578,3 +578,76 @@ def test_no_browser_that_starts_says_where_to_go_instead(monkeypatch, tmp_path):
 
     assert "Comet" in str(refused.value)
     assert "Settings" in str(refused.value)
+
+
+# ------------------------------------------------- a profile that is set up
+#
+# A fresh Chromium profile runs its vendor's first-run wizard, and the profile
+# this app opens is always fresh. Comet's wizard is its own page, so the sign-in
+# page never loaded and the attempt could only time out -- the seed below is the
+# fix, and what these tests pin is that it stays narrow.
+
+def _local_state(profile_dir):
+    with open(os.path.join(str(profile_dir), "Local State"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_a_fresh_profile_is_marked_as_already_set_up(tmp_path):
+    bc._seed_profile(str(tmp_path), r"C:\Program Files\Perplexity\Comet\comet.exe")
+
+    state = _local_state(tmp_path)
+    assert state["browser"]["first_run_finished"] is True
+    assert state["perplexity"]["onboarding_completed"] is True
+
+
+def test_seeding_a_profile_never_discards_its_encryption_keys(tmp_path):
+    """The merge is the point: replacing Local State would strand a session."""
+    (tmp_path / "Local State").write_text(
+        json.dumps(
+            {
+                "os_crypt": {"encrypted_key": "DPAPI-kept", "audit_enabled": False},
+                "unrelated": {"kept": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    bc._seed_profile(str(tmp_path), r"C:\x\comet.exe")
+
+    state = _local_state(tmp_path)
+    assert state["os_crypt"]["encrypted_key"] == "DPAPI-kept"
+    assert state["unrelated"]["kept"] is True
+    assert state["perplexity"]["onboarding_completed"] is True
+    assert state["browser"]["first_run_finished"] is True
+
+
+def test_a_browser_with_no_wizard_gets_only_the_stock_flag(tmp_path):
+    bc._seed_profile(str(tmp_path), r"C:\Edge\msedge.exe")
+
+    state = _local_state(tmp_path)
+    assert state == {"browser": {"first_run_finished": True}}
+
+
+def test_unreadable_local_state_is_replaced_rather_than_fatal(tmp_path):
+    (tmp_path / "Local State").write_text("{not json", encoding="utf-8")
+
+    bc._seed_profile(str(tmp_path), r"C:\x\comet.exe")
+
+    assert _local_state(tmp_path)["perplexity"]["onboarding_completed"] is True
+
+
+def test_a_launch_seeds_before_starting_the_browser(monkeypatch, tmp_path):
+    """The flags have to be on disk before the process reads them."""
+    seen = {}
+
+    def fake_popen(args, **kwargs):
+        seen["local_state"] = os.path.isfile(
+            os.path.join(str(tmp_path), "Local State")
+        )
+        raise OSError("stop here")
+
+    monkeypatch.setattr(bc.subprocess, "Popen", fake_popen)
+    with pytest.raises(bc.BrowserLaunchError):
+        bc._launch_one("Comet", r"C:\Comet\comet.exe", "https://x", str(tmp_path))
+
+    assert seen["local_state"] is True

@@ -93,11 +93,13 @@ everything the app needs at run time — nothing has to be installed first:
 Sign-in needs none of the user's tooling. It uses the browser they set as
 default in Windows, in a profile of its own under
 `%LOCALAPPDATA%\Sonore\sign-in-browser\<browser>`, so it never touches their
-real profile or its stored passwords. The one exception is a Firefox default:
-Firefox keeps cookies in a plain SQLite file that is only readable in place, so
-the page is opened in the profile they already use and read from there — which
-is also what makes an already-signed-in Firefox a zero-click sign-in. Signing
-out removes every profile the app created.
+real profile or its stored passwords. That profile is marked as already set up
+before it is first opened, so the window lands on YouTube Music instead of a
+browser's first-run wizard. The one exception is a Firefox default: Firefox
+keeps cookies in a plain SQLite file that is only readable in place, so the page
+is opened in the profile they already use and read from there — which is also
+what makes an already-signed-in Firefox a zero-click sign-in. Signing out
+removes every profile the app created.
 
 The app starts the Python it shipped with rather than whatever happens to be on
 the machine, so the packages it runs against are fixed by the installer. Setting

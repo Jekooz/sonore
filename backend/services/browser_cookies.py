@@ -92,6 +92,21 @@ _FIREFOX_STEMS = (
     "librewolf", "palemoon", "zen", "floorp",
 )
 
+# What a browser writes to its own profile once its setup is done, by executable
+# stem. A Chromium browser opening a profile it has never seen runs a first-run
+# experience, and the profile this app opens is new by construction; --no-first-run
+# covers the stock Chromium wizard but not a fork's own. Comet ignores it and
+# navigates to its chrome://perplexity-onboarding page instead, so the sign-in
+# page never loads and the attempt could only ever time out -- which is the
+# "another comet, and it wants setting up" report this table answers.
+#
+# These are setup booleans, written into a profile this app owns: no credential,
+# no cookie, nothing from the user's own profile is read or copied. A browser we
+# have not met needs no entry until it is seen doing this.
+_READY_FLAGS = {
+    "comet": {"perplexity": {"onboarding_completed": True}},
+}
+
 # ProgId -> the name people know the browser by. Anything not listed is named
 # from its executable instead, so a brand-new browser is not nameless.
 _PROGID_NAMES = (
@@ -544,9 +559,49 @@ def _stop_quietly(process):
         pass
 
 
+def _seed_profile(profile_dir, exe):
+    """Mark a brand-new profile as already set up, before it is first opened.
+
+    Browsers record "this profile is set up" in Local State, so that is where
+    the flags go. Merged, never replaced: an existing Local State holds the keys
+    this profile's cookies are encrypted with, and replacing it would strand a
+    session this app had already captured. A browser that will not let us write
+    it is still worth launching -- only the vendor wizard depends on this.
+    """
+    stem = os.path.splitext(os.path.basename(exe))[0].lower()
+    flags = {"browser": {"first_run_finished": True}}
+    for vendor, values in _READY_FLAGS.get(stem, {}).items():
+        flags.setdefault(vendor, {}).update(values)
+
+    path = os.path.join(profile_dir, "Local State")
+    state = {}
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                state = loaded
+        except (OSError, json.JSONDecodeError):
+            state = {}
+
+    for vendor, values in flags.items():
+        section = state.get(vendor)
+        if not isinstance(section, dict):
+            section = {}
+            state[vendor] = section
+        section.update(values)
+
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(state, handle)
+    except OSError as e:
+        logger.warning("browser auth: could not mark the profile as set up (%s)", e)
+
+
 def _launch_one(name, exe, url, profile_dir):
     """Start one browser in its own profile; return its DevTools port."""
     os.makedirs(profile_dir, exist_ok=True)
+    _seed_profile(profile_dir, exe)
     port_file = os.path.join(profile_dir, "DevToolsActivePort")
 
     # A port file from a browser that has since exited would send us nowhere;

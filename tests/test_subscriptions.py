@@ -39,7 +39,7 @@ if BACKEND_DIR not in sys.path:
 
 import main  # noqa: E402
 from services.ytmusic_client import AuthError  # noqa: E402
-from test_auth_pairing import TEST_PORT, isolated_env  # noqa: F401  (fixture)
+from test_auth_capture import TEST_PORT, isolated_env  # noqa: F401  (fixture)
 
 pytestmark = pytest.mark.usefixtures("isolated_env")
 

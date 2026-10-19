@@ -1,12 +1,15 @@
 """
 YouTube Music backend service.
 
-Authentication model — "Sign in with Google" inside the app:
-  1. The frontend shows an embedded WebView2 at https://music.youtube.com where the
-     user signs in with their normal Google account (no device codes, no console).
-  2. Once signed in, the frontend pulls the browser cookies for that domain via the
-     WebView2 CookieManager (works for HttpOnly cookies like __Secure-3PAPISID,
-     which document.cookie cannot see) and POSTs them to /auth/cookies.
+Authentication model — "Sign in with Google", no extension and no console:
+  1. The sidecar captures a session one of two ways: it reads an already
+     signed-in Firefox profile straight from disk, or it opens Edge/Chrome in a
+     profile it owns at https://music.youtube.com and the user signs in there
+     exactly as they would in any browser (no device codes, nothing to load).
+  2. The session cookies for that domain — including HttpOnly ones like
+     __Secure-3PAPISID, which page script cannot see — are read from that
+     browser and flow through the same validation path as the Settings
+     "paste request headers" fallback.
   3. The backend builds the ytmusicapi "browser auth" header set (cookie + a
      SAPISIDHASH authorization header that ytmusicapi recomputes on every request,
      exactly like music.youtube.com does in a normal browser) and stores it encrypted
@@ -101,7 +104,7 @@ _APP_DATA_DIR = os.path.join(
 )
 _AUTH_FILE = os.path.join(_APP_DATA_DIR, "auth_headers.dat")
 
-# Per-install sidecar state: the API token the app and the extension must send,
+# Per-install sidecar state: the API token every local caller must send,
 # plus the small state file the update checker and the port publisher share.
 # %LOCALAPPDATA%\Sonore\ lives beside the user, not beside the app, so an
 # uninstall leaves it and an install for one account cannot read another's.
@@ -184,11 +187,12 @@ def _build_cookie_header(cookie_map: dict) -> str:
     return "; ".join(parts)
 
 
-# Headers the caller may supply alongside the cookies. The extension reads these
-# off the real browser request, so using them keeps the app talking with the
-# browser's own identity instead of a hard-coded one. Deliberately NOT included:
-# cookie and authorization (built from the validated jar on purpose) and origin/
-# x-origin (must be the YouTube Music origin for SAPISIDHASH to verify).
+# Headers the caller may supply alongside the cookies. The "paste request
+# headers" fallback reads these off a real browser request, so using them keeps
+# the app talking with the browser's own identity instead of a hard-coded one.
+# Deliberately NOT included: cookie and authorization (built from the validated
+# jar on purpose) and origin/x-origin (must be the YouTube Music origin for
+# SAPISIDHASH to verify).
 _PASSTHROUGH_HEADERS = (
     "user-agent",
     "accept-language",
@@ -205,7 +209,7 @@ def cookies_from_cookie_header(header: str) -> dict:
 
     The "paste request headers" fallback delivers headers rather than a jar,
     so the cookie half is recovered here and then flows through exactly the
-    same validation and storage path as an extension jar.
+    same validation and storage path as a captured jar.
     """
     cookies: dict = {}
     for part in header.split(";"):

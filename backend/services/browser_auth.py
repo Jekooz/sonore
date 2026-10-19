@@ -1,24 +1,23 @@
 """
 Browser-based sign-in orchestration.
 
-Flow (replaces the WebView2 sign-in window):
-  1. /auth/browser/start -> detect the default browser from the registry
-     (HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\https\\UserChoice),
-     open https://music.youtube.com in it via the OS shell (never a hard-coded
-     browser), and flip the state machine to "waiting".
-  2. The user signs in normally in their own browser.
-  3. The paired browser extension reads the youtube.com cookies (chrome.cookies
-     includes HttpOnly) and POSTs them to /auth/extension, which completes the
-     exact same store+validate path as the old WebView2 capture.
+No browser extension is involved. One attempt does, in order:
 
-Why the extension is the primary (and on this build, only) cookie source:
-the direct-read library rookiepy has no Windows CPython 3.13 wheel (0.5.6
-ships cp37-cp312 only; building it here needs an MSVC/Rust toolchain this
-machine does not have), and Chromium's App-Bound Encryption also blocks plain
-file reads on current Chrome/Edge/Brave. A signed-in browser can hand its own
-cookies to a local extension, which no Windows policy blocks. The poller keeps
-strategy A structured so a future wheelhop (rookiepy import guarded) lights up
-automatically — see cookies_from_installed_rookiepy().
+1. **Zero-click** — read an already signed-in Firefox profile straight from
+   disk (``browser_cookies.cookies_from_firefox``). Nothing opens; a returning
+   Firefox user is simply signed in.
+2. **A window to sign in** — start the Edge/Chrome that ships with the machine
+   in a profile this app owns, pointed at music.youtube.com, and read the
+   session over the DevTools protocol once the user has signed in
+   (``browser_cookies.launch_controllable_browser`` / ``read_devtools_cookies``).
+   This is a normal browser window: Google sees nothing to object to, and there
+   is no extension to load.
+3. **Hand-off** — the Settings "paste request headers" fallback delivers a jar
+   to this attempt directly (``deliver``).
+
+A validated jar is stored through the same encrypted path as every other
+source; this module never sees storage or HTTP details, only the callbacks it
+was handed.
 
 State machine (exposed via /auth/browser/status):
   idle -> waiting -> success | timeout | failed | cancelled
@@ -31,12 +30,26 @@ import time
 import webbrowser
 import winreg
 
+from services.browser_cookies import (
+    BrowserLaunchError,
+    browser_profile_dir,
+    cookies_from_firefox,
+    find_controllable_browser,
+    launch_controllable_browser,
+    read_devtools_cookies,
+)
+
 logger = logging.getLogger("ytmusic-backend")
 
 MUSIC_URL = "https://music.youtube.com"
 
 POLL_INTERVAL_SECONDS = 2.0
 WAIT_TIMEOUT_SECONDS = 180.0  # 3 minutes, per spec
+
+# Cookies that must be present before a captured jar is worth verifying. Kept in
+# step with ytmusic_client.REQUIRED_COOKIES; duplicated here so this module
+# stays free of any dependency on the storage layer.
+_REQUIRED_COOKIES = ("__Secure-3PAPISID", "SAPISID", "SID")
 
 # Registry UserChoice ProgId -> friendly browser name. Anything unrecognized is
 # still opened through the OS shell; unknown only means "no friendly name".
@@ -75,25 +88,27 @@ def detect_default_browser() -> str:
 
 
 class BrowserAuthSession:
-    """One sign-in attempt: open the browser, poll for the extension hand-off."""
+    """One sign-in attempt: capture a session, from the easiest source first."""
 
-    def __init__(self, cookie_source=None):
-        # cookie_source: optional callable () -> dict | None for a direct
-        # cookie read (strategy A). The extension hand-off does not use it:
-        # main.py delivers that jar with deliver() below. Injection keeps this
-        # module free of HTTP/server knowledge.
-        self._cookie_source = cookie_source
+    def __init__(self, completer=None, direct_reader=None):
+        # completer: callable(cookies, source) -> None. Validates the candidate
+        # against YouTube and stores it encrypted; raises when it is refused.
+        # Keeps this module free of storage/HTTP knowledge.
+        # direct_reader: callable() -> dict | None. A zero-click jar from an
+        # already signed-in browser; None is "no such session", not an error.
+        self._completer = completer
+        self._direct_reader = direct_reader
         self._lock = threading.Lock()
         self._state = "waiting"
         self._error = None
         self._wake = threading.Event()
         self._thread = None
-        # The hand-off slot for THIS attempt, per-session on purpose. A shared
+        self._devtools_port = 0
+        self._open_browser = True
+        self._browser = detect_default_browser()
+        # The hand-off slot for THIS attempt, per-session on purpose: a shared
         # module-level slot let a superseded attempt's poll loop consume the jar
-        # meant for the live one, which left the app waiting forever when the
-        # user retried sign-in quickly -- reproduced by this suite. A jar only
-        # ever reaches the session it was delivered to, and only while that
-        # session is still waiting.
+        # meant for the live one, leaving the app waiting forever on a retry.
         self._jar = None
         self._jar_event = threading.Event()
 
@@ -121,30 +136,18 @@ class BrowserAuthSession:
     # ---------------- lifecycle ----------------
 
     def start(self, open_browser: bool = True):
-        """Begin the attempt, opening music.youtube.com unless the caller did.
+        """Begin the attempt.
 
-        The desktop app opens the URL itself with url_launcher (it owns the
-        user's default-browser experience) and passes open_browser=False, so
-        exactly one tab appears either way. The fallback path -- a caller that
-        does not or cannot open it -- keeps the OS-shell behaviour below.
+        [open_browser] is False for the paste-headers fallback, which supplies
+        the session itself and must not have a window opened for it.
         """
-        browser = detect_default_browser()
-        with self._lock:
-            self._browser = browser
+        self._open_browser = open_browser
         if open_browser:
-            try:
-                # OS shell handles the association - never a hard-coded executable.
-                webbrowser.open_new_tab(MUSIC_URL)
-                logger.info("browser auth: opened %s in %s", MUSIC_URL, browser)
-            except Exception as e:
+            found = find_controllable_browser()
+            if found is not None:
                 with self._lock:
-                    self._state = "failed"
-                    self._error = f"Could not open {browser}: {e}"
-                return
-        else:
-            logger.info("browser auth: %s already opened by the app", MUSIC_URL)
-
-        self._thread = threading.Thread(target=self._poll_loop, daemon=True)
+                    self._browser = found[0]
+        self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def cancel(self):
@@ -169,64 +172,109 @@ class BrowserAuthSession:
         with self._lock:
             return {
                 "state": self._state,
-                "browser": getattr(self, "_browser", "default browser"),
+                "browser": self._browser,
                 "error": self._error,
             }
 
-    # ---------------- poll loop ----------------
+    # ---------------- the attempt ----------------
+
+    def _is_waiting(self) -> bool:
+        with self._lock:
+            return self._state == "waiting"
+
+    def _run(self):
+        # 1. Zero-click: a browser already holding a session. A refusal here is
+        #    not fatal — it just means the user has to sign in in the window.
+        if self._direct_reader is not None and self._is_waiting():
+            try:
+                jar = self._direct_reader()
+            except Exception as e:  # noqa: BLE001 - any read failure is "no jar"
+                logger.warning("browser auth: direct cookie read failed (%s)", e)
+                jar = None
+            if jar and all(jar.get(name) for name in _REQUIRED_COOKIES):
+                if self._complete(jar, "installed browser", fatal=False):
+                    return
+
+        # 2. A window to sign in.
+        if self._open_browser:
+            if not self._start_browser():
+                return
+
+        # 3. Wait for the session to appear.
+        self._poll_loop()
+
+    def _start_browser(self) -> bool:
+        found = find_controllable_browser()
+        if found is None:
+            # No controllable browser: open the default browser through the OS
+            # shell so the user can still copy request headers into Settings.
+            try:
+                webbrowser.open_new_tab(MUSIC_URL)
+                logger.info(
+                    "browser auth: %s opened through the OS shell (no controllable browser)",
+                    MUSIC_URL,
+                )
+            except Exception as e:  # noqa: BLE001
+                self.fail(f"Could not open a browser: {e}")
+                return False
+            return True
+
+        try:
+            port = launch_controllable_browser(MUSIC_URL, browser_profile_dir())
+        except BrowserLaunchError as e:
+            logger.error("browser auth: %s", e)
+            self.fail(str(e))
+            return False
+        with self._lock:
+            self._devtools_port = port
+        return True
 
     def _poll_loop(self):
         deadline = time.monotonic() + WAIT_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
-            # Jar delivered by main.py (extension or paste hand-off) first.
+            # A jar handed over by main.py (the paste fallback). It was already
+            # validated and stored before it was delivered.
             cookies = self._take_jar()
-            if not cookies and self._cookie_source is not None:
-                try:
-                    cookies = self._cookie_source()
-                except Exception as e:
-                    logger.error("browser auth: cookie source failed: %s", e)
-                    self.fail(f"Cookie capture failed: {e}")
-                    return
-
             if cookies:
-                # main.py has already stored+validated these before delivering
-                # them; reaching here means everything succeeded.
-                self.complete_with_cookies("extension")
+                self.complete_with_cookies("hand-off")
                 return
+
+            # A session in the window this app opened.
+            if self._devtools_port:
+                try:
+                    jar = read_devtools_cookies(
+                        self._devtools_port,
+                        deadline=time.monotonic() + POLL_INTERVAL_SECONDS,
+                    )
+                except Exception as e:  # noqa: BLE001 - the window may not be ready
+                    logger.debug("browser auth: DevTools read skipped (%s)", e)
+                    jar = None
+                if jar and all(jar.get(name) for name in _REQUIRED_COOKIES):
+                    # Once the required cookies are there the user HAS signed
+                    # in, so a refusal is a real failure, not a transient one.
+                    self._complete(jar, "sign-in window", fatal=True)
+                    return
 
             if self._wake.wait(POLL_INTERVAL_SECONDS):
                 return  # cancelled or failed
 
         self.fail(
-            f"Timed out after {int(WAIT_TIMEOUT_SECONDS / 60)} minutes waiting for sign-in in "
-            + getattr(self, "_browser", "the browser")
+            f"Timed out after {int(WAIT_TIMEOUT_SECONDS / 60)} minutes waiting for "
+            f"sign-in in {self._browser}"
         )
 
-
-# --------------- strategy A (direct read), structured but inert on cp313 ---------------
-
-
-def cookies_from_installed_rookiepy(domains):
-    """
-    Direct cookie read via rookiepy, guarded at call time.
-
-    rookiepy ships CPython 3.10-3.12 Windows wheels only (verified in the PyPI
-    index for 0.5.6); on this 3.13 box the import fails and strategy B (the
-    extension) takes over. Kept as a real implementation, not a stub, so the
-    moment a cp313/abi3 wheel is installed the direct path works: NO fallback
-    cookies are ever synthesized here — None means "no direct access".
-    """
-    try:
-        import rookiepy  # noqa: F401  (availability IS the feature test)
-    except ImportError:
-        logger.info(
-            "browser auth: rookiepy unavailable (no cp313 wheel) -> extension hand-off"
-        )
-        return None
-
-    jars = []
-    if "chrome" in dir(rookiepy):
-        jars.append(rookiepy.chrome(domains))
-    if "firefox" in dir(rookiepy):
-        jars.append(rookiepy.firefox(domains))
-    return {c["name"]: c["value"] for jar in jars for c in jar if c.get("name") and c.get("value")}
+    def _complete(self, jar: dict, source: str, fatal: bool) -> bool:
+        """Validate + store a captured jar; True when the attempt is finished."""
+        if self._completer is None:
+            self.complete_with_cookies(source)
+            return True
+        try:
+            self._completer(jar, source)
+        except Exception as e:  # noqa: BLE001 - HTTPException carries .detail
+            message = getattr(e, "detail", None) or str(e) or "Sign-in failed."
+            logger.error("browser auth: the %s session was refused", source)
+            if fatal:
+                self.fail(message)
+            return False
+        self.complete_with_cookies(source)
+        return True

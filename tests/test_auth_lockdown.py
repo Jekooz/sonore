@@ -2,7 +2,7 @@
 Lockdown tests for the local API: the per-install token, Origin gating, expired
 sessions, and the yt-dlp update path.
 
-Same rules as test_auth_pairing.py: these drive the REAL FastAPI app through
+Same rules as test_auth_capture.py: these drive the REAL FastAPI app through
 TestClient, the imported ``isolated_env`` fixture redirects every piece of
 persistent state (credentials, the install token, the update-state file) into a
 tmp dir, and only the success paths stub the network/disk. Every rejection test
@@ -27,7 +27,7 @@ if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
 import main  # noqa: E402
-from test_auth_pairing import (  # noqa: F401  (fixtures are picked up by name)
+from test_auth_capture import (  # noqa: F401  (fixtures are picked up by name)
     TEST_PORT,
     api_token,
     isolated_env,

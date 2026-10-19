@@ -51,9 +51,13 @@ from typing import Literal
 from ytmusicapi import YTMusic
 
 from services.browser_auth import (
-    WAIT_TIMEOUT_SECONDS,
     BrowserAuthSession,
     detect_default_browser,
+)
+from services.browser_cookies import (
+    cookies_from_firefox,
+    find_controllable_browser,
+    remove_browser_profile,
 )
 from services import ranking, recommend
 from services.listening import listening_store
@@ -84,10 +88,8 @@ PORT_FILE = os.environ.get("YTM_PORT_FILE") or os.path.join(
     _SONORE_STATE_DIR, "sidecar_port.txt"
 )
 
-# The port this process is actually listening on. Set in __main__ before
-# uvicorn.run so the extension can be told where to call back; the request URL
-# is only a fallback for a backend started some other way.
-_BOUND_PORT = 0
+# The port file publishing below needs no in-process record of the bound port:
+# it is passed directly to the publisher thread.
 
 
 def _drop_stale_port_file() -> None:
@@ -103,15 +105,8 @@ def _drop_stale_port_file() -> None:
 
 
 # The install (or source checkout) root: backend\main.py, so one level up is the
-# folder the installer stages yt-dlp.exe into and the extension lives beside.
+# folder the installer stages yt-dlp.exe into.
 _APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Where the companion extension lives. This is the ONLY folder a pairing file
-# can work from: an extension page may fetch resources only from its own
-# installation (Chrome docs, "Cross-origin network requests"), so a config file
-# anywhere else on disk is unreadable by the extension by design.
-_EXTENSION_DIR = os.path.join(_APP_ROOT, "browser-extension")
-PAIRING_FILE = os.path.join(_EXTENSION_DIR, "sidecar.json")
 
 
 @app.get("/health")
@@ -147,8 +142,8 @@ def _validate_and_store(
     cookies: dict, source: str, extra_headers: dict | None = None
 ) -> dict:
     """
-    Shared completion path for every cookie source (WebView2 historically;
-    browser/extension hand-off now). Gate on required session cookies, confirm
+    Shared completion path for every cookie source (browser capture or paste
+    hand-off). Gate on required session cookies, confirm
     the candidate against YouTube, and only then store it encrypted. A bad
     hand-off therefore fails loudly here without disturbing the session that is
     already stored. Anonymous cookies like YSC/VISITOR_INFO1_LIVE alone do NOT
@@ -226,7 +221,7 @@ async def auth_cookies(payload: dict):
     Complete sign-in. Body: {"cookies": {"SID": "...", "__Secure-3PAPISID": "...", ...}}
 
     Kept for programmatic/diagnostic use; the UI flow now goes through
-    /auth/browser/start + /auth/extension. Same validation + storage path.
+    /auth/browser/start. Same validation + storage path.
     """
     cookies = payload.get("cookies")
     if not isinstance(cookies, dict) or not cookies:
@@ -237,10 +232,14 @@ async def auth_cookies(payload: dict):
 @app.post("/auth/signout")
 def auth_signout():
     ytmusic_service.clear_session()
+    # The sign-in window kept its own Google session in a profile this app owns.
+    # Signing out must not leave that behind, or the next "Sign in" would
+    # silently reuse the account the user just left.
+    remove_browser_profile()
     return JSONResponse(content={"signed_out": True})
 
 
-# ---------------- browser-based sign-in (replaces the WebView2 window) ----------------
+# ---------------- browser-based sign-in ----------------
 
 # The active BrowserAuthSession for this process, if a sign-in is in flight.
 _browser_session: BrowserAuthSession | None = None
@@ -267,89 +266,15 @@ def _clear_browser_session() -> None:
         _browser_session = None
 
 
-# ---------------- extension pairing token ----------------
+def _complete_browser_capture(cookies: dict, source: str) -> None:
+    """Validate + store a session the browser capture produced.
 
-# Sign-in hardening (M2). The hand-off used to be accepted from any local caller
-# at any time, and the X-Ytm-Token header was documented but never read. Now every
-# attempt issues one cryptographically random token, publishes {port, token} where
-# only the extension can read it, and demands that exact token back before anything
-# is stored. The token is single-use (consumed before the cookie jar is touched),
-# expires with the attempt, and is rotated by every new attempt -- so an
-# unsolicited request, a stale token and a replay are all rejected. Token values
-# are never logged.
-_pairing_token: str | None = None
-_pairing_issued_at = 0.0
-
-
-def _current_port(request: Request) -> int:
-    """The port the extension must call back on."""
-    return _BOUND_PORT or request.url.port or 0
-
-
-def _write_pairing_file(port: int, token: str) -> bool:
-    """Publish {port, token} for the extension to read.
-
-    Best-effort: if the folder is missing or unwritable the attempt simply
-    cannot pair, which the UI already reports, so this must never raise.
+    Verification runs BEFORE anything is stored (M2), so a stale, partial or
+    wrong-account jar fails this attempt while a working session stays exactly
+    as it was. Raising here is what the attempt turns into its failed state;
+    HTTPException carries the user-facing wording in .detail.
     """
-    try:
-        os.makedirs(_EXTENSION_DIR, exist_ok=True)
-        tmp_path = PAIRING_FILE + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump({"port": port, "token": token}, f)
-        os.replace(tmp_path, PAIRING_FILE)
-        return True
-    except OSError as e:
-        logger.warning("Could not publish the extension pairing file: %s", e)
-        return False
-
-
-def _clear_pairing() -> None:
-    """Invalidate the pairing token and remove its file. Idempotent."""
-    global _pairing_token, _pairing_issued_at
-    _pairing_token = None
-    _pairing_issued_at = 0.0
-    try:
-        if os.path.exists(PAIRING_FILE):
-            os.remove(PAIRING_FILE)
-    except OSError as e:
-        logger.warning("Could not remove the extension pairing file: %s", e)
-
-
-def _issue_pairing(port: int) -> None:
-    """Rotate the pairing token for a new attempt.
-
-    Rotation is what retires the previous attempt's token: only the newest
-    hand-off can complete, even if an older popup is still open somewhere.
-    """
-    global _pairing_token, _pairing_issued_at
-    _pairing_token = secrets.token_urlsafe(32)
-    _pairing_issued_at = time.monotonic()
-    if _write_pairing_file(port, _pairing_token):
-        logger.info(
-            "Sign-in pairing token issued for port %s (valid %d s).",
-            port, int(WAIT_TIMEOUT_SECONDS),
-        )
-
-
-def _consume_pairing_token(provided: str | None) -> str | None:
-    """Validate the handshake token, or return why the request must be rejected.
-
-    A wrong token is NOT consumed, so a retry with the right one still works
-    (guessing is hopeless against 256 bits of entropy). A correct token IS
-    consumed here, before the caller stores anything, which is what makes a
-    replay impossible.
-    """
-    global _pairing_token, _pairing_issued_at
-    if not provided:
-        return "Missing pairing token."
-    if _pairing_token is None or not secrets.compare_digest(provided, _pairing_token):
-        return "Invalid pairing token."
-    if time.monotonic() - _pairing_issued_at > WAIT_TIMEOUT_SECONDS:
-        return "Pairing token expired."
-    _pairing_token = None
-    _pairing_issued_at = 0.0
-    return None
+    _validate_and_store(cookies, source)
 
 
 # ---------------- per-install API token ----------------
@@ -424,21 +349,15 @@ def _sign_in_pending() -> bool:
 
 @app.get("/auth/browser/info")
 def auth_browser_info():
-    """Friendly name of the default HTTPS browser, for the UI's prompt text."""
-    return JSONResponse(content={"browser": detect_default_browser()})
+    """The browser sign-in will drive, for the UI's prompt text.
 
-
-@app.get("/auth/extension/folder")
-def auth_extension_folder():
-    """The one folder the companion extension can be installed from.
-
-    A browser only lets an extension read files inside its own installation, so
-    the pairing file this service writes is readable from here and nowhere else.
-    That makes this folder a step the user has to take - load it unpacked - which
-    is why the sign-in screen names it rather than leaving the hand-off to time
-    out with no explanation.
+    The window a sign-in opens is a controlled Edge/Chrome -- a real browser, so
+    Google signs in normally. Only when the machine has neither does sign-in
+    fall back to the default browser plus the paste-headers path.
     """
-    return JSONResponse(content={"folder": _EXTENSION_DIR})
+    found = find_controllable_browser()
+    browser = found[0] if found else detect_default_browser()
+    return JSONResponse(content={"browser": browser})
 
 
 @app.get("/auth/install-token")
@@ -449,7 +368,7 @@ def auth_install_token(request: Request):
     No token is needed to read it -- it IS the secret being fetched -- so this
     is the one endpoint the app calls before it knows the token (and the one
     the Settings screen shows with a copy button). Locality is still enforced:
-    only this machine's loopback, or an extension origin, may ask.
+    only this machine's loopback may ask.
     """
     reason = _non_loopback_rejection(request)
     if reason is not None:
@@ -460,17 +379,19 @@ def auth_install_token(request: Request):
 
 
 @app.post("/auth/browser/start")
-def auth_browser_start(request: Request, payload: dict | None = None):
+def auth_browser_start(payload: dict | None = None):
     """
-    Start a sign-in: open music.youtube.com (or, when the app already opened
-    it with url_launcher and passes {"open_browser": false}, just begin the
-    attempt) and poll (2 s interval, 3 min timeout) for the hand-off. The UI
-    follows along via /auth/browser/status.
+    Start a sign-in. The sidecar owns it end to end, so there is exactly one
+    window and no extension to install:
 
-    Also rotates the handshake token and publishes {port, token} into the
-    extension folder -- the only location the extension is able to read it
-    from. The response carries that same token so the loopback app can drive
-    the paste-headers fallback on /auth/handoff without reading the file.
+      * an already signed-in Firefox is read straight from disk (no window),
+      * otherwise Edge/Chrome opens in a profile this app owns, the user signs
+        in there, and the session is read over the DevTools protocol.
+
+    With {"open_browser": false} nothing is opened and nothing is read -- the
+    attempt only waits, which is what the Settings paste-headers fallback needs.
+
+    The UI follows along via /auth/browser/status (2 s poll, 3 min timeout).
     """
     global _browser_session
 
@@ -478,110 +399,48 @@ def auth_browser_start(request: Request, payload: dict | None = None):
     # A fresh session starts with an empty hand-off slot of its own, so a jar
     # left over from a cancelled or timed-out attempt cannot leak into this one.
 
-    session = BrowserAuthSession()
-    with _browser_session_lock:
-        _browser_session = session
-
-    # The session must exist before the token is issued: a hand-off is only
-    # accepted while an attempt is actually waiting.
-    _issue_pairing(_current_port(request))
-
     open_browser = not (
         isinstance(payload, dict) and payload.get("open_browser") is False
     )
+    session = BrowserAuthSession(
+        completer=_complete_browser_capture,
+        # The zero-click read belongs to a real sign-in only: the paste
+        # fallback must not be short-circuited by a Firefox session.
+        direct_reader=cookies_from_firefox if open_browser else None,
+    )
+    with _browser_session_lock:
+        _browser_session = session
+
     session.start(open_browser=open_browser)
-    status = session.status()
-    return JSONResponse(content={**status, "token": _pairing_token})
+    return JSONResponse(content=session.status())
 
 
 @app.get("/auth/browser/status")
 def auth_browser_status():
     if _browser_session is None:
+        found = find_controllable_browser()
         return JSONResponse(
-            content={"state": "idle", "browser": detect_default_browser(), "error": None}
+            content={
+                "state": "idle",
+                "browser": found[0] if found else detect_default_browser(),
+                "error": None,
+            }
         )
-
-    status = _browser_session.status()
-    if status.get("state") != "waiting":
-        # Terminal state: the pairing file must not outlive the attempt it was
-        # issued for. Idempotent, and it is also the only thing that cleans up
-        # after a timeout.
-        _clear_pairing()
-    return JSONResponse(content=status)
+    return JSONResponse(content=_browser_session.status())
 
 
 @app.post("/auth/browser/cancel")
 def auth_browser_cancel():
     _clear_browser_session()
-    _clear_pairing()
     return JSONResponse(content={"state": "cancelled"})
-
-
-@app.post("/auth/extension")
-def auth_extension(payload: dict, request: Request):
-    """
-    Extension hand-off: the MV3 companion extension reads youtube.com cookies
-    (chrome.cookies includes HttpOnly) and POSTs them here. Same validation +
-    storage as /auth/cookies, then the waiting browser session is marked done.
-
-    Auth: X-Ytm-Token must be the single-use pairing token this backend wrote to
-    browser-extension/sidecar.json when sign-in started. That rejects an
-    unsolicited caller, a token left over from an earlier attempt, and a replay
-    of one already accepted. 409 when no attempt is waiting; 401 otherwise.
-    Token and cookie VALUES are never logged.
-    """
-    # Order matters: is anything waiting, then is the caller authorised, then is
-    # the body well formed. Nothing is stored until all three pass.
-    if not _sign_in_pending():
-        logger.warning("Rejected extension hand-off: no sign-in in progress.")
-        raise HTTPException(
-            status_code=409,
-            detail="No sign-in is in progress. Start sign-in from the app first.",
-        )
-
-    rejection = _consume_pairing_token(request.headers.get("X-Ytm-Token"))
-    if rejection is not None:
-        logger.warning("Rejected extension hand-off: %s", rejection)
-        raise HTTPException(status_code=401, detail=rejection)
-
-    locked = _locked(request)
-    if locked is not None:
-        status, detail = locked
-        logger.warning("Rejected extension hand-off: %s", detail)
-        raise HTTPException(status_code=status, detail=detail)
-
-    # A present-but-EMPTY jar is not a malformed body. The extension always
-    # sends {"cookies": {...}}, and it is empty exactly when the browser it is
-    # loaded in has no YouTube Music session -- the common real case, because
-    # the app opens whatever the default browser is. Measured live against the
-    # installed build: this used to answer the popup with "Body must contain a
-    # 'cookies' object." and, since the 400 was raised outside the handler
-    # below, the app then waited out its full three minutes with nothing on
-    # screen. Routing it through the shared validation says what is actually
-    # wrong (no session cookies present) and fails the attempt, so the UI
-    # reports it at once instead of appearing to hang.
-    cookies = payload.get("cookies")
-    if not isinstance(cookies, dict):
-        raise HTTPException(status_code=400, detail="Body must contain a 'cookies' object.")
-
-    try:
-        result = _validate_and_store(cookies, "auth/extension")
-    except HTTPException as e:
-        if _browser_session is not None:
-            _browser_session.fail(e.detail)
-        raise
-
-    _deliver_to_current_attempt(cookies)
-
-    return JSONResponse(content=result)
 
 
 # ---------------- browser hand-off (loopback-only) ----------------
 
 # Payload bounds for /auth/handoff: generous for a real browser jar (hundreds
 # of cookies) and far below anything worth allocating for, checked before the
-# body is parsed or the pairing token is spent. No cookie or header VALUE is
-# ever logged -- counts and rejection reasons only, same rule as above.
+# body is parsed. No cookie or header VALUE is ever logged -- counts and
+# rejection reasons only, same rule as above.
 _MAX_HANDOFF_BYTES = 64 * 1024
 _MAX_HANDOFF_ENTRIES = 256
 _MAX_HANDOFF_VALUE = 8 * 1024
@@ -590,14 +449,6 @@ _MAX_HANDOFF_KEY = 256
 # Hosts that count as "this machine". ``[::1]`` is the bracketed form a Host
 # header uses for IPv6, kept alongside the bare form urlsplit yields.
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
-
-# Browser-extension origin schemes. These are not loopback, but they are also
-# not web origins a page can forge: only an unpacked extension installed on
-# this machine gets one, and the single-use pairing token authenticates it.
-_EXTENSION_SCHEMES = frozenset(
-    {"chrome-extension", "edge-extension", "brave-extension", "moz-extension"}
-)
-
 
 
 def _hostname_of(host_header: str) -> str:
@@ -620,9 +471,7 @@ def _non_loopback_rejection(request: Request) -> str | None:
       rejected on purpose: sandboxed frames and data: URLs produce it, so it
       is forgeable by exactly the pages this check exists to exclude.
 
-    The app's HTTP client sends no Origin at all (native callers do not), and
-    extension schemes are admitted because the pairing token -- not the Origin
-    -- is what authenticates them.
+    The app's HTTP client sends no Origin at all (native callers do not).
     """
     host = request.headers.get("host")
     if host:
@@ -634,8 +483,6 @@ def _non_loopback_rejection(request: Request) -> str | None:
     if origin:
         value = origin.strip().lower()
         scheme = value.split(":", 1)[0] if ":" in value else ""
-        if scheme in _EXTENSION_SCHEMES:
-            return None
         if value == "null":
             return "Origin 'null' is not a loopback origin."
         if scheme in ("http", "https"):
@@ -650,8 +497,8 @@ def _non_loopback_rejection(request: Request) -> str | None:
 def _validated_handoff_payload(payload: object) -> tuple[dict, dict]:
     """Structural check: return (cookies, headers), both flat string maps.
 
-    Runs BEFORE the pairing token is consumed on purpose: a malformed body
-    must not burn a usable token, so a corrected retry can still pair.
+    Checked before the attempt's state, so a malformed body is reported as a
+    malformed body rather than as "no sign-in in progress".
     """
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Body must be a JSON object.")
@@ -694,17 +541,16 @@ async def auth_handoff(request: Request):
     Browser-session hand-off, reachable only from this machine.
 
     Body: {"cookies": {...}, "headers": {"user-agent": "...", ...}} -- both
-    halves optional, at least one must carry a session. The extension sends the
-    jar it read with chrome.cookies plus the browser's own request headers; the
-    Settings "paste request headers" fallback sends headers only (the cookie
-    line inside them is recovered and takes the same path).
+    halves optional, at least one must carry a session. The Settings "paste
+    request headers" fallback sends headers only; the cookie line inside them is
+    recovered and takes the same path a captured jar does.
 
     Order of checks, all before anything is stored:
       1. loopback Host/Origin        -> 403 (non-local caller)
       2. declared/actual body size   -> 413
       3. JSON parse + shape          -> 400
       4. an attempt is actually waiting -> 409
-      5. the single-use pairing token  -> 401
+      5. the per-install API token      -> 401
       6. required cookies present + YouTube accepts the candidate (one cheap
          get_account_info) -> 422/401, never storing a bad hand-off
 
@@ -738,21 +584,14 @@ async def auth_handoff(request: Request):
 
     cookies, headers = _validated_handoff_payload(payload)
 
-    # Order mirrors /auth/extension: is anything waiting, then is the caller
-    # authorised, then is there a session to hand over. Nothing is stored
-    # until all of them pass, and the token is spent only after the body is
-    # known to be well formed.
+    # Order: is anything waiting, then is the caller authorised, then is there a
+    # session to hand over. Nothing is stored until all of them pass.
     if not _sign_in_pending():
         logger.warning("Rejected hand-off: no sign-in in progress.")
         raise HTTPException(
             status_code=409,
             detail="No sign-in is in progress. Start sign-in from the app first.",
         )
-
-    rejection = _consume_pairing_token(request.headers.get("X-Ytm-Token"))
-    if rejection is not None:
-        logger.warning("Rejected hand-off: %s", rejection)
-        raise HTTPException(status_code=401, detail=rejection)
 
     locked = _locked(request)
     if locked is not None:
@@ -768,7 +607,7 @@ async def auth_handoff(request: Request):
             detail="The pasted request headers must include a 'cookie:' line.",
         )
     # An empty payload from both directions lands in the shared validation, so
-    # the popup gets the same "not signed in" wording as /auth/extension.
+    # the screen gets the "not signed in" wording with the real reason.
 
     try:
         result = _validate_and_store(cookies, "auth/handoff", headers)
@@ -777,7 +616,7 @@ async def auth_handoff(request: Request):
             _browser_session.fail(e.detail)
         raise
 
-    # Same wiring as /auth/extension: the waiting poll loop picks the jar up,
+    # Same wiring as a captured jar: the waiting poll loop picks it up,
     # marks the attempt successful and drops its own reference afterwards.
     _deliver_to_current_attempt(cookies)
 
@@ -1880,7 +1719,6 @@ def _publish_when_ready(port: int, timeout: float = 20.0) -> None:
 if __name__ == "__main__":
     _drop_stale_port_file()
     port = _choose_port()
-    _BOUND_PORT = port
 
     logger.info(f"Starting backend on port {port}")
     threading.Thread(target=_publish_when_ready, args=(port,), daemon=True).start()

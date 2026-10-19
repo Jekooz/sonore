@@ -1,25 +1,24 @@
 """
-Unit + protocol coverage for the dependency-free cookie capture.
+Unit coverage for the dependency-free cookie capture.
 
 Two things here are worth real tests because nothing else exercises them:
 
-* the DevTools WebSocket client — the handshake, masked client frames, and
-  server frames that are fragmented and use the 16- and 64-bit length forms.
-  A throwaway socket server speaks enough RFC 6455 to answer one CDP command,
-  so this runs against the real client rather than a mock of it.
-* the Firefox reader — a real ``moz_cookies`` SQLite file in a tmp profile.
+* the Chromium profile reader -- a real ``Local State`` with a real DPAPI key
+  and a real v10 cookie database, so the encryption format itself is verified
+  rather than a mock of it. The values are produced with the browser's half of
+  the format (AES-256-GCM through Windows CNG) and read back through the code
+  the app ships.
+* the Firefox reader -- a real ``moz_cookies`` SQLite file in a tmp profile.
 """
 
 import base64
+import ctypes
 import hashlib
 import json
 import os
-import socket
 import sqlite3
-import struct
 import sys
-import threading
-import time
+from ctypes import wintypes
 
 import pytest
 
@@ -32,32 +31,6 @@ if BACKEND_DIR not in sys.path:
 from services import browser_cookies as bc  # noqa: E402
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-
-
-# --------------------------------------------------------------- CDP filtering
-
-
-def test_cdp_cookies_keep_only_youtube_and_google_hosts():
-    jar = bc._cookies_from_cdp([
-        {"name": "SID", "value": "s", "domain": ".google.com"},
-        {"name": "__Secure-3PAPISID", "value": "p", "domain": ".youtube.com"},
-        {"name": "csrftoken", "value": "nope", "domain": ".example.com"},
-        {"name": "locale", "value": "nope", "domain": ".instagram.com"},
-        {"name": "HSID", "value": "h", "domain": "music.youtube.com"},
-    ])
-
-    assert jar == {"SID": "s", "__Secure-3PAPISID": "p", "HSID": "h"}
-
-
-def test_cdp_cookies_ignore_malformed_entries_and_empty_values():
-    jar = bc._cookies_from_cdp([
-        "not a dict",
-        {"name": "SID", "domain": ".google.com"},           # no value
-        {"value": "x", "domain": ".google.com"},            # no name
-        {"name": "SAPISID", "value": "ok", "domain": ".google.com"},
-    ])
-
-    assert jar == {"SAPISID": "ok"}
 
 
 # --------------------------------------------------------------- Firefox reader
@@ -144,211 +117,190 @@ def test_firefox_profile_with_no_cookie_db_is_skipped(tmp_path, monkeypatch):
     assert bc.cookies_from_firefox() is None
 
 
-# --------------------------------------------------------------- WebSocket
+# ------------------------------------------------------------ profile cookies
+#
+# The sign-in window is a plain browser -- no debugging port, because Google
+# refuses sign-in in one that has it -- so its session is decrypted out of the
+# profile's own store: the key in Local State unwrapped with DPAPI, and v10
+# values decrypted with AES-256-GCM through Windows CNG. These build a real
+# profile with a real DPAPI key, so the format is what is tested, not a mock.
+
+needs_windows = pytest.mark.skipif(os.name != "nt", reason="Windows crypto")
 
 
-def _read_exact(conn, count):
-    data = b""
-    while len(data) < count:
-        chunk = conn.recv(count - len(data))
-        if not chunk:
-            raise ConnectionError("client closed")
-        data += chunk
-    return data
+def _dpapi_protect(data):
+    class Blob(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD),
+                    ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    source = Blob(len(data), ctypes.cast(
+        ctypes.create_string_buffer(data, len(data)),
+        ctypes.POINTER(ctypes.c_char)))
+    out = Blob()
+    if not ctypes.windll.crypt32.CryptProtectData(
+            ctypes.byref(source), None, None, None, None, 0, ctypes.byref(out)):
+        raise OSError("CryptProtectData failed")
+    try:
+        return ctypes.string_at(out.pbData, out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(out.pbData)
 
 
-def _read_client_frame(conn):
-    first, second = _read_exact(conn, 2)
-    length = second & 0x7F
-    if length == 126:
-        length = struct.unpack(">H", _read_exact(conn, 2))[0]
-    elif length == 127:
-        length = struct.unpack(">Q", _read_exact(conn, 8))[0]
-    mask = _read_exact(conn, 4)
-    payload = bytearray(_read_exact(conn, length))
-    for i in range(length):
-        payload[i] ^= mask[i % 4]
-    assert first & 0x0F == 0x1, "the client must send a text frame"
-    assert second & 0x80, "client frames must be masked"
-    return bytes(payload)
-
-
-def _frame(fin, opcode, payload):
-    header = bytearray([(0x80 if fin else 0x00) | opcode])
-    length = len(payload)
-    if length < 126:
-        header.append(length)
-    elif length < 65536:
-        header.append(126)
-        header += struct.pack(">H", length)
-    else:
-        header.append(127)
-        header += struct.pack(">Q", length)
-    return bytes(header) + payload
-
-
-def _ws_server(reply_text):
-    """A one-shot RFC 6455 server that answers one CDP command."""
-    server = socket.socket()
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(("127.0.0.1", 0))
-    server.listen(1)
-    port = server.getsockname()[1]
-    state = {"error": None, "command": None}
-
-    def serve():
+def _aes_gcm_encrypt(key, nonce, plaintext):
+    """The browser's half of the format, so the reader is tested end to end."""
+    bcrypt = ctypes.windll.bcrypt
+    handle = ctypes.c_void_p()
+    assert bcrypt.BCryptOpenAlgorithmProvider(
+        ctypes.byref(handle), "AES", None, 0) == 0
+    try:
+        mode = ctypes.c_wchar_p("ChainingModeGCM")
+        assert bcrypt.BCryptSetProperty(
+            handle, "ChainingMode", mode, ctypes.sizeof(mode), 0) == 0
+        size = wintypes.ULONG()
+        written = wintypes.ULONG()
+        assert bcrypt.BCryptGetProperty(
+            handle, "ObjectLength", ctypes.byref(size), 4,
+            ctypes.byref(written), 0) == 0
+        key_handle = ctypes.c_void_p()
+        key_object = ctypes.create_string_buffer(size.value)
+        key_bytes = ctypes.create_string_buffer(key, len(key))
+        assert bcrypt.BCryptGenerateSymmetricKey(
+            handle, ctypes.byref(key_handle), key_object, size.value,
+            key_bytes, len(key), 0) == 0
         try:
-            conn, _ = server.accept()
-            conn.settimeout(5)
-            request = b""
-            while b"\r\n\r\n" not in request:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    return
-                request += chunk
-            key = ""
-            for line in request.split(b"\r\n"):
-                if line.lower().startswith(b"sec-websocket-key:"):
-                    key = line.split(b":", 1)[1].strip().decode("ascii")
-            accept = base64.b64encode(
-                hashlib.sha1((key + WS_GUID).encode("ascii")).digest()
-            ).decode("ascii")
-            conn.sendall(
-                (
-                    "HTTP/1.1 101 Switching Protocols\r\n"
-                    "Upgrade: websocket\r\n"
-                    "Connection: Upgrade\r\n"
-                    f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
-                ).encode("ascii")
-            )
-            state["command"] = json.loads(_read_client_frame(conn).decode("utf-8"))
-
-            # Split the reply so the client has to reassemble continuation
-            # frames, and make the middle one large enough to need the 64-bit
-            # length form.
-            payload = reply_text.encode("utf-8")
-            head, middle, tail = payload[:97], payload[97:97 + 70000], payload[97 + 70000:]
-            conn.sendall(_frame(False, 0x1, head))
-            conn.sendall(_frame(False, 0x0, middle))
-            conn.sendall(_frame(True, 0x0, tail))
-            time.sleep(0.1)
-            conn.close()
-        except Exception as e:  # noqa: BLE001 - surfaced through state
-            state["error"] = repr(e)
+            info = bc._AuthInfo()
+            info.cbSize = ctypes.sizeof(info)
+            info.dwInfoVersion = 1
+            nonce_buffer = (ctypes.c_ubyte * len(nonce)).from_buffer_copy(nonce)
+            tag_buffer = (ctypes.c_ubyte * 16)()
+            data = (ctypes.c_ubyte * len(plaintext)).from_buffer_copy(plaintext)
+            info.pbNonce, info.cbNonce = nonce_buffer, len(nonce)
+            info.pbTag, info.cbTag = tag_buffer, 16
+            out = ctypes.create_string_buffer(len(plaintext))
+            written = wintypes.ULONG()
+            assert bcrypt.BCryptEncrypt(
+                key_handle, data, len(plaintext), ctypes.byref(info), None, 0,
+                out, len(plaintext), ctypes.byref(written), 0) == 0
+            return out.raw[:written.value] + bytes(tag_buffer)
         finally:
-            server.close()
+            bcrypt.BCryptDestroyKey(key_handle)
+    finally:
+        bcrypt.BCryptCloseAlgorithmProvider(handle, 0)
 
-    threading.Thread(target=serve, daemon=True).start()
-    return port, state
 
+def _write_profile(root, rows, key=b"k" * 32, app_bound=False):
+    """A Chromium-shaped profile: Local State key plus an encrypted cookie DB."""
+    network = os.path.join(str(root), "Default", "Network")
+    os.makedirs(network, exist_ok=True)
+    crypt = {
+        "encrypted_key": base64.b64encode(
+            b"DPAPI" + _dpapi_protect(key)
+        ).decode("ascii")
+    }
+    if app_bound:
+        crypt["app_bound_encrypted_key"] = "AAAA"
+    with open(os.path.join(str(root), "Local State"), "w", encoding="utf-8") as f:
+        json.dump({"os_crypt": crypt}, f)
 
-def test_read_devtools_cookies_reassembles_a_large_fragmented_reply(monkeypatch):
-    cookies = [
-        {"name": "SID", "value": "s" * 300, "domain": ".google.com"},
-        {"name": "__Secure-3PAPISID", "value": "p" * 300, "domain": ".youtube.com"},
-        {"name": "noise", "value": "n" * 70000, "domain": ".example.com"},
-    ]
-    reply = json.dumps({"id": 1, "result": {"cookies": cookies}})
-    port, state = _ws_server(reply)
-
-    monkeypatch.setattr(
-        bc,
-        "_http_json",
-        lambda url, timeout=3.0: {
-            "webSocketDebuggerUrl": f"ws://127.0.0.1:{port}/devtools/browser/xyz"
-        },
+    connection = sqlite3.connect(os.path.join(network, "Cookies"))
+    connection.execute(
+        "CREATE TABLE cookies (host_key TEXT, name TEXT, value TEXT, "
+        "encrypted_value BLOB)"
     )
+    for host, name, value in rows:
+        nonce = os.urandom(12)
+        plaintext = hashlib.sha256(host.encode()).digest() + value.encode()
+        encrypted = b"v10" + nonce + _aes_gcm_encrypt(key, nonce, plaintext)
+        connection.execute(
+            "INSERT INTO cookies VALUES (?,?,?,?)", (host, name, "", encrypted)
+        )
+    connection.commit()
+    connection.close()
+    return str(root)
 
-    jar = bc.read_devtools_cookies(port, deadline=time.monotonic() + 5)
 
-    assert state["error"] is None, state["error"]
-    assert state["command"]["method"] == "Storage.getCookies"
-    assert jar == {
-        "SID": "s" * 300,
-        "__Secure-3PAPISID": "p" * 300,
+@needs_windows
+def test_a_profile_key_is_unwrapped_and_its_cookies_decrypted(tmp_path):
+    profile = _write_profile(tmp_path, [
+        (".google.com", "SID", "session"),
+        (".youtube.com", "__Secure-3PAPISID", "apisid"),
+    ])
+
+    assert bc.read_profile_cookies(profile) == {
+        "SID": "session",
+        "__Secure-3PAPISID": "apisid",
     }
 
 
-def test_read_devtools_cookies_falls_back_to_network_get_all_cookies(monkeypatch):
-    """Older builds reject Storage.getCookies with a CDP error object."""
-    port, state = _ws_server_error_then_ok()
-    monkeypatch.setattr(
-        bc,
-        "_http_json",
-        lambda url, timeout=3.0: {
-            "webSocketDebuggerUrl": f"ws://127.0.0.1:{port}/devtools/browser/xyz"
-        },
+@needs_windows
+def test_only_youtube_and_google_cookies_are_read(tmp_path):
+    profile = _write_profile(tmp_path, [
+        (".google.com", "SID", "keep"),
+        (".example.com", "csrftoken", "drop"),
+        (".google-analytics.com", "_ga", "drop"),
+    ])
+
+    assert bc.read_profile_cookies(profile) == {"SID": "keep"}
+
+
+@needs_windows
+def test_a_plaintext_cookie_value_is_taken_as_is(tmp_path):
+    profile = _write_profile(tmp_path, [])
+    connection = sqlite3.connect(
+        os.path.join(profile, "Default", "Network", "Cookies")
+    )
+    connection.execute(
+        "INSERT INTO cookies VALUES (?,?,?,?)", (".youtube.com", "PREF", "f6=400", b"")
+    )
+    connection.commit()
+    connection.close()
+
+    assert bc.read_profile_cookies(profile) == {"PREF": "f6=400"}
+
+
+@needs_windows
+def test_a_cookie_from_another_host_is_not_accepted(tmp_path):
+    """The sha256(host_key) prefix is what binds a blob to its own row."""
+    profile = _write_profile(tmp_path, [(".google.com", "SID", "session")])
+    connection = sqlite3.connect(
+        os.path.join(profile, "Default", "Network", "Cookies")
+    )
+    connection.execute("UPDATE cookies SET host_key='.youtube.com'")
+    connection.commit()
+    connection.close()
+
+    assert bc.read_profile_cookies(profile) == {}
+
+
+@needs_windows
+def test_a_profile_with_app_bound_encryption_is_not_readable(tmp_path):
+    """Its key belongs to the browser process; there is no honest way in."""
+    profile = _write_profile(
+        tmp_path, [(".google.com", "SID", "session")], app_bound=True
     )
 
-    jar = bc.read_devtools_cookies(port, deadline=time.monotonic() + 5)
-
-    assert state["error"] is None, state["error"]
-    assert jar == {"SID": "s"}
+    assert not bc.profile_is_readable(profile)
+    assert bc.read_profile_cookies(profile) is None
 
 
-def _ws_server_error_then_ok():
-    """A server that errors on the first command and answers the second."""
-    server = socket.socket()
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(("127.0.0.1", 0))
-    server.listen(1)
-    port = server.getsockname()[1]
-    state = {"error": None}
+@needs_windows
+def test_a_profile_without_its_key_is_unreadable_rather_than_empty(tmp_path):
+    """Unreadable and empty are different answers, and callers rely on it."""
+    profile = _write_profile(tmp_path, [(".google.com", "SID", "session")])
+    os.remove(os.path.join(profile, "Local State"))
 
-    def serve():
-        try:
-            conn, _ = server.accept()
-            conn.settimeout(5)
-            request = b""
-            while b"\r\n\r\n" not in request:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    return
-                request += chunk
-            key = ""
-            for line in request.split(b"\r\n"):
-                if line.lower().startswith(b"sec-websocket-key:"):
-                    key = line.split(b":", 1)[1].strip().decode("ascii")
-            accept = base64.b64encode(
-                hashlib.sha1((key + WS_GUID).encode("ascii")).digest()
-            ).decode("ascii")
-            conn.sendall(
-                (
-                    "HTTP/1.1 101 Switching Protocols\r\n"
-                    "Upgrade: websocket\r\n"
-                    "Connection: Upgrade\r\n"
-                    f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
-                ).encode("ascii")
-            )
-            # The client may open a second connection after the first refusal;
-            # this server handles both on the same socket only if the caller
-            # reuses it, which read_devtools_cookies does not. So: answer the
-            # first command with an error and the second with a jar, keeping the
-            # socket open across both.
-            first = json.loads(_read_client_frame(conn).decode("utf-8"))
-            conn.sendall(_frame(True, 0x1, json.dumps(
-                {"id": first["id"], "error": {"message": "method not found"}}
-            ).encode("utf-8")))
+    assert bc.read_profile_cookies(profile) is None
 
-            # read_devtools_cookies retries on the SAME socket
-            second = json.loads(_read_client_frame(conn).decode("utf-8"))
-            conn.sendall(_frame(True, 0x1, json.dumps({
-                "id": second["id"],
-                "result": {
-                    "cookies": [
-                        {"name": "SID", "value": "s", "domain": ".google.com"},
-                    ]
-                },
-            }).encode("utf-8")))
-            time.sleep(0.1)
-            conn.close()
-        except Exception as e:  # noqa: BLE001
-            state["error"] = repr(e)
-        finally:
-            server.close()
 
-    threading.Thread(target=serve, daemon=True).start()
-    return port, state
+def test_a_profile_with_no_cookie_db_yet_is_empty_not_unreadable(tmp_path):
+    profile = tmp_path / "fresh"
+    profile.mkdir()
+
+    assert bc.read_profile_cookies(str(profile)) == {}
+
+
+def test_a_missing_profile_has_nothing_to_read(tmp_path):
+    assert bc.read_profile_cookies(str(tmp_path / "nope")) is None
 
 
 # ------------------------------------------------- which browser sign-in uses
@@ -411,12 +363,12 @@ def test_firefox_is_recognised_by_name_and_by_executable():
     assert not bc.is_firefox("Comet", r"C:\Comet\comet.exe")
 
 
-def test_a_numbered_version_folder_means_chromium_is_drivable(tmp_path):
-    """How an unlisted browser (Comet) is known to be drivable at all."""
+def test_a_numbered_version_folder_means_chromium_is_readable(tmp_path):
+    """How an unlisted browser (Comet) is known to keep a readable profile."""
     assert bc.is_probably_chromium(_install_with_version_folder(tmp_path))
 
 
-def test_a_firefox_shaped_install_is_not_drivable(tmp_path):
+def test_a_firefox_shaped_install_is_not_readable(tmp_path):
     install = tmp_path / "Firefox"
     (install / "defaults").mkdir(parents=True)
     exe = install / "somebrowser.exe"
@@ -465,7 +417,7 @@ def test_a_browser_that_is_already_the_default_is_not_listed_twice(monkeypatch):
 
 
 def test_firefox_is_never_a_candidate(monkeypatch):
-    """It is read from its own profile, not driven."""
+    """It is read from its own profile, not opened in one of ours."""
     monkeypatch.setattr(
         bc, "default_browser", lambda: ("Mozilla Firefox", r"C:\Firefox\firefox.exe")
     )
@@ -487,7 +439,7 @@ def test_the_plan_reads_a_default_firefox_profile(monkeypatch, tmp_path):
     assert bc.sign_in_plan() == ("firefox", "Mozilla Firefox")
 
 
-def test_the_plan_drives_a_chromium_default(monkeypatch, tmp_path):
+def test_the_plan_opens_a_chromium_default_in_a_profile_of_ours(monkeypatch, tmp_path):
     exe = _install_with_version_folder(tmp_path, "comet.exe")
     monkeypatch.setattr(bc, "_firefox_profile_dirs", lambda: iter([]))
     monkeypatch.setattr(bc, "default_browser", lambda: ("Comet", exe))
@@ -496,10 +448,10 @@ def test_the_plan_drives_a_chromium_default(monkeypatch, tmp_path):
         bc, "_known_install", lambda exe_name, subdirs: r"C:\Edge\msedge.exe"
     )
 
-    assert bc.sign_in_plan() == ("devtools", "Comet")
+    assert bc.sign_in_plan() == ("profile", "Comet")
 
 
-def test_the_plan_falls_back_to_edge_when_the_default_cannot_be_driven(
+def test_the_plan_falls_back_to_edge_when_the_default_cannot_be_read(
     monkeypatch, tmp_path
 ):
     exotic = tmp_path / "exoticbrowser.exe"
@@ -512,11 +464,11 @@ def test_the_plan_falls_back_to_edge_when_the_default_cannot_be_driven(
     )
     monkeypatch.setattr(bc, "_known_install", lambda exe_name, subdirs: None)
 
-    assert bc.sign_in_plan() == ("devtools", "Microsoft Edge")
+    assert bc.sign_in_plan() == ("profile", "Microsoft Edge")
 
 
 def test_the_plan_admits_when_nothing_can_be_read(monkeypatch, tmp_path):
-    """No drivable browser at all: the caller must fail, not open a window."""
+    """No readable browser at all: the caller must fail, not open a window."""
     exotic = tmp_path / "exoticbrowser.exe"
     exotic.write_bytes(b"")
     monkeypatch.setattr(bc, "_firefox_profile_dirs", lambda: iter([]))
@@ -540,7 +492,7 @@ def test_each_browser_gets_a_profile_of_its_own():
 def test_a_candidate_that_will_not_start_falls_through_to_the_next(
     monkeypatch, tmp_path
 ):
-    """A build that refuses the debugging port must not cost a working one."""
+    """A browser that locks its cookies must not cost one that does not."""
     attempts = []
     monkeypatch.setattr(
         bc, "controllable_browsers",
@@ -553,14 +505,14 @@ def test_a_candidate_that_will_not_start_falls_through_to_the_next(
     def launch_one(name, exe, url, profile_dir):
         attempts.append(name)
         if name == "Comet":
-            raise bc.BrowserLaunchError("it did not open a debugging port in time")
+            raise bc.BrowserLaunchError("it did not finish starting in time")
         return 4321
 
     monkeypatch.setattr(bc, "_launch_one", launch_one)
 
-    assert bc.launch_controllable_browser(
+    assert bc.launch_readable_browser(
         "https://music.youtube.com", str(tmp_path)
-    ) == ("Microsoft Edge", 4321)
+    ) == ("Microsoft Edge", os.path.join(str(tmp_path), "msedge"), 4321)
     assert attempts == ["Comet", "Microsoft Edge"]
 
 
@@ -574,7 +526,7 @@ def test_no_browser_that_starts_says_where_to_go_instead(monkeypatch, tmp_path):
     )
 
     with pytest.raises(bc.BrowserLaunchError) as refused:
-        bc.launch_controllable_browser("https://music.youtube.com", str(tmp_path))
+        bc.launch_readable_browser("https://music.youtube.com", str(tmp_path))
 
     assert "Comet" in str(refused.value)
     assert "Settings" in str(refused.value)

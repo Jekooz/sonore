@@ -11,9 +11,9 @@ Safety, enforced before anything else:
   never used as a fixture. ``_AUTH_FILE`` is redirected to a tmp dir for every
   test and a guard asserts the redirect happened.
 * No browser opens and no browser profile is read: ``webbrowser`` is stubbed,
-  no controllable browser is reported, the sign-in profile lives in a tmp dir
-  and the zero-click reader is replaced, so a test can never launch Edge or read
-  the machine's own Firefox cookies.
+  no readable browser is reported, the sign-in profile lives in a tmp dir and
+  the zero-click reader is replaced, so a test can never launch Edge or read
+  the machine's own browser cookies.
 * Only the success paths stub the network (verify_candidate) and disk
   (store_session); every rejection test runs against the real, unpatched code —
   that is exactly what it is checking.
@@ -88,27 +88,29 @@ def isolated_env(tmp_path, monkeypatch):
 
     # Sign-in must never launch a browser or read the machine's own cookies.
     # Pin the decision itself, so a test never depends on this machine's own
-    # default browser: an ordinary drivable browser that produces no session.
+    # default browser: an ordinary readable browser that produces no session.
     monkeypatch.setattr(
-        browser_auth, "sign_in_plan", lambda: ("devtools", "Microsoft Edge")
+        browser_auth, "sign_in_plan", lambda: ("profile", "Microsoft Edge")
     )
     monkeypatch.setattr(
         browser_auth, "webbrowser",
         types.SimpleNamespace(open_new_tab=lambda url: True),
     )
     monkeypatch.setattr(
-        browser_auth, "launch_controllable_browser",
-        lambda url, profile: ("Microsoft Edge", 9222),
+        browser_auth, "launch_readable_browser",
+        lambda url, profile: ("Microsoft Edge", str(profile), FakeProcess(live=True)),
     )
     monkeypatch.setattr(
-        browser_auth, "read_devtools_cookies", lambda port, deadline: None,
-        raising=False,
+        browser_auth, "read_profile_cookies", lambda profile: None, raising=False,
+    )
+    monkeypatch.setattr(
+        browser_auth, "close_browser_window", lambda process: None, raising=False,
     )
     monkeypatch.setattr(
         browser_auth, "browser_profile_dir", lambda: str(sonore / "sign-in-browser"),
         raising=False,
     )
-    monkeypatch.setattr(main, "cookies_from_firefox", lambda: None)
+    monkeypatch.setattr(main, "cookies_from_disk", lambda: None)
 
     main._clear_browser_session()
 
@@ -170,21 +172,48 @@ def stub_storage(monkeypatch, verify=None, store=None):
     return calls
 
 
-def use_controllable_browser(monkeypatch, cookies=None, port=9222, name="Microsoft Edge"):
-    """Make the capture path behave as if a sign-in window produced a session."""
-    monkeypatch.setattr(
-        browser_auth, "sign_in_plan", lambda: ("devtools", name)
-    )
+class FakeProcess:
+    """A sign-in window: open while the user is signing in, then gone."""
+
+    def __init__(self, live=False, pid=4242):
+        self.pid = pid
+        self.live = live
+
+    def poll(self):
+        return None if self.live else 0
+
+
+def use_readable_browser(monkeypatch, cookies=None, name="Microsoft Edge",
+                         live=None, jar_readable=True, process=None):
+    """Make the capture path behave as if a sign-in window produced a session.
+
+    [live] defaults to "the window is still open when there is nothing to
+    read", which is the real state while the user is signing in: a Chromium
+    window's cookie store cannot be read until it has closed. [process] hands in
+    a window of the caller's own, for tests that drive it themselves.
+    """
+    monkeypatch.setattr(browser_auth, "sign_in_plan", lambda: ("profile", name))
+    if live is None:
+        live = cookies is None
+    if process is None:
+        process = FakeProcess(live=live)
     launched = []
-    monkeypatch.setattr(
-        browser_auth, "launch_controllable_browser",
-        lambda url, profile: launched.append((url, profile)) or (name, port),
-    )
-    monkeypatch.setattr(
-        browser_auth, "read_devtools_cookies",
-        lambda p, deadline: cookies,
-        raising=False,
-    )
+    reads = []
+
+    def launch(url, profile):
+        launched.append((url, profile))
+        return name, str(profile), process
+
+    def read(profile):
+        reads.append(profile)
+        if not jar_readable:
+            return None
+        # A readable store with no session is {}, which is not the same answer
+        # as one that could not be read at all.
+        return cookies if cookies is not None else {}
+
+    monkeypatch.setattr(browser_auth, "launch_readable_browser", launch)
+    monkeypatch.setattr(browser_auth, "read_profile_cookies", read)
     return launched
 
 
@@ -206,7 +235,7 @@ def test_browser_info_names_the_browser_sign_in_will_use(client, monkeypatch):
 
 
 def test_start_opens_a_window_in_a_profile_the_app_owns(client, monkeypatch):
-    launched = use_controllable_browser(monkeypatch, cookies=None)
+    launched = use_readable_browser(monkeypatch, cookies=None)
     start_sign_in(client)
 
     deadline = time.monotonic() + 5
@@ -218,9 +247,9 @@ def test_start_opens_a_window_in_a_profile_the_app_owns(client, monkeypatch):
     assert "sign-in-browser" in profile
 
 
-def test_the_users_default_browser_is_the_one_driven(client, monkeypatch):
+def test_the_users_default_browser_is_the_one_opened(client, monkeypatch):
     """Their setting decides, not a vendor preference: Comet here, not Edge."""
-    launched = use_controllable_browser(
+    launched = use_readable_browser(
         monkeypatch, cookies=None, name="Comet"
     )
     start_sign_in(client)
@@ -243,7 +272,7 @@ def test_firefox_default_opens_their_own_browser_and_reads_it(client, monkeypatc
         types.SimpleNamespace(open_new_tab=lambda url: opened.append(url) or True),
     )
     monkeypatch.setattr(
-        browser_auth, "launch_controllable_browser",
+        browser_auth, "launch_readable_browser",
         lambda url, profile: (_ for _ in ()).throw(
             AssertionError("a Firefox sign-in must not launch a second browser")
         ),
@@ -257,7 +286,7 @@ def test_firefox_default_opens_their_own_browser_and_reads_it(client, monkeypatc
         # is signing in, which is what the poll loop is for.
         return None if reads["count"] == 1 else dict(GOOD_JAR)
 
-    monkeypatch.setattr(main, "cookies_from_firefox", firefox_once_signed_in)
+    monkeypatch.setattr(main, "cookies_from_disk", firefox_once_signed_in)
     calls = stub_storage(monkeypatch)
 
     start_sign_in(client)
@@ -272,15 +301,15 @@ def test_a_browser_that_will_not_start_says_so(client, monkeypatch):
     """A refused launch must surface, not leave the screen waiting."""
     def refuse(url, profile):
         raise browser_cookies.BrowserLaunchError(
-            "Comet: it did not open a debugging port in time"
+            "Comet: it did not finish starting in time"
         )
 
-    monkeypatch.setattr(browser_auth, "launch_controllable_browser", refuse)
+    monkeypatch.setattr(browser_auth, "launch_readable_browser", refuse)
     start_sign_in(client)
 
     state = wait_for_session_to_settle(client)
     assert state["state"] == "failed", state
-    assert "debugging port" in (state["error"] or "")
+    assert "did not finish starting" in (state["error"] or "")
 
 
 def test_nothing_drivable_fails_with_the_paste_fallback(client, monkeypatch):
@@ -289,9 +318,9 @@ def test_nothing_drivable_fails_with_the_paste_fallback(client, monkeypatch):
         browser_auth, "sign_in_plan", lambda: ("shell", "Some Browser")
     )
     monkeypatch.setattr(
-        browser_auth, "launch_controllable_browser",
+        browser_auth, "launch_readable_browser",
         lambda url, profile: (_ for _ in ()).throw(
-            AssertionError("nothing drivable means nothing to launch")
+            AssertionError("nothing readable means nothing to launch")
         ),
     )
 
@@ -307,7 +336,7 @@ def test_open_browser_false_neither_reads_nor_launches(client, monkeypatch):
     def explode():
         raise AssertionError("the paste flow must not read a browser")
 
-    monkeypatch.setattr(main, "cookies_from_firefox", explode)
+    monkeypatch.setattr(main, "cookies_from_disk", explode)
     monkeypatch.setattr(
         browser_auth, "sign_in_plan",
         lambda: (_ for _ in ()).throw(
@@ -315,7 +344,7 @@ def test_open_browser_false_neither_reads_nor_launches(client, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        browser_auth, "launch_controllable_browser",
+        browser_auth, "launch_readable_browser",
         lambda url, profile: (_ for _ in ()).throw(
             AssertionError("the paste flow must not launch a browser")
         ),
@@ -337,9 +366,9 @@ def test_the_removed_extension_endpoints_are_gone(client):
 
 def test_zero_click_firefox_session_signs_in_with_no_window(client, monkeypatch):
     """An already signed-in Firefox means no window and no click at all."""
-    monkeypatch.setattr(main, "cookies_from_firefox", lambda: dict(GOOD_JAR))
+    monkeypatch.setattr(main, "cookies_from_disk", lambda: dict(GOOD_JAR))
     monkeypatch.setattr(
-        browser_auth, "launch_controllable_browser",
+        browser_auth, "launch_readable_browser",
         lambda url, profile: (_ for _ in ()).throw(
             AssertionError("a zero-click session must not open a window")
         ),
@@ -356,7 +385,7 @@ def test_zero_click_firefox_session_signs_in_with_no_window(client, monkeypatch)
 def test_zero_click_jar_without_a_session_is_not_accepted(client, monkeypatch):
     """Anonymous cookies (YSC, VISITOR_INFO1_LIVE, ...) are not a session."""
     monkeypatch.setattr(
-        main, "cookies_from_firefox",
+        main, "cookies_from_disk",
         lambda: {"YSC": "x", "VISITOR_INFO1_LIVE": "y"},
     )
     calls = stub_storage(monkeypatch)
@@ -371,8 +400,8 @@ def test_zero_click_jar_without_a_session_is_not_accepted(client, monkeypatch):
 
 def test_zero_click_refusal_falls_through_to_the_window(client, monkeypatch):
     """A stale Firefox session is not fatal: the user can sign in again."""
-    monkeypatch.setattr(main, "cookies_from_firefox", lambda: dict(GOOD_JAR))
-    use_controllable_browser(monkeypatch, cookies=None)
+    monkeypatch.setattr(main, "cookies_from_disk", lambda: dict(GOOD_JAR))
+    use_readable_browser(monkeypatch, cookies=None)
 
     def reject(_cookies):
         raise RuntimeError("401 from upstream")
@@ -387,8 +416,29 @@ def test_zero_click_refusal_falls_through_to_the_window(client, monkeypatch):
 # ------------------------------------------------------------ captured window
 
 
+def test_a_window_closed_without_a_session_fails_with_a_reason(client, monkeypatch):
+    """Nothing can change once the window is gone, so waiting would be wrong."""
+    use_readable_browser(monkeypatch, cookies=None, live=False)
+
+    start_sign_in(client)
+
+    state = wait_for_session_to_settle(client)
+    assert state["state"] == "failed", state
+    assert "closed before you signed in" in (state["error"] or "").lower()
+
+
+def test_a_window_another_process_still_holds_keeps_waiting(client, monkeypatch):
+    """A locked store is not an empty one: another window may still sign in."""
+    use_readable_browser(monkeypatch, cookies=None, live=False, jar_readable=False)
+
+    start_sign_in(client)
+    time.sleep(0.4)
+
+    assert client.get("/auth/browser/status").json()["state"] == "waiting"
+
+
 def test_session_from_the_window_signs_in(client, monkeypatch):
-    use_controllable_browser(monkeypatch, cookies=dict(GOOD_JAR))
+    use_readable_browser(monkeypatch, cookies=dict(GOOD_JAR))
     calls = stub_storage(monkeypatch)
 
     start_sign_in(client)
@@ -400,7 +450,7 @@ def test_session_from_the_window_signs_in(client, monkeypatch):
 
 def test_window_session_refused_by_youtube_fails_the_attempt(client, monkeypatch):
     """The required cookies are present, so this is a real refusal, not a retry."""
-    use_controllable_browser(monkeypatch, cookies=dict(GOOD_JAR))
+    use_readable_browser(monkeypatch, cookies=dict(GOOD_JAR))
 
     def reject(_cookies):
         raise main.AuthError("Session expired or invalid. Please sign in again.")
@@ -413,6 +463,36 @@ def test_window_session_refused_by_youtube_fails_the_attempt(client, monkeypatch
     assert state["state"] == "failed", state
     assert "sign in again" in (state["error"] or "").lower()
     assert calls["stored"] == [], "a refused candidate must never reach storage"
+
+
+def test_a_window_left_open_is_closed_and_read_at_the_timeout(client, monkeypatch):
+    """Signing in and walking away still ends signed in, not stuck waiting."""
+    monkeypatch.setattr(browser_auth, "WAIT_TIMEOUT_SECONDS", 3.0)
+    monkeypatch.setattr(browser_auth, "CLOSE_GRACE_SECONDS", 3.0)
+    process = FakeProcess(live=True)
+    use_readable_browser(monkeypatch, live=True, process=process)
+    calls = stub_storage(monkeypatch)
+
+    closed = []
+
+    def close(closed_process):
+        closed.append(closed_process)
+        closed_process.live = False  # the window shuts, flushing its store
+
+    # The store is only readable once the window is gone, exactly as a real
+    # Chromium profile is, so this can only pass if the close really happened.
+    monkeypatch.setattr(
+        browser_auth, "read_profile_cookies",
+        lambda profile: dict(GOOD_JAR) if closed else None,
+    )
+    monkeypatch.setattr(browser_auth, "close_browser_window", close)
+
+    start_sign_in(client)
+
+    state = wait_for_session_to_settle(client, seconds=20)
+    assert state["state"] == "success", state
+    assert closed == [process]
+    assert calls["stored"] == [dict(GOOD_JAR)]
 
 
 def test_cancel_stops_the_attempt(client):
@@ -441,7 +521,7 @@ def test_refused_capture_leaves_an_existing_session_untouched(client, monkeypatc
     with open(ytc._AUTH_FILE, "wb") as f:
         f.write(existing)
 
-    use_controllable_browser(monkeypatch, cookies=dict(GOOD_JAR))
+    use_readable_browser(monkeypatch, cookies=dict(GOOD_JAR))
 
     def reject(_cookies):
         raise RuntimeError("401 from upstream")
@@ -474,7 +554,7 @@ def test_sign_out_removes_the_sign_in_browser_profile(client, monkeypatch, tmp_p
 
 
 def test_no_cookie_value_is_ever_logged(client, monkeypatch, caplog):
-    use_controllable_browser(monkeypatch, cookies=dict(GOOD_JAR))
+    use_readable_browser(monkeypatch, cookies=dict(GOOD_JAR))
     stub_storage(monkeypatch)
 
     with caplog.at_level(logging.DEBUG):

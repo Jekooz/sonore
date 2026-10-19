@@ -54,7 +54,7 @@ from services.browser_auth import (
     BrowserAuthSession,
 )
 from services.browser_cookies import (
-    cookies_from_firefox,
+    cookies_from_disk,
     planned_browser_name,
     remove_browser_profile,
 )
@@ -351,9 +351,9 @@ def auth_browser_info():
     """The browser sign-in will use, for the UI's prompt text.
 
     The browser the user chose in Windows, because that is the browser they
-    wanted: a Chromium one is driven in a profile this app owns, and Firefox is
+    wanted: a Chromium one is opened in a profile this app owns, and Firefox is
     read from the profile they already use. Only when their default cannot be
-    used does this name the Edge/Chrome that every Windows machine has.
+    read does this name the Edge/Chrome that every Windows machine has.
     """
     return JSONResponse(content={"browser": planned_browser_name()})
 
@@ -382,12 +382,13 @@ def auth_browser_start(payload: dict | None = None):
     Start a sign-in. The sidecar owns it end to end, so there is exactly one
     window and no extension to install:
 
-      * an already signed-in browser profile is read straight from disk (no
-        window),
+      * a session already on this machine is read straight from disk (no
+        window at all),
       * otherwise the browser the user set as default in Windows is opened --
         in a profile this app owns when it is a Chromium, or their own profile
-        when it is Firefox -- and the session is read back automatically,
-      * Edge or Chrome only when their own default cannot be used.
+        when it is Firefox -- and the session is read back once they have
+        signed in and closed that window,
+      * Edge or Chrome only when their own default cannot be read.
 
     With {"open_browser": false} nothing is opened and nothing is read -- the
     attempt only waits, which is what the Settings paste-headers fallback needs.
@@ -406,8 +407,8 @@ def auth_browser_start(payload: dict | None = None):
     session = BrowserAuthSession(
         completer=_complete_browser_capture,
         # The zero-click read belongs to a real sign-in only: the paste
-        # fallback must not be short-circuited by a Firefox session.
-        direct_reader=cookies_from_firefox if open_browser else None,
+        # fallback must not be short-circuited by a session already on disk.
+        direct_reader=cookies_from_disk if open_browser else None,
     )
     with _browser_session_lock:
         _browser_session = session

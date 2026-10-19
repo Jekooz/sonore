@@ -18,35 +18,39 @@ Two dependency-free routes are used instead:
    so a returning Firefox user is signed in with no window and no click at all.
    Read through Python's own ``sqlite3``; nothing is installed.
 
-2. ``launch_controllable_browser()`` + ``read_devtools_cookies()`` -- the
-   browser the user set as default in Windows (Comet, Brave, Chrome, Edge, ...)
-   is started in a profile this app owns, pointed at music.youtube.com. The user
-   signs in there exactly as they would anywhere else, and the session is read
-   over the DevTools protocol, which the browser itself decrypts. No extension,
-   no pasting, nothing to load. A default that cannot be driven -- Firefox, or a
-   build that refuses the debugging port -- falls back to Edge or Chrome, which
-   every Windows machine has.
+2. ``launch_readable_browser()`` + ``read_profile_cookies()`` -- the browser the
+   user set as default in Windows (Comet, Brave, Chrome, Edge, ...) is started
+   in a profile this app owns, pointed at music.youtube.com. The user signs in
+   there exactly as they would anywhere else and closes the window; the session
+   is then decrypted out of that profile's own store: its key comes from Local
+   State through DPAPI, and its v10 cookies are AES-256-GCM, which Windows' own
+   CNG decrypts. No extension, no pasting, nothing to load.
 
-Everything here is standard library only: ``sqlite3``, ``socket``, ``ssl``,
-``subprocess`` and a small RFC 6455 client (``_WebSocket``).
+   The window is deliberately NOT driven over the DevTools protocol. Google
+   refuses sign-in with "This browser or app may not be secure" in a browser
+   that exposes a debugging port -- verified against /v3/signin/rejected -- so a
+   driven window can never produce a session. A plain one is what a normal user
+   has.
+
+Everything here is standard library only: ``sqlite3``, ``subprocess``, and
+``ctypes`` over Windows' own crypt32/bcrypt.
 
 Nothing in this module ever logs a cookie name or value.
 """
 
 import base64
+import ctypes
+import hashlib
 import json
 import logging
 import os
 import re
-import secrets
 import shutil
-import socket
-import ssl
+import sqlite3
 import subprocess
 import tempfile
 import time
-import urllib.request
-from urllib.parse import urlsplit
+from ctypes import wintypes
 
 logger = logging.getLogger("ytmusic-backend")
 
@@ -55,14 +59,14 @@ logger = logging.getLogger("ytmusic-backend")
 # is a session for this app.
 _COOKIE_DOMAINS = ("youtube.com", "google.com")
 
-# How long a launch may take to answer on its DevTools port before the attempt
+# How long a launch may take to publish the profile key before the attempt
 # moves on to the next browser, and finally fails. Generous: a cold start on a
 # slow disk is not quick, and this happens before the profile has even loaded.
-_DEVTOOLS_START_TIMEOUT = 15.0
+_PROFILE_READY_TIMEOUT = 25.0
 
-# The browsers that are looked for when the user's own default cannot be driven,
-# in preference order. Both are Chromium builds, so both are drivable, and every
-# Windows machine has at least one of them.
+# The browsers that are looked for when the user's own default cannot be read,
+# in preference order. Both are Chromium builds, so both keep a profile this app
+# can read, and every Windows machine has at least one of them.
 _BROWSER_CANDIDATES = (
     ("Microsoft Edge", "msedge.exe",
      (r"Microsoft\Edge\Application",)),
@@ -72,8 +76,8 @@ _BROWSER_CANDIDATES = (
 
 # Chromium browsers put their own files in a folder named after the version they
 # are built from. That is a property of the install rather than of any one
-# vendor, so it is what decides whether a browser nobody has heard of can still
-# be driven over the DevTools protocol.
+# vendor, so it is what decides whether a browser nobody has heard of still
+# keeps a profile this app can read.
 _CHROMIUM_VERSION_DIR = re.compile(r"^\d+\.\d+\.\d+(\.\d+)?$")
 
 # Chromium browsers, by executable name. The structure above catches the rest;
@@ -85,8 +89,8 @@ _CHROMIUM_STEMS = (
 )
 
 # Firefox and the forks that store cookies the same way: a plain SQLite file,
-# which this app reads itself. None of them can be driven over the DevTools
-# protocol (that is Chromium's), and none of them needs to be.
+# which this app reads itself. None of them keeps a Chromium profile, and none of
+# them needs to.
 _FIREFOX_STEMS = (
     "firefox", "firefox-developer-edition", "firefox-esr", "waterfox",
     "librewolf", "palemoon", "zen", "floorp",
@@ -125,211 +129,10 @@ _PROGID_NAMES = (
 
 
 class BrowserLaunchError(Exception):
-    """Raised when no controllable browser is installed or it will not start."""
+    """Raised when no readable browser is installed or it will not start."""
 
 
-# --------------------------------------------------------------- WebSocket
-
-class _WebSocketError(Exception):
-    """The DevTools WebSocket refused, dropped or timed out."""
-
-
-class _WebSocket:
-    """A minimal RFC 6455 text client: enough for the DevTools protocol.
-
-    Hand-rolled because the shipped runtime carries no WebSocket library, and
-    adding one to the interpreter the installer builds is a much larger change
-    than the ~120 lines below. Server frames are never masked and CDP replies
-    can exceed a single frame, so both the 16/64-bit lengths and continuation
-    frames are handled.
-    """
-
-    def __init__(self, url, timeout=5.0):
-        self._url = url
-        self._timeout = timeout
-        self._sock = None
-        self._buffer = b""
-
-    def connect(self):
-        parts = urlsplit(self._url)
-        host = parts.hostname
-        if not host:
-            raise _WebSocketError("the DevTools endpoint gave no host")
-        secure = parts.scheme == "wss"
-        port = parts.port or (443 if secure else 80)
-        path = parts.path or "/"
-        if parts.query:
-            path += "?" + parts.query
-
-        sock = socket.create_connection((host, port), timeout=self._timeout)
-        if secure:
-            sock = ssl.create_default_context().wrap_socket(
-                sock, server_hostname=host
-            )
-        sock.settimeout(self._timeout)
-
-        key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
-        request = (
-            f"GET {path} HTTP/1.1\r\n"
-            f"Host: {host}:{port}\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            f"Sec-WebSocket-Key: {key}\r\n"
-            "Sec-WebSocket-Version: 13\r\n"
-            # No Origin header on purpose: Chromium only enforces
-            # --remote-allow-origins for callers that announce an origin.
-            "\r\n"
-        )
-        sock.sendall(request.encode("ascii"))
-
-        header = b""
-        while b"\r\n\r\n" not in header:
-            chunk = sock.recv(4096)
-            if not chunk:
-                sock.close()
-                raise _WebSocketError("the DevTools endpoint closed the handshake")
-            header += chunk
-        head, _, rest = header.partition(b"\r\n\r\n")
-        status = head.split(b"\r\n", 1)[0]
-        if b" 101 " not in status:
-            sock.close()
-            raise _WebSocketError(
-                "the DevTools endpoint refused the upgrade ("
-                + status.decode("latin-1", "replace") + ")"
-            )
-
-        self._sock = sock
-        self._buffer = rest
-        return self
-
-    def _recv_exact(self, count):
-        while len(self._buffer) < count:
-            chunk = self._sock.recv(max(4096, count - len(self._buffer)))
-            if not chunk:
-                raise _WebSocketError("the DevTools endpoint closed the connection")
-            self._buffer += chunk
-        data, self._buffer = self._buffer[:count], self._buffer[count:]
-        return data
-
-    def _recv_frame(self):
-        first, second = self._recv_exact(2)
-        final = bool(first & 0x80)
-        opcode = first & 0x0F
-        masked = bool(second & 0x80)
-        length = second & 0x7F
-        if length == 126:
-            length = int.from_bytes(self._recv_exact(2), "big")
-        elif length == 127:
-            length = int.from_bytes(self._recv_exact(8), "big")
-        mask = self._recv_exact(4) if masked else None
-        payload = self._recv_exact(length) if length else b""
-        if mask:
-            payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
-        return final, opcode, payload
-
-    def _recv_message(self):
-        message = b""
-        while True:
-            final, opcode, payload = self._recv_frame()
-            if opcode == 0x8:  # close
-                raise _WebSocketError("the DevTools endpoint closed the connection")
-            if opcode == 0x9:  # ping -> pong
-                self._send_frame(0xA, payload)
-                continue
-            if opcode == 0xA:  # pong
-                continue
-            if opcode in (0x0, 0x1, 0x2):  # continuation, text, binary
-                message += payload
-            if final:
-                return message
-
-    def _send_frame(self, opcode, payload):
-        mask = secrets.token_bytes(4)
-        masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
-        header = bytearray([0x80 | opcode])
-        length = len(payload)
-        if length < 126:
-            header.append(0x80 | length)
-        elif length < 65536:
-            header.append(0x80 | 126)
-            header += length.to_bytes(2, "big")
-        else:
-            header.append(0x80 | 127)
-            header += length.to_bytes(8, "big")
-        self._sock.sendall(bytes(header) + mask + masked)
-
-    def call(self, method, params=None, message_id=1, deadline=None):
-        """Send one CDP command and return its ``result`` object."""
-        self._send_frame(
-            0x1,
-            json.dumps({"id": message_id, "method": method, "params": params or {}})
-            .encode("utf-8"),
-        )
-        while True:
-            if deadline is not None and time.monotonic() > deadline:
-                raise _WebSocketError(f"timed out waiting for {method}")
-            try:
-                raw = self._recv_message()
-            except socket.timeout as e:
-                raise _WebSocketError(f"timed out waiting for {method}") from e
-            try:
-                message = json.loads(raw.decode("utf-8", "replace"))
-            except json.JSONDecodeError:
-                continue
-            # Skip events and replies to other commands (there are none, but a
-            # CDP endpoint may interleave events on the same socket).
-            if message.get("id") != message_id:
-                continue
-            if message.get("error"):
-                raise _WebSocketError(str(message["error"]))
-            return message.get("result") or {}
-
-    def close(self):
-        try:
-            if self._sock is not None:
-                self._send_frame(0x8, b"")
-        except (OSError, _WebSocketError):
-            pass
-        try:
-            if self._sock is not None:
-                self._sock.close()
-        except OSError:
-            pass
-        self._sock = None
-
-
-# --------------------------------------------------------------- HTTP probe
-
-def _http_json(url, timeout=3.0):
-    """GET a small JSON document from the loopback DevTools endpoint."""
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8", "replace"))
-    except Exception as e:  # noqa: BLE001 - any failure just means "not ready"
-        raise _WebSocketError(f"{url} did not answer: {e}") from e
-
-
-def _devtools_port_alive(port):
-    try:
-        _http_json(f"http://127.0.0.1:{int(port)}/json/version", timeout=1.5)
-        return True
-    except _WebSocketError:
-        return False
-
-
-def _read_published_port(port_file):
-    try:
-        with open(port_file, "r", encoding="ascii") as f:
-            first = f.readline().strip()
-    except OSError:
-        return 0
-    try:
-        return int(first)
-    except ValueError:
-        return 0
-
-
-# --------------------------------------------------------------- browser identity
+# --------------------------------------------------------------- browser discovery
 
 def _exe_from_command(command):
     """The executable a shell open command names, which is what Windows runs."""
@@ -421,7 +224,7 @@ def is_firefox(name, exe=""):
 
 
 def is_probably_chromium(exe):
-    """Whether this browser can be driven over the DevTools protocol.
+    """Whether this browser keeps a profile this app can read.
 
     Decided by the install, not by a list of vendors: Chromium browsers keep
     their files in a folder named after the version they are built from, so
@@ -440,7 +243,7 @@ def is_probably_chromium(exe):
 
 
 def controllable_browsers():
-    """(name, executable) candidates sign-in can drive, most preferred first.
+    """(name, executable) candidates sign-in can read, most preferred first.
 
     The user's own default browser when it is a Chromium, then Edge and Chrome
     -- every Windows machine has one of those two, so an unusual default still
@@ -471,8 +274,8 @@ def sign_in_plan():
     browser that will actually be used:
 
       "firefox"   read the user's own Firefox profile -- no window at all,
-      "devtools"  drive a Chromium in a profile this app owns,
-      "shell"     nothing drivable: sign-in cannot finish by itself.
+      "profile"   open a Chromium in a profile this app owns, then read it,
+      "shell"     nothing this app can read: sign-in cannot finish by itself.
     """
     default = default_browser()
     if default is not None:
@@ -482,7 +285,7 @@ def sign_in_plan():
 
     candidates = controllable_browsers()
     if candidates:
-        return "devtools", candidates[0][0]
+        return "profile", candidates[0][0]
 
     if default is not None:
         return "shell", default[0]
@@ -598,25 +401,99 @@ def _seed_profile(profile_dir, exe):
         logger.warning("browser auth: could not mark the profile as set up (%s)", e)
 
 
+def _pid_running(pid):
+    """Whether a process with this id is still alive."""
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(0x1000, False, int(pid))  # QUERY_LIMITED
+    if not handle:
+        return False
+    try:
+        code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return False
+        return code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _windows_of(pid):
+    """Top-level windows owned by a process."""
+    user32 = ctypes.windll.user32
+    found = []
+    prototype = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def each(hwnd, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == int(pid) and user32.IsWindowVisible(hwnd):
+            found.append(hwnd)
+        return True
+
+    user32.EnumWindows(prototype(each), 0)
+    return found
+
+
+def close_browser_window(process):
+    """Ask the sign-in window to close, so it flushes its cookie store.
+
+    A window message, not a kill: Chromium commits cookies on a timer, so a
+    window that is terminated can take the session it just received with it.
+    """
+    if process is None or process.poll() is not None:
+        return
+    user32 = ctypes.windll.user32
+    for hwnd in _windows_of(process.pid):
+        user32.PostMessageW(hwnd, _WM_CLOSE, 0, 0)
+
+
+def _close_stale_window(profile_dir):
+    """Close a sign-in window left over from an earlier attempt.
+
+    Chromium runs one process per profile: launching again against a profile
+    that is still open only opens a tab in the existing window and exits, so a
+    leftover window would make every later attempt look like an instant
+    failure. Recorded by pid when the window was opened.
+    """
+    path = os.path.join(profile_dir, _PID_FILE)
+    try:
+        with open(path, encoding="ascii") as handle:
+            pid = int(handle.read().strip())
+    except (OSError, ValueError):
+        return
+    if _pid_running(pid):
+        user32 = ctypes.windll.user32
+        for hwnd in _windows_of(pid):
+            user32.PostMessageW(hwnd, _WM_CLOSE, 0, 0)
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            if read_profile_cookies(profile_dir) is not None:
+                break
+            time.sleep(0.25)
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def _launch_one(name, exe, url, profile_dir):
-    """Start one browser in its own profile; return its DevTools port."""
+    """Start one browser in its own profile; return its process."""
     os.makedirs(profile_dir, exist_ok=True)
     _seed_profile(profile_dir, exe)
-    port_file = os.path.join(profile_dir, "DevToolsActivePort")
-
-    # A port file from a browser that has since exited would send us nowhere;
-    # the port is only trusted once /json/version answers on it.
-    stale = _read_published_port(port_file)
-    if stale and not _devtools_port_alive(stale):
-        try:
-            os.remove(port_file)
-        except OSError:
-            pass
+    # Debris left by the version that drove the browser over DevTools. Nothing
+    # reads it now, and a stale port file is exactly what a later reader would
+    # trust, so it does not outlive the code that wrote it.
+    try:
+        os.remove(os.path.join(profile_dir, "DevToolsActivePort"))
+    except OSError:
+        pass
 
     args = [
         exe,
         f"--user-data-dir={profile_dir}",
-        "--remote-debugging-port=0",
+        # Deliberately no --remote-debugging-port: Google refuses sign-in with
+        # "This browser or app may not be secure" in a browser that exposes one
+        # (it redirects straight to /v3/signin/rejected), so a driven window can
+        # never produce a session. This is a plain browser window.
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-background-mode",
@@ -637,100 +514,300 @@ def _launch_one(name, exe, url, profile_dir):
     except OSError as e:
         raise BrowserLaunchError(f"could not start it ({e})") from e
 
-    deadline = time.monotonic() + _DEVTOOLS_START_TIMEOUT
+    try:
+        with open(os.path.join(profile_dir, _PID_FILE), "w", encoding="ascii") as handle:
+            handle.write(str(process.pid))
+    except OSError:
+        pass
+
+    # Whether the window can be read afterwards is structural, so it is settled
+    # now: a profile whose key is bound to the browser process (App-Bound
+    # Encryption) can be signed in but never read, and must not cost the user a
+    # sign-in they cannot finish.
+    deadline = time.monotonic() + _PROFILE_READY_TIMEOUT
     while time.monotonic() < deadline:
-        port = _read_published_port(port_file)
-        if port and _devtools_port_alive(port):
-            return port
+        if process.poll() is not None:
+            raise BrowserLaunchError("it closed as soon as it started")
+        if profile_is_readable(profile_dir):
+            return process
+        if _os_crypt(profile_dir).get("app_bound_encrypted_key"):
+            _stop_quietly(process)
+            raise BrowserLaunchError(
+                "it locks its cookies to itself, so a session signed in there "
+                "could not be read afterwards"
+            )
         time.sleep(0.25)
 
     _stop_quietly(process)
-    raise BrowserLaunchError("it did not open a debugging port in time")
+    raise BrowserLaunchError("it did not finish starting in time")
 
 
-def launch_controllable_browser(url, profile_root):
+def launch_readable_browser(url, profile_root):
     """Start a browser sign-in can read, in a profile this app owns.
 
-    Returns (friendly name, DevTools port). Candidates are tried in preference
-    order -- the user's own default browser first -- because a build that will
-    not expose a debugging port must not cost the ones that will.
+    Returns (friendly name, profile directory, process). Candidates are tried in
+    preference order -- the user's own default browser first -- so a browser
+    nobody has met cannot cost the ones that can finish.
 
-    The window is left open on success for the user to sign in (and to close),
-    so a retry reuses the same window and the same profile.
+    The window is left open for the user to sign in. They close it when they are
+    done, which is also what flushes the cookie store this app reads.
     """
     candidates = controllable_browsers()
     if not candidates:
         raise BrowserLaunchError(
-            "Sign-in could not open a browser window it can read: no browser "
-            "on this machine can be driven. You can sign in to YouTube Music "
-            "in your own browser and paste the request headers in Settings, "
-            "under Account."
+            "Sign-in could not open a browser window it can read: no Chromium "
+            "browser was found. You can sign in to YouTube Music in your own "
+            "browser and paste the request headers in Settings, under Account."
         )
 
     attempts = []
     for name, exe in candidates:
+        profile_dir = _profile_for(profile_root, exe)
         try:
-            return name, _launch_one(name, exe, url, _profile_for(profile_root, exe))
+            _close_stale_window(profile_dir)
+            return name, profile_dir, _launch_one(name, exe, url, profile_dir)
         except BrowserLaunchError as e:
-            logger.warning("browser auth: %s cannot be driven: %s", name, e)
+            logger.warning("browser auth: %s cannot be read: %s", name, e)
             attempts.append(f"{name}: {e}")
 
     raise BrowserLaunchError(
-        "Sign-in could not open a browser window ("
+        "Sign-in could not open a browser window it can read ("
         + "; ".join(attempts)
         + "). You can sign in to YouTube Music in your own browser and paste "
         "the request headers in Settings, under Account."
     )
 
 
-# --------------------------------------------------------------- CDP cookies
+# ------------------------------------------------------------ profile cookies
 
-def _cookies_from_cdp(entries):
-    """name -> value for the YouTube/Google cookies in a CDP cookie list."""
+_V10 = b"v10"
+_GCM_NONCE = 12
+_GCM_TAG = 16
+_STILL_ACTIVE = 259
+_WM_CLOSE = 0x0010
+_PID_FILE = "signin.pid"
+_STATE_FILE = "Local State"
+_COOKIE_DB = ("Default", "Network", "Cookies")
+
+
+def _os_crypt(profile_dir):
+    """The os_crypt section of a profile's Local State, or {}."""
+    path = os.path.join(profile_dir, _STATE_FILE)
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            state = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    crypt = state.get("os_crypt") if isinstance(state, dict) else None
+    return crypt if isinstance(crypt, dict) else {}
+
+
+def profile_is_readable(profile_dir):
+    """Whether this profile's cookies can be read without the browser.
+
+    App-Bound Encryption binds the key to the browser's own process, so a
+    profile carrying one can be signed in but never read afterwards. A profile
+    this app creates has only the DPAPI-protected key, which is what makes this
+    route possible.
+    """
+    crypt = _os_crypt(profile_dir)
+    return bool(crypt.get("encrypted_key")) and not crypt.get("app_bound_encrypted_key")
+
+
+class _DataBlob(ctypes.Structure):
+    _fields_ = [("cbData", wintypes.DWORD),
+                ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+
+def _dpapi_unprotect(blob):
+    """Unwrap a DPAPI blob as the Windows user who is running this app."""
+    out = _DataBlob()
+    source = _DataBlob(len(blob), ctypes.cast(
+        ctypes.create_string_buffer(blob, len(blob)),
+        ctypes.POINTER(ctypes.c_char)))
+    if not ctypes.windll.crypt32.CryptUnprotectData(
+            ctypes.byref(source), None, None, None, None, 0, ctypes.byref(out)):
+        raise OSError("the profile key could not be unwrapped")
+    try:
+        return ctypes.string_at(out.pbData, out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(out.pbData)
+
+
+class _AuthInfo(ctypes.Structure):
+    """BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO, from Windows CNG."""
+
+    _fields_ = [
+        ("cbSize", wintypes.ULONG),
+        ("dwInfoVersion", wintypes.ULONG),
+        ("pbNonce", ctypes.POINTER(ctypes.c_ubyte)),
+        ("cbNonce", wintypes.ULONG),
+        ("pbAuthData", ctypes.POINTER(ctypes.c_ubyte)),
+        ("cbAuthData", wintypes.ULONG),
+        ("pbTag", ctypes.POINTER(ctypes.c_ubyte)),
+        ("cbTag", wintypes.ULONG),
+        ("pbMacContext", ctypes.POINTER(ctypes.c_ubyte)),
+        ("cbMacContext", wintypes.ULONG),
+        ("cbAAD", wintypes.ULONG),
+        ("cbData", ctypes.c_ulonglong),
+        ("dwFlags", wintypes.ULONG),
+    ]
+
+
+def _aes_gcm_decrypt(key, nonce, ciphertext, tag):
+    """AES-256-GCM through Windows' own CNG, so nothing has to be installed.
+
+    The tag is authenticated by the cipher: a wrong key or a tampered blob
+    raises instead of returning plausible-looking bytes.
+    """
+    bcrypt = ctypes.windll.bcrypt
+    handle = ctypes.c_void_p()
+    if bcrypt.BCryptOpenAlgorithmProvider(ctypes.byref(handle), "AES", None, 0):
+        raise OSError("AES is unavailable")
+    try:
+        mode = ctypes.c_wchar_p("ChainingModeGCM")
+        if bcrypt.BCryptSetProperty(handle, "ChainingMode", mode,
+                                    ctypes.sizeof(mode), 0):
+            raise OSError("GCM is unavailable")
+        object_length = wintypes.ULONG()
+        written = wintypes.ULONG()
+        if bcrypt.BCryptGetProperty(handle, "ObjectLength",
+                                    ctypes.byref(object_length), 4,
+                                    ctypes.byref(written), 0):
+            raise OSError("the key could not be sized")
+        key_handle = ctypes.c_void_p()
+        key_object = ctypes.create_string_buffer(object_length.value)
+        key_bytes = ctypes.create_string_buffer(key, len(key))
+        if bcrypt.BCryptGenerateSymmetricKey(
+                handle, ctypes.byref(key_handle), key_object,
+                object_length.value, key_bytes, len(key), 0):
+            raise OSError("the key could not be imported")
+        try:
+            info = _AuthInfo()
+            info.cbSize = ctypes.sizeof(info)
+            info.dwInfoVersion = 1
+            nonce_buffer = (ctypes.c_ubyte * len(nonce)).from_buffer_copy(nonce)
+            tag_buffer = (ctypes.c_ubyte * len(tag)).from_buffer_copy(tag)
+            data_buffer = (ctypes.c_ubyte * len(ciphertext)).from_buffer_copy(ciphertext)
+            info.pbNonce, info.cbNonce = nonce_buffer, len(nonce)
+            info.pbTag, info.cbTag = tag_buffer, len(tag)
+
+            out = ctypes.create_string_buffer(len(ciphertext))
+            status = bcrypt.BCryptDecrypt(
+                key_handle, data_buffer, len(ciphertext), ctypes.byref(info),
+                None, 0, out, len(ciphertext), ctypes.byref(written), 0)
+            if status:
+                raise OSError(
+                    f"the cookie could not be decrypted (0x{status & 0xFFFFFFFF:08X})"
+                )
+            return out.raw[: written.value]
+        finally:
+            bcrypt.BCryptDestroyKey(key_handle)
+    finally:
+        bcrypt.BCryptCloseAlgorithmProvider(handle, 0)
+
+
+def _profile_key(profile_dir):
+    """The 32-byte AES key this profile encrypts cookies with, or None."""
+    crypt = _os_crypt(profile_dir)
+    if crypt.get("app_bound_encrypted_key"):
+        # App-Bound Encryption: the real key is only unwrappable by the browser
+        # itself, so the DPAPI key beside it is not the one the cookies use.
+        return None
+    encrypted = crypt.get("encrypted_key")
+    if not encrypted:
+        return None
+    try:
+        blob = base64.b64decode(encrypted)
+    except (TypeError, ValueError):
+        return None
+    if not blob.startswith(b"DPAPI"):
+        return None
+    try:
+        return _dpapi_unprotect(blob[5:])
+    except OSError as e:
+        logger.debug("browser auth: the profile key could not be read (%s)", e)
+        return None
+
+
+def read_profile_cookies(profile_dir):
+    """The YouTube/Google cookies in a profile this app owns.
+
+    None means the store could not be read (a browser still holds it); {} means
+    it was read and holds no session. That difference decides whether a closed
+    window was a failure or whether another window still has to be closed.
+    """
+    if not profile_dir:
+        return None
+    database = os.path.join(profile_dir, *_COOKIE_DB)
+    if not os.path.isfile(database):
+        return {} if os.path.isdir(profile_dir) else None
+    key = _profile_key(profile_dir)
+    if key is None:
+        return None
+
+    uri = "file:" + database.replace(os.sep, "/") + "?mode=ro"
+    try:
+        connection = sqlite3.connect(uri, uri=True, timeout=2)
+    except sqlite3.Error:
+        return None
+    try:
+        rows = connection.execute(
+            "SELECT host_key, name, value, encrypted_value FROM cookies"
+        ).fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        connection.close()
+
     jar = {}
-    for entry in entries or []:
-        if not isinstance(entry, dict):
+    for host_key, name, value, encrypted in rows:
+        if not name:
             continue
-        name = entry.get("name")
-        value = entry.get("value")
-        domain = (entry.get("domain") or "").lstrip(".").lower()
-        if not name or value is None:
+        host = (host_key or "").lstrip(".").lower()
+        if not any(host == d or host.endswith("." + d) for d in _COOKIE_DOMAINS):
             continue
-        if not any(domain == d or domain.endswith("." + d) for d in _COOKIE_DOMAINS):
+        if value:
+            jar[name] = value
             continue
-        jar[name] = value
+        if not encrypted or not encrypted.startswith(_V10):
+            continue
+        try:
+            plain = _aes_gcm_decrypt(
+                key,
+                encrypted[3:3 + _GCM_NONCE],
+                encrypted[3 + _GCM_NONCE:-_GCM_TAG],
+                encrypted[-_GCM_TAG:],
+            )
+        except OSError:
+            continue
+        # Chromium prefixes the value with sha256(host_key). A mismatch means
+        # the blob was not written for this row, so it is not this cookie.
+        if plain[:32] != hashlib.sha256((host_key or "").encode()).digest():
+            continue
+        jar[name] = plain[32:].decode("utf-8", "replace")
     return jar
 
 
-def read_devtools_cookies(port, deadline):
-    """The browser's YouTube/Google cookies, via the DevTools protocol.
+def stored_sign_in_cookies():
+    """A session already in the profile sign-in would open, without opening it.
 
-    The browser decrypts its own store, so this works where a file read cannot
-    (App-Bound Encryption). Empty when there is no signed-in session yet, which
-    is the normal state right after the window opens.
+    This is the "already signed in" path: no window, no process, nothing to
+    click. Empty when there is no such profile or no session in it.
     """
-    version = _http_json(f"http://127.0.0.1:{int(port)}/json/version")
-    ws_url = version.get("webSocketDebuggerUrl")
-    if not ws_url:
-        raise _WebSocketError("the DevTools endpoint published no WebSocket URL")
-
-    socket_client = _WebSocket(ws_url, timeout=5.0).connect()
-    try:
-        try:
-            result = socket_client.call(
-                "Storage.getCookies", deadline=deadline, message_id=1
-            )
-        except _WebSocketError:
-            # Older/edge builds may not expose Storage; Network is the alias.
-            result = socket_client.call(
-                "Network.getAllCookies", deadline=deadline, message_id=2
-            )
-    finally:
-        socket_client.close()
-    return _cookies_from_cdp(result.get("cookies"))
+    if sign_in_plan()[0] != "profile":
+        return {}
+    candidates = controllable_browsers()
+    if not candidates:
+        return {}
+    _, exe = candidates[0]
+    return read_profile_cookies(_profile_for(browser_profile_dir(), exe)) or {}
 
 
-# --------------------------------------------------------------- Firefox
+def cookies_from_disk():
+    """Any session already on this machine, without opening anything."""
+    return cookies_from_firefox() or stored_sign_in_cookies()
+
 
 def _firefox_profile_dirs():
     roots = [

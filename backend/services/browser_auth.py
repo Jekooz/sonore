@@ -3,19 +3,22 @@ Browser-based sign-in orchestration.
 
 No browser extension is involved. One attempt does, in order:
 
-1. **Zero-click** — read an already signed-in Firefox profile straight from
-   disk (``browser_cookies.cookies_from_firefox``). Nothing opens; a returning
-   Firefox user is simply signed in.
-2. **A window to sign in** — start the browser the user actually chose in
-   Windows in a profile this app owns, pointed at music.youtube.com, and read
-   the session over the DevTools protocol once the user has signed in
-   (``browser_cookies.launch_controllable_browser`` / ``read_devtools_cookies``).
-   If their default is Firefox, the same window is their own Firefox and the
-   poll loop reads the profile instead — Firefox cannot be driven, and does not
-   need to be. Edge or Chrome is driven only when nothing else can be. This is
-   a normal browser window: Google sees nothing to object to, and there is no
-   extension to load.
-3. **Hand-off** — the Settings "paste request headers" fallback delivers a jar
+1. **Zero-click** -- read a session that is already on this machine: an
+   already signed-in Firefox profile, or the profile sign-in itself would open
+   (``browser_cookies.cookies_from_disk``). Nothing opens; a returning user is
+   simply signed in.
+
+2. **A window to sign in** -- start the browser the user actually chose in
+   Windows in a profile this app owns, pointed at music.youtube.com
+   (``browser_cookies.launch_readable_browser``). They sign in there exactly as
+   they would anywhere else and close the window; the session is then read out
+   of that profile (``browser_cookies.read_profile_cookies``). If their default
+   is Firefox, the same window is their own Firefox and the poll loop reads the
+   profile instead -- Firefox keeps cookies in a plain file, so it does not need
+   to be closed first. This is a normal browser window with no debugging port,
+   which is the only kind Google will let sign in.
+
+3. **Hand-off** -- the Settings "paste request headers" fallback delivers a jar
    to this attempt directly (``deliver``).
 
 A validated jar is stored through the same encrypted path as every other
@@ -35,9 +38,9 @@ import webbrowser
 from services.browser_cookies import (
     BrowserLaunchError,
     browser_profile_dir,
-    cookies_from_firefox,
-    launch_controllable_browser,
-    read_devtools_cookies,
+    close_browser_window,
+    launch_readable_browser,
+    read_profile_cookies,
     sign_in_plan,
 )
 
@@ -47,6 +50,10 @@ MUSIC_URL = "https://music.youtube.com"
 
 POLL_INTERVAL_SECONDS = 2.0
 WAIT_TIMEOUT_SECONDS = 180.0  # 3 minutes, per spec
+
+# How long a window that is still open gets to shut down -- and flush its cookie
+# store -- when the attempt runs out of time.
+CLOSE_GRACE_SECONDS = 15.0
 
 # Cookies that must be present before a captured jar is worth verifying. Kept in
 # step with ytmusic_client.REQUIRED_COOKIES; duplicated here so this module
@@ -70,7 +77,10 @@ class BrowserAuthSession:
         self._error = None
         self._wake = threading.Event()
         self._thread = None
-        self._devtools_port = 0
+        # The sign-in window this attempt opened, and the profile it owns. The
+        # window is what the user signs in; the profile is what is read.
+        self._process = None
+        self._profile_dir = None
         self._open_browser = True
         # Replaced by sign_in_plan() the moment an attempt opens a browser, so
         # the prompt the user reads and the window that opens cannot disagree.
@@ -123,6 +133,10 @@ class BrowserAuthSession:
             if self._state == "waiting":
                 self._state = "cancelled"
         self._wake.set()
+        # Take the window with it: left open, it would hold its profile locked
+        # (so the next attempt could not read it) and Chromium would hand the
+        # next launch off to it and exit, which reads as an instant failure.
+        close_browser_window(self._process)
 
     def complete_with_cookies(self, source_name):
         """Cookie hand-off arrived (main.py validates + stores, then calls this)."""
@@ -190,15 +204,15 @@ class BrowserAuthSession:
             self._browser = browser
 
         if mode == "firefox":
-            # Their default is Firefox, which cannot be driven over DevTools and
-            # does not need to be: its cookies are a plain SQLite file. Open the
-            # URL in the profile they already use and the poll loop reads the
-            # session out of it.
+            # Their default is Firefox, which keeps cookies in a plain SQLite
+            # file that is only readable in place. Open the URL in the profile
+            # they already use and the poll loop reads the session out of it --
+            # which is also what makes an already-signed-in Firefox zero-click.
             return self._open_in_default_browser()
 
-        if mode == "devtools":
+        if mode == "profile":
             try:
-                name, port = launch_controllable_browser(
+                name, profile_dir, process = launch_readable_browser(
                     MUSIC_URL, browser_profile_dir()
                 )
             except BrowserLaunchError as e:
@@ -207,10 +221,11 @@ class BrowserAuthSession:
                 return False
             with self._lock:
                 self._browser = name
-                self._devtools_port = port
+                self._profile_dir = profile_dir
+                self._process = process
             return True
 
-        # Nothing on this machine can be driven, so an attempt could only ever
+        # Nothing on this machine can be read, so an attempt could only ever
         # time out. Say what to do instead of waiting three minutes for it.
         self.fail(
             "Sign-in could not open a browser window it can read. You can sign "
@@ -244,32 +259,60 @@ class BrowserAuthSession:
                 self.complete_with_cookies("hand-off")
                 return
 
-            # A session in the window this app opened, or in the user's own
-            # Firefox when that is the browser sign-in is using.
-            if self._devtools_port:
-                try:
-                    jar = read_devtools_cookies(
-                        self._devtools_port,
-                        deadline=time.monotonic() + POLL_INTERVAL_SECONDS,
-                    )
-                except Exception as e:  # noqa: BLE001 - the window may not be ready
-                    logger.debug("browser auth: DevTools read skipped (%s)", e)
-                    jar = None
-            elif self._direct_reader is not None:
-                jar = self._read_directly()
-            else:
-                jar = None
-
+            jar, window_closed = self._read_jar()
             if jar and all(jar.get(name) for name in _REQUIRED_COOKIES):
                 # Once the required cookies are there the user HAS signed in,
                 # so a refusal is a real failure, not a transient one.
-                source = "sign-in window" if self._devtools_port else "browser profile"
-                self._complete(jar, source, fatal=True)
+                self._complete(jar, "sign-in window", fatal=True)
+                return
+
+            if window_closed and jar is not None:
+                # The window is gone and its store could be read: nothing can
+                # change any more, and it held no session.
+                self.fail(
+                    f"The {self._browser} window closed before you signed in. "
+                    "Start sign-in again to retry."
+                )
                 return
 
             if self._wake.wait(POLL_INTERVAL_SECONDS):
                 return  # cancelled or failed
 
+        self._finish_after_timeout()
+
+    def _read_jar(self):
+        """The session this attempt is waiting on, and whether its window is gone.
+
+        A Chromium window can only be read once it has closed -- the browser
+        holds its cookie store open, and commits to it on a timer -- so while it
+        is up there is nothing to read and the store stays locked. Firefox is
+        readable in place, which is why it is polled instead.
+        """
+        if self._process is not None:
+            if self._process.poll() is None:
+                return None, False
+            return read_profile_cookies(self._profile_dir), True
+        if self._direct_reader is not None:
+            return self._read_directly(), False
+        return None, False
+
+    def _finish_after_timeout(self):
+        """Out of time: a window still open may well hold a session.
+
+        Closing it flushes the cookie store, so signing in and then walking away
+        without closing the window still ends in a signed-in app rather than a
+        failure the user cannot explain.
+        """
+        if self._process is not None and self._process.poll() is None:
+            close_browser_window(self._process)
+            deadline = time.monotonic() + CLOSE_GRACE_SECONDS
+            while time.monotonic() < deadline and self._process.poll() is None:
+                time.sleep(0.25)
+            time.sleep(0.5)  # let the store finish writing
+            jar = read_profile_cookies(self._profile_dir)
+            if jar and all(jar.get(name) for name in _REQUIRED_COOKIES):
+                self._complete(jar, "sign-in window", fatal=True)
+                return
         self.fail(
             f"Timed out after {int(WAIT_TIMEOUT_SECONDS / 60)} minutes waiting for "
             f"sign-in in {self._browser}"

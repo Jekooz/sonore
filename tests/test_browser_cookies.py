@@ -21,6 +21,8 @@ import sys
 import threading
 import time
 
+import pytest
+
 BACKEND_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend"
 )
@@ -347,3 +349,232 @@ def _ws_server_error_then_ok():
 
     threading.Thread(target=serve, daemon=True).start()
     return port, state
+
+
+# ------------------------------------------------- which browser sign-in uses
+#
+# The point of this section: sign-in must follow the browser the user chose in
+# Windows, not a vendor preference. The decision is one function, and these pin
+# every branch of it without touching this machine's real registry or files.
+
+def _install_with_version_folder(root, exe_name="somebrowser.exe"):
+    """A Chromium-style install: the exe beside a numbered version folder."""
+    (root / "154.0.8037.181").mkdir(parents=True, exist_ok=True)
+    exe = root / exe_name
+    exe.write_bytes(b"")
+    return str(exe)
+
+
+def test_the_executable_is_read_out_of_a_shell_open_command(tmp_path):
+    exe = tmp_path / "comet.exe"
+    exe.write_bytes(b"")
+
+    # The forms Windows actually registers: quoted with arguments, and bare.
+    assert bc._exe_from_command(f'"{exe}" --single-argument %1') == str(exe)
+    assert bc._exe_from_command(f'{exe} "%1"') == str(exe)
+    assert bc._exe_from_command('"C:\\nowhere\\missing.exe" %1') is None
+    assert bc._exe_from_command("") is None
+
+
+def test_the_default_browser_is_named_from_its_progid(monkeypatch, tmp_path):
+    exe = tmp_path / "comet.exe"
+    exe.write_bytes(b"")
+    monkeypatch.setattr(bc, "_userchoice_progid", lambda: "CometHTM")
+    monkeypatch.setattr(
+        bc, "_progid_command", lambda progid: f'"{exe}" --single-argument %1'
+    )
+
+    assert bc.default_browser() == ("Comet", str(exe))
+
+
+def test_a_browser_nobody_listed_is_named_from_its_executable(
+    monkeypatch, tmp_path
+):
+    """A new browser still gets a name, so the prompt never says 'unknown'."""
+    exe = tmp_path / "zen-browser.exe"
+    exe.write_bytes(b"")
+    monkeypatch.setattr(bc, "_userchoice_progid", lambda: "ZenHTML.9f2c")
+    monkeypatch.setattr(bc, "_progid_command", lambda progid: f'"{exe}" %1')
+
+    assert bc.default_browser() == ("Zen Browser", str(exe))
+
+
+def test_no_association_means_no_default_browser(monkeypatch):
+    monkeypatch.setattr(bc, "_userchoice_progid", lambda: "")
+    assert bc.default_browser() is None
+
+
+def test_firefox_is_recognised_by_name_and_by_executable():
+    assert bc.is_firefox("Mozilla Firefox", r"C:\Firefox\firefox.exe")
+    assert bc.is_firefox("Waterfox", r"C:\Waterfox\waterfox.exe")
+    assert bc.is_firefox("", r"C:\x\firefox.exe")
+    assert not bc.is_firefox("Comet", r"C:\Comet\comet.exe")
+
+
+def test_a_numbered_version_folder_means_chromium_is_drivable(tmp_path):
+    """How an unlisted browser (Comet) is known to be drivable at all."""
+    assert bc.is_probably_chromium(_install_with_version_folder(tmp_path))
+
+
+def test_a_firefox_shaped_install_is_not_drivable(tmp_path):
+    install = tmp_path / "Firefox"
+    (install / "defaults").mkdir(parents=True)
+    exe = install / "somebrowser.exe"
+    exe.write_bytes(b"")
+
+    assert not bc.is_probably_chromium(str(exe))
+    assert not bc.is_probably_chromium("")
+
+
+def test_a_known_chromium_browser_needs_no_folder_check(tmp_path):
+    assert bc.is_probably_chromium(str(tmp_path / "brave.exe"))
+
+
+def test_the_default_browser_is_the_first_candidate(monkeypatch, tmp_path):
+    exe = _install_with_version_folder(tmp_path, "comet.exe")
+    monkeypatch.setattr(bc, "default_browser", lambda: ("Comet", exe))
+    monkeypatch.setattr(
+        bc, "_app_paths_key",
+        lambda name: {
+            "msedge.exe": r"C:\Edge\msedge.exe",
+            "chrome.exe": r"C:\Chrome\chrome.exe",
+        }.get(name),
+    )
+    monkeypatch.setattr(bc, "_known_install", lambda exe_name, subdirs: None)
+
+    assert bc.controllable_browsers() == [
+        ("Comet", exe),
+        ("Microsoft Edge", r"C:\Edge\msedge.exe"),
+        ("Google Chrome", r"C:\Chrome\chrome.exe"),
+    ]
+
+
+def test_a_browser_that_is_already_the_default_is_not_listed_twice(monkeypatch):
+    monkeypatch.setattr(
+        bc, "default_browser", lambda: ("Microsoft Edge", r"C:\Edge\msedge.exe")
+    )
+    monkeypatch.setattr(
+        bc, "_app_paths_key",
+        lambda name: r"C:\Edge\msedge.exe" if name == "msedge.exe" else None,
+    )
+    monkeypatch.setattr(bc, "_known_install", lambda exe_name, subdirs: None)
+
+    assert bc.controllable_browsers() == [
+        ("Microsoft Edge", r"C:\Edge\msedge.exe"),
+    ]
+
+
+def test_firefox_is_never_a_candidate(monkeypatch):
+    """It is read from its own profile, not driven."""
+    monkeypatch.setattr(
+        bc, "default_browser", lambda: ("Mozilla Firefox", r"C:\Firefox\firefox.exe")
+    )
+    monkeypatch.setattr(bc, "_app_paths_key", lambda name: None)
+    monkeypatch.setattr(bc, "_known_install", lambda exe_name, subdirs: None)
+
+    assert bc.controllable_browsers() == []
+
+
+def test_the_plan_reads_a_default_firefox_profile(monkeypatch, tmp_path):
+    profile = tmp_path / "abc123.default-release"
+    profile.mkdir()
+    (profile / "cookies.sqlite").write_bytes(b"")
+    monkeypatch.setattr(bc, "_firefox_profile_dirs", lambda: iter([str(profile)]))
+    monkeypatch.setattr(
+        bc, "default_browser", lambda: ("Mozilla Firefox", r"C:\Firefox\firefox.exe")
+    )
+
+    assert bc.sign_in_plan() == ("firefox", "Mozilla Firefox")
+
+
+def test_the_plan_drives_a_chromium_default(monkeypatch, tmp_path):
+    exe = _install_with_version_folder(tmp_path, "comet.exe")
+    monkeypatch.setattr(bc, "_firefox_profile_dirs", lambda: iter([]))
+    monkeypatch.setattr(bc, "default_browser", lambda: ("Comet", exe))
+    monkeypatch.setattr(bc, "_app_paths_key", lambda name: None)
+    monkeypatch.setattr(
+        bc, "_known_install", lambda exe_name, subdirs: r"C:\Edge\msedge.exe"
+    )
+
+    assert bc.sign_in_plan() == ("devtools", "Comet")
+
+
+def test_the_plan_falls_back_to_edge_when_the_default_cannot_be_driven(
+    monkeypatch, tmp_path
+):
+    exotic = tmp_path / "exoticbrowser.exe"
+    exotic.write_bytes(b"")
+    monkeypatch.setattr(bc, "_firefox_profile_dirs", lambda: iter([]))
+    monkeypatch.setattr(bc, "default_browser", lambda: ("Exotic", str(exotic)))
+    monkeypatch.setattr(
+        bc, "_app_paths_key",
+        lambda name: r"C:\Edge\msedge.exe" if name == "msedge.exe" else None,
+    )
+    monkeypatch.setattr(bc, "_known_install", lambda exe_name, subdirs: None)
+
+    assert bc.sign_in_plan() == ("devtools", "Microsoft Edge")
+
+
+def test_the_plan_admits_when_nothing_can_be_read(monkeypatch, tmp_path):
+    """No drivable browser at all: the caller must fail, not open a window."""
+    exotic = tmp_path / "exoticbrowser.exe"
+    exotic.write_bytes(b"")
+    monkeypatch.setattr(bc, "_firefox_profile_dirs", lambda: iter([]))
+    monkeypatch.setattr(bc, "default_browser", lambda: ("Exotic", str(exotic)))
+    monkeypatch.setattr(bc, "_app_paths_key", lambda name: None)
+    monkeypatch.setattr(bc, "_known_install", lambda exe_name, subdirs: None)
+
+    assert bc.sign_in_plan() == ("shell", "Exotic")
+
+
+def test_each_browser_gets_a_profile_of_its_own():
+    """Two browsers must never share one Chromium profile directory."""
+    assert bc._profile_for("C:\\profiles", r"C:\Comet\comet.exe") == os.path.join(
+        "C:\\profiles", "comet"
+    )
+    assert bc._profile_for("C:\\profiles", r"C:\Edge\msedge.exe") == os.path.join(
+        "C:\\profiles", "msedge"
+    )
+
+
+def test_a_candidate_that_will_not_start_falls_through_to_the_next(
+    monkeypatch, tmp_path
+):
+    """A build that refuses the debugging port must not cost a working one."""
+    attempts = []
+    monkeypatch.setattr(
+        bc, "controllable_browsers",
+        lambda: [
+            ("Comet", r"C:\Comet\comet.exe"),
+            ("Microsoft Edge", r"C:\Edge\msedge.exe"),
+        ],
+    )
+
+    def launch_one(name, exe, url, profile_dir):
+        attempts.append(name)
+        if name == "Comet":
+            raise bc.BrowserLaunchError("it did not open a debugging port in time")
+        return 4321
+
+    monkeypatch.setattr(bc, "_launch_one", launch_one)
+
+    assert bc.launch_controllable_browser(
+        "https://music.youtube.com", str(tmp_path)
+    ) == ("Microsoft Edge", 4321)
+    assert attempts == ["Comet", "Microsoft Edge"]
+
+
+def test_no_browser_that_starts_says_where_to_go_instead(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        bc, "controllable_browsers", lambda: [("Comet", r"C:\Comet\comet.exe")]
+    )
+    monkeypatch.setattr(
+        bc, "_launch_one",
+        lambda *a: (_ for _ in ()).throw(bc.BrowserLaunchError("nope")),
+    )
+
+    with pytest.raises(bc.BrowserLaunchError) as refused:
+        bc.launch_controllable_browser("https://music.youtube.com", str(tmp_path))
+
+    assert "Comet" in str(refused.value)
+    assert "Settings" in str(refused.value)

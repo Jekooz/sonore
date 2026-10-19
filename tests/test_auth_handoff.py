@@ -315,19 +315,33 @@ def test_start_can_skip_opening_the_browser_for_the_paste_flow(client, monkeypat
     assert opened == [], "the paste flow must not open a window"
 
 
-def test_start_still_opens_the_browser_when_none_is_controllable(client, monkeypatch):
+def test_start_fails_with_a_way_forward_when_nothing_is_controllable(
+    client, monkeypatch
+):
+    """No browser the app can read: say what to do, not open a useless window.
+
+    An attempt that cannot finish is worse than an honest failure, because the
+    waiting screen says sign-in completes on its own.
+    """
     opened = []
     monkeypatch.setattr(
         browser_auth,
         "webbrowser",
-        __import__("types").SimpleNamespace(open_new_tab=opened.append),
+        __import__("types").SimpleNamespace(
+            open_new_tab=lambda url: opened.append(url) or True
+        ),
     )
-    start(client)
+    monkeypatch.setattr(
+        browser_auth, "sign_in_plan", lambda: ("shell", "Some Browser")
+    )
 
-    deadline = time.monotonic() + 5
-    while not opened and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert opened == [browser_auth.MUSIC_URL]
+    state, _ = start(client)
+    assert state in ("waiting", "failed"), "the attempt must not stay silent"
+
+    settled = wait_for_session_to_settle(client)
+    assert settled["state"] == "failed", settled
+    assert "Settings" in (settled["error"] or "")
+    assert opened == [], "a flow that cannot finish must not open a window"
 
 
 def test_pasted_headers_with_cookie_line_sign_in(client, monkeypatch, api_token):

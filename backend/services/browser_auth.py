@@ -6,12 +6,15 @@ No browser extension is involved. One attempt does, in order:
 1. **Zero-click** — read an already signed-in Firefox profile straight from
    disk (``browser_cookies.cookies_from_firefox``). Nothing opens; a returning
    Firefox user is simply signed in.
-2. **A window to sign in** — start the Edge/Chrome that ships with the machine
-   in a profile this app owns, pointed at music.youtube.com, and read the
-   session over the DevTools protocol once the user has signed in
+2. **A window to sign in** — start the browser the user actually chose in
+   Windows in a profile this app owns, pointed at music.youtube.com, and read
+   the session over the DevTools protocol once the user has signed in
    (``browser_cookies.launch_controllable_browser`` / ``read_devtools_cookies``).
-   This is a normal browser window: Google sees nothing to object to, and there
-   is no extension to load.
+   If their default is Firefox, the same window is their own Firefox and the
+   poll loop reads the profile instead — Firefox cannot be driven, and does not
+   need to be. Edge or Chrome is driven only when nothing else can be. This is
+   a normal browser window: Google sees nothing to object to, and there is no
+   extension to load.
 3. **Hand-off** — the Settings "paste request headers" fallback delivers a jar
    to this attempt directly (``deliver``).
 
@@ -28,15 +31,14 @@ import logging
 import threading
 import time
 import webbrowser
-import winreg
 
 from services.browser_cookies import (
     BrowserLaunchError,
     browser_profile_dir,
     cookies_from_firefox,
-    find_controllable_browser,
     launch_controllable_browser,
     read_devtools_cookies,
+    sign_in_plan,
 )
 
 logger = logging.getLogger("ytmusic-backend")
@@ -50,41 +52,6 @@ WAIT_TIMEOUT_SECONDS = 180.0  # 3 minutes, per spec
 # step with ytmusic_client.REQUIRED_COOKIES; duplicated here so this module
 # stays free of any dependency on the storage layer.
 _REQUIRED_COOKIES = ("__Secure-3PAPISID", "SAPISID", "SID")
-
-# Registry UserChoice ProgId -> friendly browser name. Anything unrecognized is
-# still opened through the OS shell; unknown only means "no friendly name".
-_PROGID_MAP = {
-    "CHROMEHTML": "Chrome",
-    "MSEEDGEHTM": "Edge",
-    "FIREFOXURL-3080465078": "Firefox",
-    "FIREFOXURL": "Firefox",
-    "BRAVEHTML": "Brave",
-    "OPERHTML": "Opera",
-    "OPERAHTM": "Opera",
-    "VIVALDIHTM": "Vivaldi",
-    "COMETHTM": "Comet (Perplexity)",
-}
-
-
-def detect_default_browser() -> str:
-    """Friendly name of the default HTTPS browser, or "default browser".
-
-    Read from HKCU UrlAssociations (the settings the user actually controls),
-    never from a hard-coded path or a specific vendor key.
-    """
-    try:
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
-        ) as key:
-            progid, _ = winreg.QueryValueEx(key, "ProgId")
-        progid_upper = (progid or "").upper()
-        for known, name in _PROGID_MAP.items():
-            if progid_upper.startswith(known.upper()):
-                return name
-        return "default browser"
-    except OSError:
-        return "default browser"
 
 
 class BrowserAuthSession:
@@ -105,7 +72,10 @@ class BrowserAuthSession:
         self._thread = None
         self._devtools_port = 0
         self._open_browser = True
-        self._browser = detect_default_browser()
+        # Replaced by sign_in_plan() the moment an attempt opens a browser, so
+        # the prompt the user reads and the window that opens cannot disagree.
+        # The paste-headers flow never opens one and never resolves this.
+        self._browser = "your browser"
         # The hand-off slot for THIS attempt, per-session on purpose: a shared
         # module-level slot let a superseded attempt's poll loop consume the jar
         # meant for the live one, leaving the app waiting forever on a retry.
@@ -143,10 +113,8 @@ class BrowserAuthSession:
         """
         self._open_browser = open_browser
         if open_browser:
-            found = find_controllable_browser()
-            if found is not None:
-                with self._lock:
-                    self._browser = found[0]
+            with self._lock:
+                self._browser = sign_in_plan()[1]
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -178,6 +146,23 @@ class BrowserAuthSession:
 
     # ---------------- the attempt ----------------
 
+    def _read_directly(self, first=False):
+        """A zero-click jar from the user's own browser profile, if any.
+
+        [first] is the read made before anything opens, where a failure is worth
+        a warning; the poll loop repeats it every couple of seconds, where a
+        failure is only ever noise.
+        """
+        try:
+            return self._direct_reader()
+        except Exception as e:  # noqa: BLE001 - any read failure is "no jar"
+            logger.log(
+                logging.WARNING if first else logging.DEBUG,
+                "browser auth: direct cookie read failed (%s)",
+                e,
+            )
+            return None
+
     def _is_waiting(self) -> bool:
         with self._lock:
             return self._state == "waiting"
@@ -186,11 +171,7 @@ class BrowserAuthSession:
         # 1. Zero-click: a browser already holding a session. A refusal here is
         #    not fatal — it just means the user has to sign in in the window.
         if self._direct_reader is not None and self._is_waiting():
-            try:
-                jar = self._direct_reader()
-            except Exception as e:  # noqa: BLE001 - any read failure is "no jar"
-                logger.warning("browser auth: direct cookie read failed (%s)", e)
-                jar = None
+            jar = self._read_directly(first=True)
             if jar and all(jar.get(name) for name in _REQUIRED_COOKIES):
                 if self._complete(jar, "installed browser", fatal=False):
                     return
@@ -204,30 +185,54 @@ class BrowserAuthSession:
         self._poll_loop()
 
     def _start_browser(self) -> bool:
-        found = find_controllable_browser()
-        if found is None:
-            # No controllable browser: open the default browser through the OS
-            # shell so the user can still copy request headers into Settings.
+        mode, browser = sign_in_plan()
+        with self._lock:
+            self._browser = browser
+
+        if mode == "firefox":
+            # Their default is Firefox, which cannot be driven over DevTools and
+            # does not need to be: its cookies are a plain SQLite file. Open the
+            # URL in the profile they already use and the poll loop reads the
+            # session out of it.
+            return self._open_in_default_browser()
+
+        if mode == "devtools":
             try:
-                webbrowser.open_new_tab(MUSIC_URL)
-                logger.info(
-                    "browser auth: %s opened through the OS shell (no controllable browser)",
-                    MUSIC_URL,
+                name, port = launch_controllable_browser(
+                    MUSIC_URL, browser_profile_dir()
                 )
-            except Exception as e:  # noqa: BLE001
-                self.fail(f"Could not open a browser: {e}")
+            except BrowserLaunchError as e:
+                logger.error("browser auth: %s", e)
+                self.fail(str(e))
                 return False
+            with self._lock:
+                self._browser = name
+                self._devtools_port = port
             return True
 
+        # Nothing on this machine can be driven, so an attempt could only ever
+        # time out. Say what to do instead of waiting three minutes for it.
+        self.fail(
+            "Sign-in could not open a browser window it can read. You can sign "
+            "in to YouTube Music in your own browser and paste the request "
+            "headers in Settings, under Account."
+        )
+        return False
+
+    def _open_in_default_browser(self) -> bool:
+        """Open the sign-in page through the OS shell.
+
+        The shell is what applies the user's own default-browser setting, so
+        this needs no knowledge of which browser that is.
+        """
         try:
-            port = launch_controllable_browser(MUSIC_URL, browser_profile_dir())
-        except BrowserLaunchError as e:
-            logger.error("browser auth: %s", e)
-            self.fail(str(e))
-            return False
-        with self._lock:
-            self._devtools_port = port
-        return True
+            if webbrowser.open_new_tab(MUSIC_URL):
+                logger.info("browser auth: %s opened in the default browser", MUSIC_URL)
+                return True
+            self.fail("Could not open your browser to sign in.")
+        except Exception as e:  # noqa: BLE001
+            self.fail(f"Could not open your browser to sign in: {e}")
+        return False
 
     def _poll_loop(self):
         deadline = time.monotonic() + WAIT_TIMEOUT_SECONDS
@@ -239,7 +244,8 @@ class BrowserAuthSession:
                 self.complete_with_cookies("hand-off")
                 return
 
-            # A session in the window this app opened.
+            # A session in the window this app opened, or in the user's own
+            # Firefox when that is the browser sign-in is using.
             if self._devtools_port:
                 try:
                     jar = read_devtools_cookies(
@@ -249,11 +255,17 @@ class BrowserAuthSession:
                 except Exception as e:  # noqa: BLE001 - the window may not be ready
                     logger.debug("browser auth: DevTools read skipped (%s)", e)
                     jar = None
-                if jar and all(jar.get(name) for name in _REQUIRED_COOKIES):
-                    # Once the required cookies are there the user HAS signed
-                    # in, so a refusal is a real failure, not a transient one.
-                    self._complete(jar, "sign-in window", fatal=True)
-                    return
+            elif self._direct_reader is not None:
+                jar = self._read_directly()
+            else:
+                jar = None
+
+            if jar and all(jar.get(name) for name in _REQUIRED_COOKIES):
+                # Once the required cookies are there the user HAS signed in,
+                # so a refusal is a real failure, not a transient one.
+                source = "sign-in window" if self._devtools_port else "browser profile"
+                self._complete(jar, source, fatal=True)
+                return
 
             if self._wake.wait(POLL_INTERVAL_SECONDS):
                 return  # cancelled or failed

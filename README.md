@@ -48,15 +48,18 @@ Everything below is present in the code on this branch:
 - **Shuffle and repeat** — off / all / one, persisted between runs.
 - **Synced lyrics** — lyric lines with timestamps; the screen follows playback
   and seek-by-tap when a synced source is available.
-- **Sign-in** — sign in with Google in a browser window, with **nothing to
-  install**: the local service either reads an already signed-in Firefox profile
-  directly (no window, no click) or opens Microsoft Edge (or Chrome) in a profile
-  it owns, and captures the session over the DevTools protocol the moment the
-  user has signed in. There is no extension to load and no token to copy. A
-  "paste request headers" fallback in Settings → Account feeds the same
-  loopback-only endpoint when a machine cannot drive a browser. The session is
-  stored encrypted on this device, an expired session is reported as signed-out
-  (not broken), and a failed sign-in never damages a working one.
+- **Sign-in** — sign in with Google in your own browser, with **nothing to
+  install**. The local service uses the browser you set as default in Windows:
+  a Chromium one (Comet, Brave, Chrome, Edge, ...) is opened in a profile it
+  owns and the session is captured over the DevTools protocol the moment you
+  have signed in; if your default is Firefox, the page opens in the profile you
+  already use and the session is read from it — no window needed at all when you
+  were already signed in there. Edge or Chrome is used only if your own default
+  cannot be. There is no extension to load and no token to copy. A "paste
+  request headers" fallback in Settings → Account feeds the same loopback-only
+  endpoint when a machine cannot drive a browser. The session is stored
+  encrypted on this device, an expired session is reported as signed-out (not
+  broken), and a failed sign-in never damages a working one.
 - **Ten-band equalizer** — per-band gain on top of media_kit's audio bindings,
   with named presets and manual editing (`ytm_app/lib/audio/`,
   `ytm_app/lib/features/equalizer/`).
@@ -87,10 +90,14 @@ everything the app needs at run time — nothing has to be installed first:
   endpoint. It can also update itself into `%LOCALAPPDATA%\Sonore\bin\`
   (see **Settings → Playback → Update playback engine**).
 
-Sign-in needs none of the user's tooling: the app drives the Edge (or Chrome)
-that ships with Windows in a profile of its own under
-`%LOCALAPPDATA%\Sonore\sign-in-browser`, so it never touches the default
-browser's profile or its stored passwords. Signing out removes that profile.
+Sign-in needs none of the user's tooling. It uses the browser they set as
+default in Windows, in a profile of its own under
+`%LOCALAPPDATA%\Sonore\sign-in-browser\<browser>`, so it never touches their
+real profile or its stored passwords. The one exception is a Firefox default:
+Firefox keeps cookies in a plain SQLite file that is only readable in place, so
+the page is opened in the profile they already use and read from there — which
+is also what makes an already-signed-in Firefox a zero-click sign-in. Signing
+out removes every profile the app created.
 
 The app starts the Python it shipped with rather than whatever happens to be on
 the machine, so the packages it runs against are fixed by the installer. Setting
@@ -159,13 +166,13 @@ cd ytm_app && flutter test            # 354 widget and unit tests
 
 Flutter (Riverpod + go_router, media_kit for playback) talking over `http` to a
 local FastAPI service that wraps `ytmusicapi` and `yt-dlp` on `127.0.0.1`.
-Sign-in is performed in a browser window the local service drives; the session it
-derives from that window is stored **encrypted on this device** and token/cookie
-values are never logged (the Settings page states this too). The service binds to
-loopback only, rejects non-loopback callers and foreign web origins, and requires
-a per-install **API token** (`X-Sonore-Token`) on every account, library and
-stream route — the app fetches its own copy — so a stray local process or web
-page cannot read your account even on the same machine.
+Sign-in is performed in the browser the user set as default in Windows; the
+session it derives from that browser is stored **encrypted on this device** and
+token/cookie values are never logged (the Settings page states this too). The
+service binds to loopback only, rejects non-loopback callers and foreign web
+origins, and requires a per-install **API token** (`X-Sonore-Token`) on every
+account, library and stream route — the app fetches its own copy — so a stray
+local process or web page cannot read your account even on the same machine.
 
 ## Building the installer
 

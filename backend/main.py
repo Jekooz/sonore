@@ -52,11 +52,10 @@ from ytmusicapi import YTMusic
 
 from services.browser_auth import (
     BrowserAuthSession,
-    detect_default_browser,
 )
 from services.browser_cookies import (
     cookies_from_firefox,
-    find_controllable_browser,
+    planned_browser_name,
     remove_browser_profile,
 )
 from services import ranking, recommend
@@ -349,15 +348,14 @@ def _sign_in_pending() -> bool:
 
 @app.get("/auth/browser/info")
 def auth_browser_info():
-    """The browser sign-in will drive, for the UI's prompt text.
+    """The browser sign-in will use, for the UI's prompt text.
 
-    The window a sign-in opens is a controlled Edge/Chrome -- a real browser, so
-    Google signs in normally. Only when the machine has neither does sign-in
-    fall back to the default browser plus the paste-headers path.
+    The browser the user chose in Windows, because that is the browser they
+    wanted: a Chromium one is driven in a profile this app owns, and Firefox is
+    read from the profile they already use. Only when their default cannot be
+    used does this name the Edge/Chrome that every Windows machine has.
     """
-    found = find_controllable_browser()
-    browser = found[0] if found else detect_default_browser()
-    return JSONResponse(content={"browser": browser})
+    return JSONResponse(content={"browser": planned_browser_name()})
 
 
 @app.get("/auth/install-token")
@@ -384,9 +382,12 @@ def auth_browser_start(payload: dict | None = None):
     Start a sign-in. The sidecar owns it end to end, so there is exactly one
     window and no extension to install:
 
-      * an already signed-in Firefox is read straight from disk (no window),
-      * otherwise Edge/Chrome opens in a profile this app owns, the user signs
-        in there, and the session is read over the DevTools protocol.
+      * an already signed-in browser profile is read straight from disk (no
+        window),
+      * otherwise the browser the user set as default in Windows is opened --
+        in a profile this app owns when it is a Chromium, or their own profile
+        when it is Firefox -- and the session is read back automatically,
+      * Edge or Chrome only when their own default cannot be used.
 
     With {"open_browser": false} nothing is opened and nothing is read -- the
     attempt only waits, which is what the Settings paste-headers fallback needs.
@@ -418,11 +419,10 @@ def auth_browser_start(payload: dict | None = None):
 @app.get("/auth/browser/status")
 def auth_browser_status():
     if _browser_session is None:
-        found = find_controllable_browser()
         return JSONResponse(
             content={
                 "state": "idle",
-                "browser": found[0] if found else detect_default_browser(),
+                "browser": planned_browser_name(),
                 "error": None,
             }
         )

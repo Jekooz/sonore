@@ -87,12 +87,22 @@ def isolated_env(tmp_path, monkeypatch):
     assert "ytmusic_client" not in ytc._AUTH_FILE
 
     # Sign-in must never launch a browser or read the machine's own cookies.
+    # Pin the decision itself, so a test never depends on this machine's own
+    # default browser: an ordinary drivable browser that produces no session.
     monkeypatch.setattr(
-        browser_auth, "webbrowser",
-        types.SimpleNamespace(open_new_tab=lambda url: None),
+        browser_auth, "sign_in_plan", lambda: ("devtools", "Microsoft Edge")
     )
     monkeypatch.setattr(
-        browser_auth, "find_controllable_browser", lambda: None, raising=False
+        browser_auth, "webbrowser",
+        types.SimpleNamespace(open_new_tab=lambda url: True),
+    )
+    monkeypatch.setattr(
+        browser_auth, "launch_controllable_browser",
+        lambda url, profile: ("Microsoft Edge", 9222),
+    )
+    monkeypatch.setattr(
+        browser_auth, "read_devtools_cookies", lambda port, deadline: None,
+        raising=False,
     )
     monkeypatch.setattr(
         browser_auth, "browser_profile_dir", lambda: str(sonore / "sign-in-browser"),
@@ -160,16 +170,15 @@ def stub_storage(monkeypatch, verify=None, store=None):
     return calls
 
 
-def use_controllable_browser(monkeypatch, cookies=None, port=9222):
+def use_controllable_browser(monkeypatch, cookies=None, port=9222, name="Microsoft Edge"):
     """Make the capture path behave as if a sign-in window produced a session."""
     monkeypatch.setattr(
-        browser_auth, "find_controllable_browser",
-        lambda: ("Microsoft Edge", r"C:\Edge\msedge.exe"),
+        browser_auth, "sign_in_plan", lambda: ("devtools", name)
     )
     launched = []
     monkeypatch.setattr(
         browser_auth, "launch_controllable_browser",
-        lambda url, profile: launched.append((url, profile)) or port,
+        lambda url, profile: launched.append((url, profile)) or (name, port),
     )
     monkeypatch.setattr(
         browser_auth, "read_devtools_cookies",
@@ -189,14 +198,11 @@ def test_start_reports_a_waiting_attempt_with_no_pairing_token(client):
     assert body.get("error") is None
 
 
-def test_browser_info_names_the_browser_sign_in_will_drive(client, monkeypatch):
-    monkeypatch.setattr(
-        main, "find_controllable_browser",
-        lambda: ("Microsoft Edge", r"C:\Edge\msedge.exe"),
-    )
+def test_browser_info_names_the_browser_sign_in_will_use(client, monkeypatch):
+    monkeypatch.setattr(main, "planned_browser_name", lambda: "Comet")
     resp = client.get("/auth/browser/info")
     assert resp.status_code == 200, resp.text
-    assert resp.json()["browser"] == "Microsoft Edge"
+    assert resp.json()["browser"] == "Comet"
 
 
 def test_start_opens_a_window_in_a_profile_the_app_owns(client, monkeypatch):
@@ -212,6 +218,90 @@ def test_start_opens_a_window_in_a_profile_the_app_owns(client, monkeypatch):
     assert "sign-in-browser" in profile
 
 
+def test_the_users_default_browser_is_the_one_driven(client, monkeypatch):
+    """Their setting decides, not a vendor preference: Comet here, not Edge."""
+    launched = use_controllable_browser(
+        monkeypatch, cookies=None, name="Comet"
+    )
+    start_sign_in(client)
+
+    deadline = time.monotonic() + 5
+    while not launched and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert len(launched) == 1
+    assert client.get("/auth/browser/status").json()["browser"] == "Comet"
+
+
+def test_firefox_default_opens_their_own_browser_and_reads_it(client, monkeypatch):
+    """Firefox cannot be driven, and does not need to be: read its profile."""
+    opened = []
+    monkeypatch.setattr(
+        browser_auth, "sign_in_plan", lambda: ("firefox", "Mozilla Firefox")
+    )
+    monkeypatch.setattr(
+        browser_auth, "webbrowser",
+        types.SimpleNamespace(open_new_tab=lambda url: opened.append(url) or True),
+    )
+    monkeypatch.setattr(
+        browser_auth, "launch_controllable_browser",
+        lambda url, profile: (_ for _ in ()).throw(
+            AssertionError("a Firefox sign-in must not launch a second browser")
+        ),
+    )
+
+    reads = {"count": 0}
+
+    def firefox_once_signed_in():
+        reads["count"] += 1
+        # Nothing yet on the pre-window read; a session appears while the user
+        # is signing in, which is what the poll loop is for.
+        return None if reads["count"] == 1 else dict(GOOD_JAR)
+
+    monkeypatch.setattr(main, "cookies_from_firefox", firefox_once_signed_in)
+    calls = stub_storage(monkeypatch)
+
+    start_sign_in(client)
+    state = wait_for_session_to_settle(client)
+
+    assert opened == [browser_auth.MUSIC_URL], "their own Firefox is opened"
+    assert state["state"] == "success", state
+    assert calls["stored"] == [dict(GOOD_JAR)]
+
+
+def test_a_browser_that_will_not_start_says_so(client, monkeypatch):
+    """A refused launch must surface, not leave the screen waiting."""
+    def refuse(url, profile):
+        raise browser_cookies.BrowserLaunchError(
+            "Comet: it did not open a debugging port in time"
+        )
+
+    monkeypatch.setattr(browser_auth, "launch_controllable_browser", refuse)
+    start_sign_in(client)
+
+    state = wait_for_session_to_settle(client)
+    assert state["state"] == "failed", state
+    assert "debugging port" in (state["error"] or "")
+
+
+def test_nothing_drivable_fails_with_the_paste_fallback(client, monkeypatch):
+    """No browser the app can read: fail with something to do, not a wait."""
+    monkeypatch.setattr(
+        browser_auth, "sign_in_plan", lambda: ("shell", "Some Browser")
+    )
+    monkeypatch.setattr(
+        browser_auth, "launch_controllable_browser",
+        lambda url, profile: (_ for _ in ()).throw(
+            AssertionError("nothing drivable means nothing to launch")
+        ),
+    )
+
+    start_sign_in(client)
+
+    state = wait_for_session_to_settle(client)
+    assert state["state"] == "failed", state
+    assert "Settings" in (state["error"] or ""), state["error"]
+
+
 def test_open_browser_false_neither_reads_nor_launches(client, monkeypatch):
     """The paste-headers fallback supplies the session itself."""
     def explode():
@@ -219,8 +309,10 @@ def test_open_browser_false_neither_reads_nor_launches(client, monkeypatch):
 
     monkeypatch.setattr(main, "cookies_from_firefox", explode)
     monkeypatch.setattr(
-        browser_auth, "find_controllable_browser",
-        lambda: ("Microsoft Edge", r"C:\Edge\msedge.exe"),
+        browser_auth, "sign_in_plan",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("the paste flow must not pick a browser")
+        ),
     )
     monkeypatch.setattr(
         browser_auth, "launch_controllable_browser",
@@ -266,9 +358,6 @@ def test_zero_click_jar_without_a_session_is_not_accepted(client, monkeypatch):
     monkeypatch.setattr(
         main, "cookies_from_firefox",
         lambda: {"YSC": "x", "VISITOR_INFO1_LIVE": "y"},
-    )
-    monkeypatch.setattr(
-        browser_auth, "find_controllable_browser", lambda: None
     )
     calls = stub_storage(monkeypatch)
 

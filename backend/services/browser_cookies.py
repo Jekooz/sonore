@@ -18,11 +18,14 @@ Two dependency-free routes are used instead:
    so a returning Firefox user is signed in with no window and no click at all.
    Read through Python's own ``sqlite3``; nothing is installed.
 
-2. ``launch_controllable_browser()`` + ``read_devtools_cookies()`` -- the Edge
-   (or Chrome) that ships with Windows is started in a profile this app owns,
-   pointed at music.youtube.com. The user signs in there exactly as they would
-   anywhere else, and the session is read over the DevTools protocol, which the
-   browser itself decrypts. No extension, no pasting, nothing to load.
+2. ``launch_controllable_browser()`` + ``read_devtools_cookies()`` -- the
+   browser the user set as default in Windows (Comet, Brave, Chrome, Edge, ...)
+   is started in a profile this app owns, pointed at music.youtube.com. The user
+   signs in there exactly as they would anywhere else, and the session is read
+   over the DevTools protocol, which the browser itself decrypts. No extension,
+   no pasting, nothing to load. A default that cannot be driven -- Firefox, or a
+   build that refuses the debugging port -- falls back to Edge or Chrome, which
+   every Windows machine has.
 
 Everything here is standard library only: ``sqlite3``, ``socket``, ``ssl``,
 ``subprocess`` and a small RFC 6455 client (``_WebSocket``).
@@ -34,6 +37,7 @@ import base64
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -52,16 +56,56 @@ logger = logging.getLogger("ytmusic-backend")
 _COOKIE_DOMAINS = ("youtube.com", "google.com")
 
 # How long a launch may take to answer on its DevTools port before the attempt
-# is called failed. Generous: a cold Edge start on a slow disk is not quick.
-_DEVTOOLS_START_TIMEOUT = 20.0
+# moves on to the next browser, and finally fails. Generous: a cold start on a
+# slow disk is not quick, and this happens before the profile has even loaded.
+_DEVTOOLS_START_TIMEOUT = 15.0
 
-# Chromium browsers this app knows how to drive, most preferred first. Edge is
-# first because every Windows 10/11 machine has it.
+# The browsers that are looked for when the user's own default cannot be driven,
+# in preference order. Both are Chromium builds, so both are drivable, and every
+# Windows machine has at least one of them.
 _BROWSER_CANDIDATES = (
     ("Microsoft Edge", "msedge.exe",
      (r"Microsoft\Edge\Application",)),
     ("Google Chrome", "chrome.exe",
      (r"Google\Chrome\Application",)),
+)
+
+# Chromium browsers put their own files in a folder named after the version they
+# are built from. That is a property of the install rather than of any one
+# vendor, so it is what decides whether a browser nobody has heard of can still
+# be driven over the DevTools protocol.
+_CHROMIUM_VERSION_DIR = re.compile(r"^\d+\.\d+\.\d+(\.\d+)?$")
+
+# Chromium browsers, by executable name. The structure above catches the rest;
+# this only saves a directory listing for the common ones.
+_CHROMIUM_STEMS = (
+    "chrome", "msedge", "brave", "comet", "opera", "launcher", "vivaldi",
+    "chromium", "thorium", "yandex", "iridium", "avastbrowser",
+    "avgsecurebrowser", "sidekick",
+)
+
+# Firefox and the forks that store cookies the same way: a plain SQLite file,
+# which this app reads itself. None of them can be driven over the DevTools
+# protocol (that is Chromium's), and none of them needs to be.
+_FIREFOX_STEMS = (
+    "firefox", "firefox-developer-edition", "firefox-esr", "waterfox",
+    "librewolf", "palemoon", "zen", "floorp",
+)
+
+# ProgId -> the name people know the browser by. Anything not listed is named
+# from its executable instead, so a brand-new browser is not nameless.
+_PROGID_NAMES = (
+    ("MSEEDGEHTM", "Microsoft Edge"),
+    ("CHROMEHTML", "Google Chrome"),
+    ("FIREFOXURL", "Mozilla Firefox"),
+    ("BRAVEHTML", "Brave"),
+    ("COMETHTM", "Comet"),
+    ("OPERASTABLE", "Opera"),
+    ("OPERHTML", "Opera"),
+    ("OPERAHTM", "Opera"),
+    ("VIVALDIHTM", "Vivaldi"),
+    ("THORIUMHTML", "Thorium"),
+    ("YANDEXHTML", "Yandex Browser"),
 )
 
 
@@ -270,6 +314,171 @@ def _read_published_port(port_file):
         return 0
 
 
+# --------------------------------------------------------------- browser identity
+
+def _exe_from_command(command):
+    """The executable a shell open command names, which is what Windows runs."""
+    if not command:
+        return None
+    text = os.path.expandvars(command.strip())
+    if text.startswith('"'):
+        end = text.find('"', 1)
+        candidate = text[1:end] if end > 0 else ""
+    else:
+        candidate = text.split(" ")[0]
+    candidate = candidate.strip()
+    if candidate.lower().endswith(".exe") and os.path.exists(candidate):
+        return candidate
+    return None
+
+
+def _userchoice_progid():
+    """The ProgId Windows would use for a link, from the user's own setting."""
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    for scheme in ("https", "http"):
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                "Software\\Microsoft\\Windows\\Shell\\Associations"
+                "\\UrlAssociations\\" + scheme + "\\UserChoice",
+            ) as key:
+                value, _ = winreg.QueryValueEx(key, "ProgId")
+            if value:
+                return value
+        except OSError:
+            continue
+    return ""
+
+
+def _progid_command(progid):
+    """The command a ProgId's open verb runs, i.e. where that browser lives."""
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CLASSES_ROOT, progid + "\\shell\\open\\command"
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, None)
+        return value or ""
+    except OSError:
+        return ""
+
+
+def _friendly_name(progid, exe):
+    upper = (progid or "").upper()
+    for prefix, name in _PROGID_NAMES:
+        if upper.startswith(prefix):
+            return name
+    stem = os.path.splitext(os.path.basename(exe or ""))[0]
+    if not stem:
+        return "your browser"
+    return stem.replace("-", " ").replace("_", " ").title()
+
+
+def default_browser():
+    """(friendly name, executable) for the user's default HTTPS browser.
+
+    Read from the association the user set in Windows, then resolved through
+    that ProgId's own open command -- the same route Windows takes. An
+    unfamiliar browser therefore resolves without being listed anywhere here,
+    which is the difference between honouring the setting and guessing at it.
+    The executable is empty when only the name could be established; None when
+    Windows has no opinion at all.
+    """
+    progid = _userchoice_progid()
+    exe = _exe_from_command(_progid_command(progid)) if progid else None
+    if not progid and not exe:
+        return None
+    return _friendly_name(progid, exe), (exe or "")
+
+
+def is_firefox(name, exe=""):
+    """True for Firefox and the forks that keep cookies the same way."""
+    if "firefox" in (name or "").lower():
+        return True
+    stem = os.path.splitext(os.path.basename(exe or ""))[0].lower()
+    return stem in _FIREFOX_STEMS
+
+
+def is_probably_chromium(exe):
+    """Whether this browser can be driven over the DevTools protocol.
+
+    Decided by the install, not by a list of vendors: Chromium browsers keep
+    their files in a folder named after the version they are built from, so
+    Comet, Edge, Chrome and Brave all answer yes and Firefox answers no.
+    """
+    if not exe:
+        return False
+    stem = os.path.splitext(os.path.basename(exe))[0].lower()
+    if stem in _CHROMIUM_STEMS:
+        return True
+    try:
+        entries = os.listdir(os.path.dirname(exe))
+    except OSError:
+        return False
+    return any(_CHROMIUM_VERSION_DIR.match(entry) for entry in entries)
+
+
+def controllable_browsers():
+    """(name, executable) candidates sign-in can drive, most preferred first.
+
+    The user's own default browser when it is a Chromium, then Edge and Chrome
+    -- every Windows machine has one of those two, so an unusual default still
+    ends in an automatic sign-in. Firefox never appears here: it is read from
+    its own profile instead, which beats a window in a profile nobody uses.
+    """
+    planned = []
+    default = default_browser()
+    if default is not None:
+        name, exe = default
+        if exe and not is_firefox(name, exe) and is_probably_chromium(exe):
+            planned.append((name, exe))
+
+    for name, exe_name, subdirs in _BROWSER_CANDIDATES:
+        path = _app_paths_key(exe_name) or _known_install(exe_name, subdirs)
+        if not path:
+            continue
+        if any(os.path.normcase(seen) == os.path.normcase(path) for _, seen in planned):
+            continue
+        planned.append((name, path))
+    return planned
+
+
+def sign_in_plan():
+    """How sign-in will get a session: (mode, browser name).
+
+    One decision in one place, so the browser named to the user is always the
+    browser that will actually be used:
+
+      "firefox"   read the user's own Firefox profile -- no window at all,
+      "devtools"  drive a Chromium in a profile this app owns,
+      "shell"     nothing drivable: sign-in cannot finish by itself.
+    """
+    default = default_browser()
+    if default is not None:
+        name, exe = default
+        if is_firefox(name, exe) and any(_firefox_profile_dirs()):
+            return "firefox", name
+
+    candidates = controllable_browsers()
+    if candidates:
+        return "devtools", candidates[0][0]
+
+    if default is not None:
+        return "shell", default[0]
+    return "shell", "your browser"
+
+
+def planned_browser_name():
+    """What the UI should name: the browser sign-in will really use."""
+    return sign_in_plan()[1]
+
+
 # --------------------------------------------------------------- browser discovery
 
 def _app_paths_key(exe):
@@ -312,33 +521,31 @@ def _known_install(exe, subdirs):
     return None
 
 
-def find_controllable_browser():
-    """(friendly name, executable path) for the browser sign-in will drive.
+def _profile_for(profile_root, exe):
+    """The profile a browser gets: one each, never shared.
 
-    None when the machine has neither Edge nor Chrome, which is the signal to
-    fall back to opening the default browser (and the paste-headers path).
+    Two browsers writing one Chromium profile directory would corrupt it, and a
+    user who changes their default browser should start from a clean profile
+    there rather than inherit half of another browser's.
     """
-    for name, exe, subdirs in _BROWSER_CANDIDATES:
-        path = _app_paths_key(exe) or _known_install(exe, subdirs)
-        if path:
-            return name, path
-    return None
+    stem = os.path.splitext(os.path.basename(exe))[0].lower() or "browser"
+    slug = "".join(c for c in stem if c.isalnum() or c in "-_")
+    return os.path.join(profile_root, slug or "browser")
 
 
-def launch_controllable_browser(url, profile_dir):
-    """Start Edge/Chrome on *url* in a profile this app owns.
+def _stop_quietly(process):
+    """Drop a window we opened but can never read. Best effort, and only ever
+    the process this app started: a browser that a failed candidate left open
+    would otherwise invite the user to sign in somewhere that cannot finish."""
+    try:
+        if process.poll() is None:
+            process.terminate()
+    except OSError:
+        pass
 
-    Returns the DevTools port. The window is left for the user to sign in (and,
-    later, to close); nothing is killed here, so a retry simply reuses the same
-    window and the same profile.
-    """
-    found = find_controllable_browser()
-    if found is None:
-        raise BrowserLaunchError(
-            "Neither Microsoft Edge nor Google Chrome is installed."
-        )
-    name, exe = found
 
+def _launch_one(name, exe, url, profile_dir):
+    """Start one browser in its own profile; return its DevTools port."""
     os.makedirs(profile_dir, exist_ok=True)
     port_file = os.path.join(profile_dir, "DevToolsActivePort")
 
@@ -362,7 +569,7 @@ def launch_controllable_browser(url, profile_dir):
     ]
     logger.info("browser auth: launching %s in its own profile", name)
     try:
-        subprocess.Popen(
+        process = subprocess.Popen(
             args,
             close_fds=True,
             # Detached so the sign-in window is not a child of the sidecar and
@@ -373,7 +580,7 @@ def launch_controllable_browser(url, profile_dir):
             stderr=subprocess.DEVNULL,
         )
     except OSError as e:
-        raise BrowserLaunchError(f"Could not start {name}: {e}") from e
+        raise BrowserLaunchError(f"could not start it ({e})") from e
 
     deadline = time.monotonic() + _DEVTOOLS_START_TIMEOUT
     while time.monotonic() < deadline:
@@ -381,7 +588,44 @@ def launch_controllable_browser(url, profile_dir):
         if port and _devtools_port_alive(port):
             return port
         time.sleep(0.25)
-    raise BrowserLaunchError(f"{name} did not open a debugging port in time.")
+
+    _stop_quietly(process)
+    raise BrowserLaunchError("it did not open a debugging port in time")
+
+
+def launch_controllable_browser(url, profile_root):
+    """Start a browser sign-in can read, in a profile this app owns.
+
+    Returns (friendly name, DevTools port). Candidates are tried in preference
+    order -- the user's own default browser first -- because a build that will
+    not expose a debugging port must not cost the ones that will.
+
+    The window is left open on success for the user to sign in (and to close),
+    so a retry reuses the same window and the same profile.
+    """
+    candidates = controllable_browsers()
+    if not candidates:
+        raise BrowserLaunchError(
+            "Sign-in could not open a browser window it can read: no browser "
+            "on this machine can be driven. You can sign in to YouTube Music "
+            "in your own browser and paste the request headers in Settings, "
+            "under Account."
+        )
+
+    attempts = []
+    for name, exe in candidates:
+        try:
+            return name, _launch_one(name, exe, url, _profile_for(profile_root, exe))
+        except BrowserLaunchError as e:
+            logger.warning("browser auth: %s cannot be driven: %s", name, e)
+            attempts.append(f"{name}: {e}")
+
+    raise BrowserLaunchError(
+        "Sign-in could not open a browser window ("
+        + "; ".join(attempts)
+        + "). You can sign in to YouTube Music in your own browser and paste "
+        "the request headers in Settings, under Account."
+    )
 
 
 # --------------------------------------------------------------- CDP cookies
@@ -507,7 +751,10 @@ def cookies_from_firefox():
         if fallback is None:
             fallback = jar
     if fallback is not None:
-        logger.info("browser auth: read %d cookies from Firefox, but no session", len(fallback))
+        # Debug, not info: this runs on every poll of a Firefox sign-in, and
+        # "there are cookies but not a session yet" is the normal state right
+        # after the window opens.
+        logger.debug("browser auth: read %d cookies from Firefox, but no session", len(fallback))
     return fallback
 
 

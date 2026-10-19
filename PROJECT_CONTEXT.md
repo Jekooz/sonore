@@ -20,8 +20,10 @@ Fallback to user's own Gonic/FLAC library for owned tracks, YT Music only for th
 
 ## Non‑negotiables
 - No mock data, no TODO stubs on in‑scope features, at any milestone.
-- The YouTube Music session is captured from a browser the sidecar drives (or from an
-  already signed-in Firefox profile) — there is no helper extension to install and no
-  OAuth device-code flow to fall back on; Google removed it. The session is stored
-  encrypted on this device (DPAPI, via keyring where that fits), never as a plain file.
+- The YouTube Music session is captured from the browser the user set as default
+  in Windows — in a profile the app owns for a Chromium browser, or from the
+  user's own Firefox profile, which is readable in place. There is no helper
+  extension to install and no OAuth device-code flow to fall back on; Google
+  removed it. The session is stored encrypted on this device (DPAPI, via keyring
+  where that fits), never as a plain file.
 - Each milestone must end in a runnable checkpoint before the next one starts.

@@ -3,9 +3,11 @@ YouTube Music backend service.
 
 Authentication model — "Sign in with Google", no extension and no console:
   1. The sidecar captures a session one of two ways: it reads an already
-     signed-in Firefox profile straight from disk, or it opens Edge/Chrome in a
-     profile it owns at https://music.youtube.com and the user signs in there
-     exactly as they would in any browser (no device codes, nothing to load).
+     signed-in browser profile straight from disk (Firefox keeps cookies in a
+     plain SQLite file), or it opens the browser the user set as default in
+     Windows -- in a profile it owns, at https://music.youtube.com -- and the
+     user signs in there exactly as they would in any browser (no device codes,
+     nothing to load).
   2. The session cookies for that domain — including HttpOnly ones like
      __Secure-3PAPISID, which page script cannot see — are read from that
      browser and flow through the same validation path as the Settings

@@ -490,8 +490,9 @@ class YtmApiClient {
 
   /// POST /auth/browser/start — begins a sign-in (2 s poll, 3 min timeout on
   /// the sidecar). The sidecar owns the whole flow: it signs in from an
-  /// already signed-in Firefox with no window at all, or opens Edge/Chrome in
-  /// a profile it owns for the user to sign in there. Nothing is installed and
+  /// already signed-in profile with no window at all, or opens the browser the
+  /// user set as default in Windows — their own Firefox profile, or a Chromium
+  /// in a profile it owns — for them to sign in there. Nothing is installed and
   /// no extension is involved.
   ///
   /// `openBrowser: false` starts an attempt that only waits for a hand-off,
@@ -532,9 +533,9 @@ class YtmApiClient {
 
   /// GET /auth/browser/info -> {"browser": name}
   ///
-  /// The browser sign-in will drive (a controlled Edge/Chrome, or the default
-  /// browser on a machine that has neither). Cosmetic: it only message-brands
-  /// the wait.
+  /// The browser sign-in will use: whatever the user set as default in Windows
+  /// when that can be used, otherwise the Edge or Chrome every machine has.
+  /// Cosmetic: it only message-brands the wait.
   Future<String> defaultBrowser() async {
     try {
       final dynamic body = await _getJson('/auth/browser/info');

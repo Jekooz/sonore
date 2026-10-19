@@ -322,8 +322,9 @@ class YtmRepository {
       _api.rate(videoId, liked ? 'LIKE' : 'INDIFFERENT');
 
   /// POST /auth/browser/start — begins a sign-in. The sidecar owns the whole
-  /// flow: it signs in from an already signed-in Firefox with no window at
-  /// all, or opens Edge/Chrome in a profile it owns for the user to sign in
+  /// flow: it signs in from an already signed-in profile with no window at all,
+  /// or opens the browser the user set as default in Windows — their own
+  /// Firefox profile, or a Chromium in a profile it owns — for them to sign in
   /// there. Nothing is installed and no extension is involved.
   ///
   /// [openBrowser] is false when the caller only needs an attempt to hand

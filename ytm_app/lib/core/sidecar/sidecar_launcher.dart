@@ -83,11 +83,11 @@ abstract interface class ProcessSpawner {
   Future<SidecarProcess> spawn(SidecarSpawnSpec spec);
 }
 
-/// Reads and removes the sidecar's published port file
-/// (`%TEMP%/ytmusic_sidecar_port.txt`), the project's existing discovery
-/// protocol.
+/// Reads and removes the sidecar's published port file, the project's
+/// discovery protocol: `%LOCALAPPDATA%\Sonore\sidecar_port.txt` with
+/// `%TEMP%/ytmusic_sidecar_port.txt` as a fallback for an older service.
 abstract interface class PortFile {
-  /// The published port, or null when the file is absent or unreadable.
+  /// The published port, or null when no candidate file is present or readable.
   Future<int?> read();
 
   /// Removes a stale port file so a previous run's value cannot be mistaken for

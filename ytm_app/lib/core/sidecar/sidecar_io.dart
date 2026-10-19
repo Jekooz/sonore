@@ -58,35 +58,62 @@ class IoProcessSpawner implements ProcessSpawner {
   }
 }
 
-/// The sidecar's published port file: `%TEMP%/ytmusic_sidecar_port.txt`, the
-/// same location the Python service writes and the API client reads.
+/// The sidecar's published port file.
+///
+/// The backend writes `%LOCALAPPDATA%\Sonore\sidecar_port.txt`; the pre-1.6.1
+/// `%TEMP%\ytmusic_sidecar_port.txt` is read as a fallback so a service started
+/// by an older build is still discovered. This is the same discovery contract
+/// the API client reads, so both halves of the app agree on the port.
 class FilePortFile implements PortFile {
-  FilePortFile({File? file})
-      : _file = file ??
-            File(
-              '${Directory.systemTemp.path}${Platform.pathSeparator}'
-              'ytmusic_sidecar_port.txt',
-            );
+  FilePortFile({File? file, List<File>? files})
+      : _files = files ?? (file != null ? <File>[file] : publishedPortFiles());
 
-  final File _file;
+  /// The production locations of the published port, current contract first.
+  ///
+  /// Overridable so a test can point it at a sandbox instead of the shared
+  /// per-user and temp directories.
+  static List<File> publishedPortFiles({
+    String? localAppData,
+    String? tempDirectory,
+  }) {
+    final String? appData =
+        localAppData ?? Platform.environment['LOCALAPPDATA'];
+    final String temp = tempDirectory ?? Directory.systemTemp.path;
+    return <File>[
+      if (appData != null && appData.isNotEmpty)
+        File(
+          '$appData${Platform.pathSeparator}Sonore'
+          '${Platform.pathSeparator}sidecar_port.txt',
+        ),
+      File('$temp${Platform.pathSeparator}ytmusic_sidecar_port.txt'),
+    ];
+  }
+
+  final List<File> _files;
 
   @override
   Future<int?> read() async {
-    try {
-      if (!await _file.exists()) return null;
-      return int.tryParse((await _file.readAsString()).trim());
-    } catch (_) {
-      return null;
+    for (final File file in _files) {
+      try {
+        if (!await file.exists()) continue;
+        final int? port = int.tryParse((await file.readAsString()).trim());
+        if (port != null) return port;
+      } catch (_) {
+        // Try the next candidate.
+      }
     }
+    return null;
   }
 
   @override
   Future<void> delete() async {
-    try {
-      if (await _file.exists()) await _file.delete();
-    } catch (_) {
-      // A stale port file is harmless: the health check already proved nothing
-      // is serving on it.
+    for (final File file in _files) {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // A stale port file is harmless: the health check already proved
+        // nothing is serving on it.
+      }
     }
   }
 }

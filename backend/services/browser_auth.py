@@ -144,6 +144,28 @@ class BrowserAuthSession:
                 target=close_browser_window, args=(process,), daemon=True
             ).start()
 
+    def finish(self):
+        """The user is signed in: close the window and read it out now.
+
+        A Chromium cookie store is only readable once its window is gone, and
+        the window has to be asked to close rather than killed so it flushes.
+        This is the app doing that for the user -- the same thing as closing the
+        window by hand -- and the poll loop then reports the result the usual
+        way, so the screen needs no second path for it.
+        """
+        if not self._is_waiting():
+            return
+        process = self._process
+        if process is not None:
+            # On a thread: the window may still be starting, and this answers a
+            # button, so it must not hold the request open while it appears.
+            threading.Thread(
+                target=close_browser_window, args=(process,), daemon=True
+            ).start()
+        # No wake: the poll loop re-reads on its own schedule (2 s, the same
+        # cadence the app polls this), and waking it here could swallow the
+        # wake a failure in flight is using to end it.
+
     def complete_with_cookies(self, source_name):
         """Cookie hand-off arrived (main.py validates + stores, then calls this)."""
         with self._lock:

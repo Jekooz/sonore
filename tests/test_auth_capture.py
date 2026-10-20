@@ -496,6 +496,43 @@ def test_a_window_left_open_is_closed_and_read_at_the_timeout(client, monkeypatc
     assert calls["stored"] == [dict(GOOD_JAR)]
 
 
+def test_finishing_the_sign_in_closes_the_window_and_reads_it(client, monkeypatch):
+    """The app's "I've signed in" is the user closing the window, for them."""
+    process = FakeProcess(live=True)
+    use_readable_browser(monkeypatch, live=True, process=process)
+    calls = stub_storage(monkeypatch)
+
+    closed = []
+
+    def close(closed_process):
+        closed.append(closed_process)
+        closed_process.live = False  # the window shuts, flushing its store
+
+    # Readable only once it is gone, as a real Chromium profile is.
+    monkeypatch.setattr(
+        browser_auth, "read_profile_cookies",
+        lambda profile: dict(GOOD_JAR) if closed else None,
+    )
+    monkeypatch.setattr(browser_auth, "close_browser_window", close)
+
+    start_sign_in(client)
+    assert client.get("/auth/browser/status").json()["state"] == "waiting"
+
+    body = client.post("/auth/browser/finish").json()
+    assert body["state"] == "waiting", "the read still has to happen"
+
+    state = wait_for_session_to_settle(client, seconds=15)
+    assert state["state"] == "success", state
+    assert closed == [process]
+    assert calls["stored"] == [dict(GOOD_JAR)]
+
+
+def test_finishing_with_no_attempt_in_flight_is_idle_not_an_error(client):
+    main._clear_browser_session()
+    body = client.post("/auth/browser/finish").json()
+    assert body["state"] == "idle"
+
+
 def test_cancel_stops_the_attempt(client):
     start_sign_in(client)
     body = client.post("/auth/browser/cancel").json()

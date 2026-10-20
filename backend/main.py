@@ -436,6 +436,29 @@ def auth_browser_cancel():
     return JSONResponse(content={"state": "cancelled"})
 
 
+@app.post("/auth/browser/finish")
+def auth_browser_finish():
+    """The user says they have signed in: close the window and read it now.
+
+    A Chromium profile cannot be read while its window is open, so closing that
+    window is what finishes sign-in. The user can close it themselves; this is
+    the same thing on their behalf, for the obvious next click. The attempt
+    keeps its usual shape -- still waiting here, and the read the close allows
+    is reported by /auth/browser/status like any other result.
+    """
+    session = _browser_session
+    if session is None:
+        return JSONResponse(
+            content={
+                "state": "idle",
+                "browser": planned_browser_name(),
+                "error": None,
+            }
+        )
+    session.finish()
+    return JSONResponse(content=session.status())
+
+
 # ---------------- browser hand-off (loopback-only) ----------------
 
 # Payload bounds for /auth/handoff: generous for a real browser jar (hundreds

@@ -9,7 +9,7 @@ import 'package:ytm_app/data/ytm_repository.dart';
 import 'package:ytm_app/ui/data_states.dart';
 
 import 'support/harness.dart';
-import 'support/recorded_sidecar.dart' show jsonOk, testRepository;
+import 'support/recorded_sidecar.dart' show jsonOk, recordedResponse;
 
 /// Drives the real SignInController against a scripted sidecar, through the
 /// same YtmApiClient the app uses.
@@ -182,21 +182,27 @@ void main() {
     );
   });
 
-  testWidgets('the waiting screen names the browser sign-in is using',
+  testWidgets('the waiting screen names the browser and offers a way to finish',
       (tester) async {
-    await tester.pumpWidget(
-      appScope(
-        initialLocation: '/home',
-        repository: testRepository(
-          responses: <String, http.Response>{
+    final List<String> requests = <String>[];
+    final YtmRepository repository = YtmRepository(
+      YtmApiClient(
+        client: MockClient((http.Request request) async {
+          requests.add('${request.method} ${request.url.path}');
+          return recordedResponse(request, responses: <String, http.Response>{
             '/auth/status': jsonOk('{"logged_in":false,"error":null}'),
             '/auth/browser/start': jsonOk(
                 '{"state":"waiting","browser":"Comet","error":null}'),
             '/auth/browser/status': jsonOk(
                 '{"state":"waiting","browser":"Comet","error":null}'),
-          },
-        ),
+          });
+        }),
+        readPortFile: () async => '8000',
       ),
+    );
+
+    await tester.pumpWidget(
+      appScope(initialLocation: '/home', repository: repository),
     );
     await tester.pumpAndSettle();
 
@@ -215,6 +221,14 @@ void main() {
       find.textContaining('Close that window when you are done'),
       findsOneWidget,
     );
+
+    // Closing the window is the only thing that makes the profile readable, so
+    // the same act is a button: waiting for the user to find the window's X is
+    // what left them signed in, in the browser, with the app still waiting.
+    await tester.tap(find.text("I've signed in"));
+    await tester.pump();
+    await tester.pump();
+    expect(requests, contains('POST /auth/browser/finish'));
 
     // Retire the attempt so no poll outlives the test.
     await tester.tap(find.text('Cancel'));

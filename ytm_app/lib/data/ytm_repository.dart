@@ -354,9 +354,14 @@ class YtmRepository {
     );
   }
 
-  /// POST /auth/browser/cancel — retires the attempt server-side too, so it
+  /// POST /auth/browser/cancel - retires the attempt server-side too, so it
   /// cannot outlive the screen that started it.
   Future<void> cancelBrowserSignIn() => _api.cancelBrowserSignIn();
+
+  /// POST /auth/browser/finish - "I've signed in". The sidecar closes the
+  /// sign-in window, which is what makes its profile readable, and then reports
+  /// the result through the same status the screen already polls.
+  Future<void> finishBrowserSignIn() => _api.finishBrowserSignIn();
 
   /// POST /auth/handoff with pasted request headers — the fallback for a
   /// machine where the app cannot drive a browser of its own.
@@ -594,6 +599,21 @@ class SignInController extends Notifier<SignInState> {
       await ref.read(ytmRepositoryProvider).cancelBrowserSignIn();
     } on YtmException {
       // A sidecar that cannot be reached times its own attempt out.
+    }
+  }
+
+  /// "I've signed in": ask the sidecar to close the sign-in window and read the
+  /// session out of it now, instead of waiting for the user to close it.
+  ///
+  /// Polling deliberately continues — the read is what completes the attempt,
+  /// and its result (success, or a refusal with its own reason) arrives through
+  /// the same status the screen already watches.
+  Future<void> finish() async {
+    if (!state.isWaiting) return;
+    try {
+      await ref.read(ytmRepositoryProvider).finishBrowserSignIn();
+    } on YtmException {
+      // The poll loop reports whatever the sidecar makes of the attempt.
     }
   }
 

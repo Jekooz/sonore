@@ -51,9 +51,10 @@ Everything below is present in the code on this branch:
 - **Sign-in** — sign in with Google in your own browser, with **nothing to
   install**. The local service uses the browser you set as default in Windows:
   a Chromium one (Comet, Brave, Chrome, Edge, ...) is opened in a profile it
-  owns, and once you have signed in and closed that window the session is read
-  out of the profile itself (its key through Windows DPAPI, its cookies through
-  Windows' own crypto). If your default is Firefox, the page opens in the
+  owns, and once you have signed in and closed that window — or pressed "I've
+  signed in", which closes it for you — the session is read out of the profile
+  itself (its key through Windows DPAPI, its cookies through Windows' own
+  crypto). If your default is Firefox, the page opens in the
   profile you already use and the session is read from it — no window needed at
   all when you were already signed in there. Edge or Chrome is used only if your
   own default cannot be read. There is no extension to load and no token to

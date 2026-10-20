@@ -524,6 +524,15 @@ class YtmApiClient {
   Future<void> cancelBrowserSignIn() async =>
       _postJson('/auth/browser/cancel', const <String, dynamic>{});
 
+  /// POST /auth/browser/finish
+  ///
+  /// "I've signed in": the sidecar closes the sign-in window — a Chromium
+  /// profile cannot be read until that window is gone — and then reads the
+  /// session out of it. The result still arrives through [browserSignInStatus],
+  /// so nothing else about the wait changes.
+  Future<void> finishBrowserSignIn() async =>
+      _postJson('/auth/browser/finish', const <String, dynamic>{});
+
   /// POST /auth/handoff — the Settings "paste request headers" fallback.
   ///
   /// The sidecar recovers the cookie line from the pasted headers, validates

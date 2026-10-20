@@ -81,10 +81,11 @@ class SignedOutState extends ConsumerWidget {
         message: 'Waiting for you to sign in…',
         footnote: 'Sign in to YouTube Music with Google in '
             '${_signInWindow(signIn.browser)}. Close that window when you are '
-            'done and this finishes on its own — nothing else to press.',
-        actionLabel: 'Cancel',
-        actionIcon: AppIcons.close,
-        onAction: controller.cancel,
+            'done — or press I\'ve signed in and this closes it for you.',
+        actionLabel: 'I\'ve signed in',
+        onAction: controller.finish,
+        secondaryLabel: 'Cancel',
+        onSecondary: controller.cancel,
       ),
       SignInStage.done => const StateMessage(
         message: 'Signed in. Loading your music…',

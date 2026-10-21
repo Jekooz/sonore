@@ -25,14 +25,15 @@ reach its music service. It is published as a GitHub *pre-release*.
 
 ## Screenshots
 
-Not yet added. If you want screenshots in the README, add these files and
-reenable the section:
+| Home | Search | Now Playing | Equalizer | Settings |
+| --- | --- | --- | --- | --- |
+| ![Home](docs/screenshots/home.png) | ![Search](docs/screenshots/search.png) | ![Now Playing](docs/screenshots/now-playing.png) | ![Equalizer](docs/screenshots/equalizer.png) | ![Settings](docs/screenshots/settings.png) |
 
-- `docs/screenshots/home.png`
-- `docs/screenshots/search.png`
-- `docs/screenshots/now-playing.png`
-- `docs/screenshots/equalizer.png`
-- `docs/screenshots/settings.png`
+The app is built around a full-glass design system: surfaces are translucent
+panels over an ambient backdrop derived from the track's artwork, and all
+chrome is monochrome. "Reduce transparency" in Settings switches to solid
+surfaces (Windows also falls back automatically when the OS reports reduced
+transparency).
 
 ## What works today
 

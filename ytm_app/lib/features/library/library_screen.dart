@@ -227,7 +227,7 @@ class _Chip extends StatelessWidget {
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: Tokens.s16),
           decoration: ShapeDecoration(
-            color: selected ? Tokens.accent : Tokens.surfaceRaised,
+            color: selected ? Tokens.borderStrong : Tokens.transparent,
             shape: Tokens.shapePill,
           ),
           child: Text(

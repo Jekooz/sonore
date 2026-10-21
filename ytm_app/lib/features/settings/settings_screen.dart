@@ -15,6 +15,8 @@ import '../../data/ytm_repository.dart';
 import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
+import '../../ui/confirm_dialog.dart';
+import '../../ui/glass_surface.dart';
 import '../../ui/media_actions.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/screen_header.dart';
@@ -48,13 +50,17 @@ class SettingsScreen extends ConsumerWidget {
         isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
 
     return Scaffold(
-      backgroundColor: Tokens.bg,
       body: SafeArea(
         child: Column(
           children: <Widget>[
             const _StickyHeader(),
             Expanded(
-              child: ListView(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: Tokens.contentMaxWidth,
+                  ),
+                  child: ListView(
                 // One content column: the same margin on both sides, and the
                 // rows below give up ListTile's own inset, so section titles,
                 // notes and buttons all start and end on the same edges.
@@ -66,7 +72,9 @@ class SettingsScreen extends ConsumerWidget {
                   const _Section(title: 'Appearance'),
                   _SwitchRow(
                     title: 'Reduce transparency',
-                    subtitle: 'Uses solid surfaces instead of glass.',
+                    subtitle: 'Uses solid tinted surfaces instead of glass. '
+                        'Also engages automatically when the system reduces '
+                        'transparency or uses high contrast.',
                     value: settings.reduceTransparency,
                     onChanged: controller.setReduceTransparency,
                   ),
@@ -187,6 +195,8 @@ class SettingsScreen extends ConsumerWidget {
                   const SizedBox(height: Tokens.s32),
                 ],
               ),
+                ),
+              ),
             ),
           ],
         ),
@@ -199,30 +209,13 @@ class SettingsScreen extends ConsumerWidget {
     BuildContext context,
     AppSettingsNotifier controller,
   ) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        backgroundColor: Tokens.surfaceRaised,
-        title: const Text('Reset preferences?', style: Tokens.rowTitle),
-        content: const Text(
-          'Appearance, lyrics and equalizer settings go back to their '
-          'defaults. Your music, queue and sign-in are not affected.',
-          style: Tokens.subtitle,
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: Tokens.subtitle),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(
-              'Reset',
-              style: Tokens.subtitle.copyWith(color: Tokens.accent),
-            ),
-          ),
-        ],
-      ),
+    final bool? confirmed = await confirmDialog(
+      context,
+      title: 'Reset preferences?',
+      body: 'Appearance, motion, text, lyrics, equalizer and the player '
+          'modes go back to their defaults. Your music, queue and sign-in '
+          'are not affected.',
+      confirmLabel: 'Reset',
     );
     if (confirmed ?? false) controller.resetAll();
   }
@@ -231,15 +224,17 @@ class SettingsScreen extends ConsumerWidget {
 /// The pinned header: the page title with the save status under it.
 ///
 /// It sits outside the scrolling list, so it stays put while the page scrolls,
-/// and it paints the page background, so it is explicitly opaque rather than
-/// relying on what happens to be behind it.
+/// and it carries a thin glass fill so the reader can see content slide
+/// beneath it without the header itself losing the backdrop.
 class _StickyHeader extends StatelessWidget {
   const _StickyHeader();
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(color: Tokens.bg),
+    return GlassSurface(
+      tier: GlassTier.thin,
+      isFloating: false,
+      shape: Tokens.shapeAnchoredBar,
       child: Column(
         children: <Widget>[
           ScreenHeader(
@@ -344,7 +339,7 @@ class _SwitchRow extends StatelessWidget {
       label: title,
       child: SwitchListTile(
         value: value,
-        activeThumbColor: Tokens.accent,
+        activeThumbColor: Tokens.text,
         // No inset of its own: the row shares the list's content column, so the
         // control sits on the same right edge the notes end on.
         contentPadding: EdgeInsets.zero,
@@ -390,15 +385,22 @@ class _SliderRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(subtitle, style: Tokens.caption),
-            Slider(
-              value: value.clamp(min, max),
-              min: min,
-              max: max,
-              divisions: divisions,
-              label: label,
-              activeColor: Tokens.accent,
-              inactiveColor: Tokens.border,
-              onChanged: onChanged,
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                // A thumb travelling the full content width on a 1920 window
+                // is unusable mouse tuning; the control gets a sane maximum.
+                maxWidth: Tokens.formControlMaxWidth,
+              ),
+              child: Slider(
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                divisions: divisions,
+                label: label,
+                activeColor: Tokens.text,
+                inactiveColor: Tokens.border,
+                onChanged: onChanged,
+              ),
             ),
           ],
         ),
@@ -485,31 +487,13 @@ class _RecommendationsState extends ConsumerState<_Recommendations> {
 
   /// A destructive action needs a deliberate second step.
   Future<void> _confirmClear() async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        backgroundColor: Tokens.surfaceRaised,
-        title: const Text('Clear listening data?', style: Tokens.rowTitle),
-        content: const Text(
-          'What this app has learned about your taste is forgotten: the plays, '
-          'skips and likes it recorded, and the listening history it shows. '
-          'Your YouTube Music account is not affected.',
-          style: Tokens.subtitle,
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: Tokens.subtitle),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(
-              'Clear',
-              style: Tokens.subtitle.copyWith(color: Tokens.accent),
-            ),
-          ),
-        ],
-      ),
+    final bool? confirmed = await confirmDialog(
+      context,
+      title: 'Clear listening data?',
+      body: 'What this app has learned about your taste is forgotten: the '
+          'plays, skips and likes it recorded, and the listening history it '
+          'shows. Your YouTube Music account is not affected.',
+      confirmLabel: 'Clear',
     );
     if (!(confirmed ?? false)) return;
 
@@ -641,7 +625,7 @@ class _TokenFieldState extends State<_TokenField> {
             decoration: InputDecoration(
               isDense: true,
               filled: true,
-              fillColor: Tokens.surface,
+              fillColor: Tokens.glassThin,
               hintText: widget.hint,
               hintStyle: Tokens.caption,
               border: const OutlineInputBorder(),
@@ -885,7 +869,7 @@ class _AccountState extends ConsumerState<_Account> {
             padding: const EdgeInsets.only(top: Tokens.s4),
             child: Text(
               _pasteError!,
-              style: Tokens.caption.copyWith(color: Tokens.accent),
+              style: Tokens.caption.copyWith(color: Tokens.text, fontWeight: FontWeight.w700),
             ),
           ),
         Padding(
@@ -942,30 +926,12 @@ class _AccountState extends ConsumerState<_Account> {
   }
 
   Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        backgroundColor: Tokens.surfaceRaised,
-        title: const Text('Sign out?', style: Tokens.rowTitle),
-        content: const Text(
-          'The local service forgets your session. Your music stays where it '
-          'is; you can sign in again at any time.',
-          style: Tokens.subtitle,
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: Tokens.subtitle),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(
-              'Sign out',
-              style: Tokens.subtitle.copyWith(color: Tokens.accent),
-            ),
-          ),
-        ],
-      ),
+    final bool? confirmed = await confirmDialog(
+      context,
+      title: 'Sign out?',
+      body: 'The local service forgets your session. Your music stays where '
+          'it is; you can sign in again at any time.',
+      confirmLabel: 'Sign out',
     );
     if (!(confirmed ?? false) || !context.mounted) return;
     await ref.read(ytmRepositoryProvider).signOut();

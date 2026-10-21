@@ -31,7 +31,7 @@ class LyricsScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      backgroundColor: Tokens.bg,
+      backgroundColor: Tokens.transparent,
       body: SafeArea(
         child: track == null
             ? const _NoTrack()

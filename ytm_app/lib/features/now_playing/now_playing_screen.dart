@@ -12,7 +12,6 @@ import '../../ui/format.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/screen_states.dart';
 import '../../ui/seek_bar.dart';
-import 'artwork.dart';
 import 'queue_carousel.dart';
 import 'queue_panel.dart';
 import 'transport_pill.dart';
@@ -81,23 +80,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       );
     }
 
-    final AmbientPaletteLoader palette =
-        ref.watch(ambientPaletteLoaderProvider);
-
-    return Stack(
-      children: <Widget>[
-        Positioned.fill(
-          child: _AmbientBackground(
-            url: track.artworkUrl,
-            loader: palette,
-          ),
-        ),
-        SafeArea(
-          child: isDesktop
-              ? _desktopLayout(state, track)
-              : _compactLayout(state, track),
-        ),
-      ],
+    return SafeArea(
+      child: isDesktop
+          ? _desktopLayout(state, track)
+          : _compactLayout(state, track),
     );
   }
 
@@ -219,54 +205,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-/// Loads the artwork palette and cross-fades the wash when the track changes.
-class _AmbientBackground extends StatefulWidget {
-  const _AmbientBackground({required this.url, required this.loader});
-
-  final String? url;
-  final AmbientPaletteLoader loader;
-
-  @override
-  State<_AmbientBackground> createState() => _AmbientBackgroundState();
-}
-
-class _AmbientBackgroundState extends State<_AmbientBackground> {
-  List<Color> _colors = const <Color>[];
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(covariant _AmbientBackground oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) _load();
-  }
-
-  Future<void> _load() async {
-    final String? url = widget.url;
-    if (url == null || url.isEmpty) {
-      if (mounted) setState(() => _colors = const <Color>[]);
-      return;
-    }
-    final List<Color> colors = await widget.loader(url);
-    if (!mounted || widget.url != url) return;
-    setState(() => _colors = colors);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: Tokens.dAmbientCrossfade,
-      child: AmbientBackground(
-        key: ValueKey<String>(widget.url ?? ''),
-        colors: _colors,
-      ),
-    );
-  }
-}
+/// The ambient wash behind this screen is the shell-wide [AmbientBackdrop]; it
+/// cross-fades on track change on its own, so nothing here duplicates it.
 
 class _SeekRow extends ConsumerWidget {
   const _SeekRow({required this.state});

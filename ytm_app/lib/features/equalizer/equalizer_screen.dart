@@ -25,7 +25,7 @@ class EqualizerScreen extends ConsumerWidget {
     final bool supported = ref.watch(equalizerSupportedProvider);
 
     return Scaffold(
-      backgroundColor: Tokens.bg,
+      backgroundColor: Tokens.transparent,
       body: SafeArea(
         child: Column(
           children: <Widget>[
@@ -88,9 +88,9 @@ class _EqualizerControls extends ConsumerWidget {
               Semantics(
                 toggled: state.config.enabled,
                 label: 'Equalizer',
-                child:                Switch(
+                child: Switch(
                   value: state.config.enabled,
-                  activeThumbColor: Tokens.accent,
+                  activeThumbColor: Tokens.text,
                   onChanged: state.isApplying
                       ? null
                       : (bool value) => controller.setEnabled(value),
@@ -267,7 +267,7 @@ class _BandControl extends StatelessWidget {
                 max: equalizerMaxGainDb,
                 divisions: 24,
                 label: '${gainDb.round()} dB',
-                activeColor: Tokens.accent,
+                activeColor: Tokens.text,
                 inactiveColor: Tokens.border,
                 onChanged: enabled ? onChanged : null,
               ),

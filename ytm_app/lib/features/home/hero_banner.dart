@@ -275,17 +275,32 @@ class _HeroTintState extends ConsumerState<_HeroTint> {
     if (_colors.isEmpty) return const SizedBox.shrink();
 
     return IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[
-              _colors.first.withValues(alpha: Tokens.heroTintOpacity),
-              Tokens.transparent,
-            ],
+      child: Stack(
+        children: <Widget>[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[
+                  _colors.first.withValues(alpha: Tokens.heroTintOpacity),
+                  Tokens.transparent,
+                ],
+              ),
+            ),
           ),
-        ),
+          // The adaptive part of the hero's contrast guarantee: a black wash
+          // whose strength follows the tint's brightness, sitting under the
+          // hero type and, harmlessly, under the opaque artwork tile too.
+          ColoredBox(
+            color: Tokens.scrim.withValues(
+              alpha: ((Tokens.lumaOf(_colors.first) - Tokens.heroScrimLumaGate) /
+                      (1 - Tokens.heroScrimLumaGate))
+                  .clamp(0.0, 1.0) *
+                  Tokens.heroScrimMaxAlpha,
+            ),
+          ),
+        ],
       ),
     );
   }

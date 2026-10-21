@@ -5,6 +5,7 @@ import '../../data/models.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
 import '../../ui/data_states.dart';
+import '../../ui/glass_surface.dart';
 import '../../ui/media_rows.dart';
 import '../../ui/pressable.dart';
 import '../../ui/screen_states.dart';
@@ -56,36 +57,43 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     return ConnectionGate(
       loading: const ListSkeleton(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              margin,
-              Tokens.s16,
-              margin,
-              Tokens.s8,
-            ),
-            child: _SearchField(
-              controller: _field,
-              focusNode: focusNode,
-              hint: 'Search songs, albums, artists, playlists',
-              onChanged: controller.onQueryChanged,
-              onSubmitted: controller.submit,
-              onClear: () {
-                _field.clear();
-                controller.clearQuery();
-                focusNode.requestFocus();
-              },
-            ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: Tokens.contentMaxWidth,
           ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: margin),
-              child: _SearchBody(state: state, controller: controller),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  margin,
+                  Tokens.s16,
+                  margin,
+                  Tokens.s8,
+                ),
+                child: _SearchField(
+                  controller: _field,
+                  focusNode: focusNode,
+                  hint: 'Search songs, albums, artists, playlists',
+                  onChanged: controller.onQueryChanged,
+                  onSubmitted: controller.submit,
+                  onClear: () {
+                    _field.clear();
+                    controller.clearQuery();
+                    focusNode.requestFocus();
+                  },
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: margin),
+                  child: _SearchBody(state: state, controller: controller),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -110,11 +118,10 @@ class _SearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: ShapeDecoration(
-        color: Tokens.surface,
-        shape: Tokens.shapeFor(Tokens.rCard),
-      ),
+    return GlassSurface(
+      tier: GlassTier.thin,
+      isFloating: false,
+      radius: Tokens.rCard,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: Tokens.s12),
         child: Row(
@@ -132,7 +139,7 @@ class _SearchField extends StatelessWidget {
                 onChanged: onChanged,
                 onSubmitted: onSubmitted,
                 style: Tokens.rowTitle,
-                cursorColor: Tokens.accent,
+                cursorColor: Tokens.text,
                 decoration: InputDecoration(
                   hintText: hint,
                   hintStyle: Tokens.subtitle,

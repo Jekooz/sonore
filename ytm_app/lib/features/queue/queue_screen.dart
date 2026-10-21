@@ -9,6 +9,7 @@ import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
 import '../../ui/context_menu.dart';
+import '../../ui/confirm_dialog.dart';
 import '../../ui/format.dart';
 import '../../ui/media_actions.dart';
 import '../../ui/pill_button.dart';
@@ -37,7 +38,6 @@ class QueueScreen extends ConsumerWidget {
     final PlaybackController controller = ref.read(playbackProvider.notifier);
 
     return Scaffold(
-      backgroundColor: Tokens.bg,
       body: SafeArea(
         child: Column(
           children: <Widget>[
@@ -81,7 +81,7 @@ class _QueueBody extends ConsumerWidget {
         // mode the transport's autoplay behaviour reads.
         SwitchListTile(
           value: state.autoplay,
-          activeThumbColor: Tokens.accent,
+          activeThumbColor: Tokens.text,
           title: const Text('Autoplay', style: Tokens.rowTitle),
           subtitle: const Text(
             'Keeps playing real recommendations when the queue runs out.',
@@ -171,30 +171,12 @@ class _QueueBody extends ConsumerWidget {
   /// Clearing the queue is consequential (it stops playback and drops the
   /// list), so it asks first — the spec's rule for destructive actions.
   Future<void> _confirmClear(BuildContext context) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        backgroundColor: Tokens.surfaceRaised,
-        title: const Text('Clear the queue?', style: Tokens.rowTitle),
-        content: const Text(
-          'Playback stops and the queue is emptied. Your music, likes and '
+    final bool? confirmed = await confirmDialog(
+      context,
+      title: 'Clear the queue?',
+      body: 'Playback stops and the queue is emptied. Your music, likes and '
           'sign-in are not affected.',
-          style: Tokens.subtitle,
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: Tokens.subtitle),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(
-              'Clear',
-              style: Tokens.subtitle.copyWith(color: Tokens.accent),
-            ),
-          ),
-        ],
-      ),
+      confirmLabel: 'Clear',
     );
     if (confirmed ?? false) controller.clear();
   }

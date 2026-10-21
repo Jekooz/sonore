@@ -89,50 +89,58 @@ class _HomeContent extends ConsumerWidget {
     // Desktop only; and only when there is a real track to list.
     final bool showPopular = isDesktop && popular.isNotEmpty;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: RefreshIndicator(
-            color: Tokens.accent,
-            backgroundColor: Tokens.surfaceRaised,
-            onRefresh: () async {
-              ref.invalidate(connectionProvider);
-              ref.invalidate(homeProvider);
-              await ref.read(homeProvider.future);
-            },
-            // A Column, not a lazy list: a handful of rails is cheap, and it
-            // keeps every shelf the service returned mounted — the hero must
-            // not be able to push a later rail out of the tree.
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                margin,
-                Tokens.s24,
-                margin,
-                Tokens.s24,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: Tokens.s16),
-                    child: Text(
-                      'Good evening',
-                      style: isDesktop
-                          ? Tokens.pageTitleDesktop
-                          : Tokens.pageTitle,
-                    ),
+    // Ultrawide guard: the whole content row — rails and the Popular third
+    // column — stops growing at [Tokens.contentMaxWidth] and centers, so line
+    // lengths stay readable on a 1920 window.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Expanded(
+              child: RefreshIndicator(
+                color: Tokens.text,
+                backgroundColor: Tokens.surfaceRaised,
+                onRefresh: () async {
+                  ref.invalidate(connectionProvider);
+                  ref.invalidate(homeProvider);
+                  await ref.read(homeProvider.future);
+                },
+                // A Column, not a lazy list: a handful of rails is cheap, and
+                // it keeps every shelf the service returned mounted — the
+                // hero must not be able to push a later rail out of the tree.
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    margin,
+                    Tokens.s24,
+                    margin,
+                    Tokens.s24,
                   ),
-                  if (featured != null) HomeHeroBanner(item: featured),
-                  for (final HomeRow row in rows) _HomeRail(row: row),
-                ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: Tokens.s16),
+                        child: Text(
+                          'Good evening',
+                          style: isDesktop
+                              ? Tokens.pageTitleDesktop
+                              : Tokens.pageTitle,
+                        ),
+                      ),
+                      if (featured != null) HomeHeroBanner(item: featured),
+                      for (final HomeRow row in rows) _HomeRail(row: row),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
+            if (showPopular) PopularRail(tracks: popular),
+          ],
         ),
-        if (showPopular) PopularRail(tracks: popular),
-      ],
+      ),
     );
   }
 }

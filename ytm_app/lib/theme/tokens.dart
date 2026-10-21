@@ -257,6 +257,11 @@ class Tokens {
   static const double pageMarginPhone = 20;
   static const double pageMarginDesktop = 32;
 
+  /// The one gutter rule: every page reads its margin through this, so the
+  /// desktop width switch never drifts per screen.
+  static double pageMargin(double width) =>
+      width >= breakpointDesktop ? pageMarginDesktop : pageMarginPhone;
+
   // ----------------------------------------------------------------- Icons ---
   //
   // One set (Phosphor), regular weight, 24px. Hit area is 48x48 even when the
@@ -348,6 +353,13 @@ class Tokens {
 
   /// Widest the transport block (seek row + pill) grows on a wide screen.
   static const double transportMaxWidth = 460;
+
+  /// Widest a form-like page content (settings, equalizer) is allowed to
+  /// stretch; wider windows centre it on the page gutter.
+  static const double formMaxWidth = 720;
+
+  /// Height of the ten-band equalizer's slider field.
+  static const double eqBandsHeight = 220;
 
   /// Pressing previous restarts the track while it is past this point.
   static const Duration previousRestartThreshold = Duration(seconds: 3);

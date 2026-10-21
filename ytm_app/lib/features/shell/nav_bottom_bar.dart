@@ -107,6 +107,7 @@ class _NavAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool reduceMotion = MediaQuery.of(context).disableAnimations;
     return Semantics(
       button: true,
       selected: selected,
@@ -122,12 +123,15 @@ class _NavAction extends StatelessWidget {
             hoverColor: Tokens.glassThick,
             focusColor: Tokens.glassThick,
             splashColor: Tokens.transparent,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minHeight: Tokens.minTouchTarget,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Tokens.s12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Tokens.s8),
+              child: AnimatedContainer(
+                duration: reduceMotion ? Duration.zero : Tokens.dPress,
+                curve: Tokens.curvePress,
+                decoration: ShapeDecoration(
+                  color: selected ? Tokens.surfaceRaised : Tokens.transparent,
+                  shape: Tokens.shapePill,
+                ),
                 child: Icon(
                   icon,
                   size: Tokens.iconSize,
@@ -156,6 +160,7 @@ class _NavBarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color foreground = selected ? Tokens.text : Tokens.textSecondary;
+    final bool reduceMotion = MediaQuery.of(context).disableAnimations;
 
     return Semantics(
       button: true,
@@ -172,26 +177,32 @@ class _NavBarItem extends StatelessWidget {
             hoverColor: Tokens.glassThick,
             focusColor: Tokens.glassThick,
             splashColor: Tokens.transparent,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minHeight: Tokens.minTouchTarget,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(
-                    selected ? destination.activeIcon : destination.icon,
-                    size: Tokens.iconSize,
-                    color: foreground,
-                  ),
-                  const SizedBox(height: Tokens.s4),
-                  Text(
-                    destination.label,
-                    style: Tokens.caption.copyWith(color: foreground),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Tokens.s4),
+              child: AnimatedContainer(
+                duration: reduceMotion ? Duration.zero : Tokens.dPress,
+                curve: Tokens.curvePress,
+                decoration: ShapeDecoration(
+                  color: selected ? Tokens.surfaceRaised : Tokens.transparent,
+                  shape: Tokens.shapePill,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Icon(
+                      selected ? destination.activeIcon : destination.icon,
+                      size: Tokens.iconSize,
+                      color: foreground,
+                    ),
+                    const SizedBox(height: Tokens.s4),
+                    Text(
+                      destination.label,
+                      style: Tokens.caption.copyWith(color: foreground),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

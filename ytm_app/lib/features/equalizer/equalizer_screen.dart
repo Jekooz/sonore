@@ -7,6 +7,7 @@ import '../../audio/equalizer_controller.dart';
 import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
+import '../../ui/glass_surface.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/screen_header.dart';
 import '../../ui/screen_states.dart';
@@ -69,122 +70,158 @@ class _EqualizerControls extends ConsumerWidget {
     final EqualizerController controller =
         ref.read(equalizerControllerProvider.notifier);
 
+    // The selected preset is stated where the reader set it: right next to
+    // the switch the page is named by, and again on the preset chip itself.
+    final String summary = !state.config.enabled
+        ? 'Off'
+        : (state.config.presetName ?? 'Custom');
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Tokens.pageMarginPhone,
-        vertical: Tokens.s16,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Row(
+      padding: const EdgeInsets.symmetric(vertical: Tokens.s16),
+      // A form, not a dashboard: one centred column that never stretches
+      // across a wide window.
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: Tokens.formMaxWidth),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Expanded(
-                child: Text(
-                  state.config.enabled ? 'On' : 'Off',
-                  style: Tokens.rowTitle,
-                ),
-              ),
-              Semantics(
-                toggled: state.config.enabled,
-                label: 'Equalizer',
-                child: Switch(
-                  value: state.config.enabled,
-                  activeThumbColor: Tokens.text,
-                  onChanged: state.isApplying
-                      ? null
-                      : (bool value) => controller.setEnabled(value),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Tokens.s16),
-          Text('Preset', style: Tokens.sectionHeader),
-          const SizedBox(height: Tokens.s8),
-          // A wrapped chip row: chips keep their own width, a second run starts
-          // at the same left edge as the first, and the selected one is stated
-          // both visually and to assistive technology.
-          Wrap(
-            alignment: WrapAlignment.start,
-            crossAxisAlignment: WrapCrossAlignment.start,
-            spacing: Tokens.s8,
-            runSpacing: Tokens.s8,
-            children: <Widget>[
-              for (final EqualizerPreset preset in equalizerPresets)
-                _PresetChip(
-                  label: preset.name,
-                  selected: state.config.presetName == preset.name,
-                  onPressed: state.isApplying
-                      ? null
-                      : () => controller.setPreset(preset),
-                ),
-            ],
-          ),
-          const SizedBox(height: Tokens.s24),
-          Text('Bands', style: Tokens.sectionHeader),
-          const SizedBox(height: Tokens.s4),
-          // The range every band moves over, stated once: the readouts below are
-          // dB values, and this is the scale they are read against.
-          Text(
-            '±${equalizerMaxGainDb.round()} dB per band',
-            style: Tokens.caption,
-          ),
-          const SizedBox(height: Tokens.s8),
-          SizedBox(
-            height: 220,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                for (int i = 0; i < equalizerBandFrequenciesHz.length; i++)
-                  Expanded(
-                    child: _BandControl(
-                      frequencyHz: equalizerBandFrequenciesHz[i],
-                      gainDb: state.config.gains[i],
-                      enabled: state.config.enabled && !state.isApplying,
-                      onChanged: (double value) =>
-                          controller.setGain(i, value),
-                    ),
+              GlassSurface(
+                radius: Tokens.rLarge,
+                child: Padding(
+                  padding: const EdgeInsets.all(Tokens.s16),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text('Equalizer', style: Tokens.rowTitle),
+                            const SizedBox(height: Tokens.s4),
+                            Text(summary, style: Tokens.caption),
+                          ],
+                        ),
+                      ),
+                      Semantics(
+                        toggled: state.config.enabled,
+                        label: 'Equalizer',
+                        child: Switch(
+                          value: state.config.enabled,
+                          activeThumbColor: Tokens.text,
+                          onChanged: state.isApplying
+                              ? null
+                              : (bool value) => controller.setEnabled(value),
+                        ),
+                      ),
+                    ],
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Tokens.s16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              PillButton(
-                icon: AppIcons.arrowClockwise,
-                label: 'Reset to flat',
-                onPressed: state.isApplying
-                    ? null
-                    : () => controller.reset(),
+                ),
               ),
+              const SizedBox(height: Tokens.s16),
+              GlassSurface(
+                radius: Tokens.rLarge,
+                child: Padding(
+                  padding: const EdgeInsets.all(Tokens.s16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      const Text('Preset', style: Tokens.sectionHeader),
+                      const SizedBox(height: Tokens.s8),
+                      // A wrapped chip row: chips keep their own width, a
+                      // second run starts at the same left edge as the first,
+                      // and the selected one is stated both visually and to
+                      // assistive technology.
+                      Wrap(
+                        alignment: WrapAlignment.start,
+                        crossAxisAlignment: WrapCrossAlignment.start,
+                        spacing: Tokens.s8,
+                        runSpacing: Tokens.s8,
+                        children: <Widget>[
+                          for (final EqualizerPreset preset in equalizerPresets)
+                            _PresetChip(
+                              label: preset.name,
+                              selected: state.config.presetName == preset.name,
+                              onPressed: state.isApplying
+                                  ? null
+                                  : () => controller.setPreset(preset),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: Tokens.s24),
+                      const Text('Bands', style: Tokens.sectionHeader),
+                      const SizedBox(height: Tokens.s4),
+                      // The range every band moves over, stated once: the
+                      // readouts below are dB values, and this is the scale
+                      // they are read against.
+                      Text(
+                        '±${equalizerMaxGainDb.round()} dB per band',
+                        style: Tokens.caption,
+                      ),
+                      const SizedBox(height: Tokens.s8),
+                      SizedBox(
+                        height: Tokens.eqBandsHeight,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            for (int i = 0;
+                                i < equalizerBandFrequenciesHz.length;
+                                i++)
+                              Expanded(
+                                child: _BandControl(
+                                  frequencyHz: equalizerBandFrequenciesHz[i],
+                                  gainDb: state.config.gains[i],
+                                  enabled:
+                                      state.config.enabled && !state.isApplying,
+                                  onChanged: (double value) =>
+                                      controller.setGain(i, value),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: Tokens.s16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  PillButton(
+                    icon: AppIcons.arrowClockwise,
+                    label: 'Reset to flat',
+                    onPressed: state.isApplying
+                        ? null
+                        : () => controller.reset(),
+                  ),
+                ],
+              ),
+              if (state.isApplying) ...<Widget>[
+                const SizedBox(height: Tokens.s16),
+                const LinearProgressIndicator(minHeight: 2),
+              ],
+              if (state.error != null) ...<Widget>[
+                const SizedBox(height: Tokens.s16),
+                StateMessage(message: state.error!),
+              ],
+              // The engine's own answer, so the reader (and the tests) can see
+              // the configuration really landed rather than assuming it did.
+              if (state.appliedFilter != null &&
+                  state.appliedFilter!.isNotEmpty) ...<Widget>[
+                const SizedBox(height: Tokens.s16),
+                Text('Engine reports', style: Tokens.sectionHeader),
+                const SizedBox(height: Tokens.s4),
+                Text(
+                  state.appliedFilter!,
+                  style: Tokens.caption,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: Tokens.s32),
             ],
           ),
-          if (state.isApplying) ...<Widget>[
-            const SizedBox(height: Tokens.s16),
-            const LinearProgressIndicator(minHeight: 2),
-          ],
-          if (state.error != null) ...<Widget>[
-            const SizedBox(height: Tokens.s16),
-            StateMessage(message: state.error!),
-          ],
-          // The engine's own answer, so the reader (and the tests) can see the
-          // configuration really landed rather than assuming it did.
-          if (state.appliedFilter != null &&
-              state.appliedFilter!.isNotEmpty) ...<Widget>[
-            const SizedBox(height: Tokens.s16),
-            Text('Engine reports', style: Tokens.sectionHeader),
-            const SizedBox(height: Tokens.s4),
-            Text(
-              state.appliedFilter!,
-              style: Tokens.caption,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          const SizedBox(height: Tokens.s32),
-        ],
+        ),
       ),
     );
   }
@@ -268,7 +305,7 @@ class _BandControl extends StatelessWidget {
                 divisions: 24,
                 label: '${gainDb.round()} dB',
                 activeColor: Tokens.text,
-                inactiveColor: Tokens.border,
+                inactiveColor: Tokens.surfaceRaised,
                 onChanged: enabled ? onChanged : null,
               ),
             ),

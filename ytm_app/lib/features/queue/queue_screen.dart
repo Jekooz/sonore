@@ -73,6 +73,7 @@ class _QueueBody extends ConsumerWidget {
     final ArtworkResolver artwork = ref.watch(artworkResolverProvider);
     final Track current = state.current!;
     final List<Track> upNext = state.upNext;
+    final double margin = Tokens.pageMargin(MediaQuery.sizeOf(context).width);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,9 +91,9 @@ class _QueueBody extends ConsumerWidget {
           onChanged: controller.setAutoplay,
         ),
         if (state.shuffle)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: Tokens.pageMarginPhone),
-            child: Text(
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: margin),
+            child: const Text(
               'Shuffle is on. The service exposes no separate collection order, '
               'so the order below is the play order.',
               style: Tokens.caption,
@@ -154,7 +155,7 @@ class _QueueBody extends ConsumerWidget {
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Tokens.pageMarginPhone),
+          padding: EdgeInsets.symmetric(horizontal: margin),
           child: Center(
             child: PillButton(
               icon: AppIcons.close,

@@ -10,12 +10,14 @@ import 'glass_surface.dart';
 ///
 /// It is a real interactive control, not just an indicator:
 /// tapping or clicking seeks, dragging shows a temporary preview and commits
-/// exactly one seek on release, and the bar thickens from 4 to 8 px on touch or
-/// hover. Played and buffered progress are drawn separately.
+/// exactly one seek on release, and the bar thickens under touch or hover
+/// while a round thumb grows out of the track. Played and buffered progress
+/// are drawn separately.
 ///
 /// When the duration is unknown or the stream cannot seek, pass
 /// [enabled] = false: the bar renders inert instead of pretending the action
-/// worked. The invisible hit area is [Tokens.minTouchTarget] tall.
+/// worked. The invisible hit area is [Tokens.minTouchTarget] tall, or
+/// [Tokens.seekHitHeightCompact] in [compact] mode.
 class SeekBar extends StatefulWidget {
   const SeekBar({
     super.key,
@@ -23,6 +25,7 @@ class SeekBar extends StatefulWidget {
     required this.duration,
     this.buffered = Duration.zero,
     this.enabled = true,
+    this.compact = false,
     this.onSeekStart,
     this.onSeek,
     this.onSeekEnd,
@@ -32,6 +35,11 @@ class SeekBar extends StatefulWidget {
   final Duration duration;
   final Duration buffered;
   final bool enabled;
+
+  /// The hairline variant used where a full-height scrubber would crowd the
+  /// layout — the floating Now Playing bar. Same behaviours, smaller geometry,
+  /// all of it from tokens.
+  final bool compact;
 
   /// Called once when a drag or tap begins, with the previewed position.
   final ValueChanged<Duration>? onSeekStart;
@@ -54,6 +62,20 @@ class _SeekBarState extends State<SeekBar> {
 
   bool get _interactive =>
       widget.enabled && _totalMs > 0 && widget.onSeekEnd != null;
+
+  bool get _compact => widget.compact;
+
+  double get _thickness =>
+      (_hovered || _preview != null)
+      ? (_compact
+            ? Tokens.seekBarThicknessCompactActive
+            : Tokens.seekBarThicknessActive)
+      : (_compact
+            ? Tokens.seekBarThicknessCompact
+            : Tokens.seekBarThickness);
+
+  double get _hitHeight =>
+      _compact ? Tokens.seekHitHeightCompact : Tokens.minTouchTarget;
 
   Duration _at(double fraction) =>
       Duration(milliseconds: (fraction * _totalMs).round());
@@ -78,9 +100,7 @@ class _SeekBarState extends State<SeekBar> {
 
   @override
   Widget build(BuildContext context) {
-    final double thickness = (_hovered || _preview != null)
-        ? Tokens.seekBarThicknessActive
-        : Tokens.seekBarThickness;
+    final double thickness = _thickness;
 
     final double played = _preview ??
         (_totalMs == 0 ? 0 : (widget.position.inMilliseconds / _totalMs).clamp(0.0, 1.0));
@@ -98,7 +118,7 @@ class _SeekBarState extends State<SeekBar> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: Tokens.minTouchTarget),
+        constraints: BoxConstraints(minHeight: _hitHeight),
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double width = constraints.maxWidth;
@@ -141,6 +161,22 @@ class _SeekBarState extends State<SeekBar> {
                       _segment(1, remainingColor),
                       _segment(buffered, bufferedColor),
                       _segment(played, playedColor),
+                      if (showPreview)
+                        Positioned(
+                          // Centre the thumb on the shown position; the track
+                          // is thin, so it may overflow a hair — Clip.none
+                          // lets it grow out of the hairline.
+                          left: shownFraction * width - Tokens.seekThumbSize / 2,
+                          top: thickness / 2 - Tokens.seekThumbSize / 2,
+                          child: Container(
+                            width: Tokens.seekThumbSize,
+                            height: Tokens.seekThumbSize,
+                            decoration: ShapeDecoration(
+                              color: playedColor,
+                              shape: const CircleBorder(),
+                            ),
+                          ),
+                        ),
                       if (showPreview)
                         Positioned(
                           // Above the thumb, clamped to the edges so the tag

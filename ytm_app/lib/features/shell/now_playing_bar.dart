@@ -11,19 +11,19 @@ import '../../theme/tokens.dart';
 import '../../ui/art_tile.dart';
 import '../../ui/format.dart';
 import '../../ui/glass_surface.dart';
+import '../../ui/seek_bar.dart';
 import '../now_playing/artwork.dart';
 
 /// The persistent Now Playing bar.
 ///
-/// It is the one playback surface in the shell, and it is deliberately *not*
-/// floating chrome: it is a full-width, square-cornered bar docked to the
-/// bottom of the application content area, directly above the phone navigation
-/// menu (or flush with the window bottom on wide layouts). It casts no shadow,
-/// paints no specular streak and leaves no outer margin, so it reads as part of
-/// the layout even though it keeps the subtle glass tint and backdrop blur.
+/// It is floating chrome, like the navigation it hovers above: a thick glass
+/// pill that sits clear of the page bottom with its own margins, casting the
+/// same soft shadow as every other floating surface. The old progress
+/// hairline is now a real — if whisper-thin — scrubber along the pill's
+/// bottom edge, so a seek never requires the full page first.
 ///
-/// Only the navigation menu is allowed to float. The bar stays hidden while the
-/// queue is empty and on Now Playing itself, where the page is the player.
+/// The bar stays hidden while the queue is empty and on Now Playing itself,
+/// where the page is the player.
 class NowPlayingBar extends ConsumerWidget {
   const NowPlayingBar({super.key});
 
@@ -37,13 +37,6 @@ class NowPlayingBar extends ConsumerWidget {
     final PlaybackController controller = ref.read(playbackProvider.notifier);
     final ArtworkResolver artwork = ref.watch(artworkResolverProvider);
 
-    final double fraction = state.duration > Duration.zero
-        ? (state.position.inMilliseconds / state.duration.inMilliseconds).clamp(
-            0.0,
-            1.0,
-          )
-        : 0.0;
-
     void openNowPlaying() => context.go(AppDestination.nowPlaying.path);
 
     return Semantics(
@@ -51,23 +44,24 @@ class NowPlayingBar extends ConsumerWidget {
       label: 'Now playing',
       child: GlassSurface(
         tier: GlassTier.thick,
-        isFloating: false,
-        shape: Tokens.shapeAnchoredBar,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            _ProgressLine(fraction: fraction),
-            SizedBox(
-              height: Tokens.nowPlayingBarHeight,
-              child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
-                  final bool wide =
-                      constraints.maxWidth >= Tokens.breakpointDesktop;
-                  return Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: wide
-                          ? Tokens.pageMarginDesktop
-                          : Tokens.pageMarginPhone,
+        shape: Tokens.shapePill,
+        child: SizedBox(
+          height: Tokens.nowPlayingBarHeight,
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool wide =
+                  constraints.maxWidth >= Tokens.breakpointDesktop;
+              return Stack(
+                clipBehavior: Clip.none,
+                children: <Widget>[
+                  // The pill's own interior frame; the scrubber hugs the
+                  // bottom edge below this row.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      Tokens.s16,
+                      Tokens.s4,
+                      Tokens.s16,
+                      Tokens.s12,
                     ),
                     child: wide
                         ? _WideContent(
@@ -84,45 +78,25 @@ class NowPlayingBar extends ConsumerWidget {
                             artwork: artwork,
                             onOpen: openNowPlaying,
                           ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A 2 px white line at the very top of the bar. It is an indicator only; the
-/// full seek control lives on Now Playing.
-class _ProgressLine extends StatelessWidget {
-  const _ProgressLine({required this.fraction});
-
-  final double fraction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Playback progress',
-      value: '${(fraction * 100).round()} percent',
-      child: SizedBox(
-        height: Tokens.progressLineThin,
-        width: double.infinity,
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            const ColoredBox(color: Tokens.surface),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: fraction.clamp(0.0, 1.0),
-                heightFactor: 1,
-                child: const ColoredBox(color: Tokens.text),
-              ),
-            ),
-          ],
+                  ),
+                  // A thin, fully interactive scrubber along the bottom edge,
+                  // inset so it never climbs into the pill's rounded corners.
+                  Positioned(
+                    left: Tokens.s16,
+                    right: Tokens.s16,
+                    bottom: Tokens.s4,
+                    child: SeekBar(
+                      compact: true,
+                      position: state.position,
+                      duration: state.duration,
+                      buffered: state.buffered,
+                      onSeekEnd: state.canSeek ? controller.seek : null,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -152,38 +126,35 @@ class _TrackSummary extends StatelessWidget {
         hoverColor: Tokens.glassThick,
         focusColor: Tokens.glassThick,
         splashColor: Tokens.transparent,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Tokens.s8),
-          child: Row(
-            children: <Widget>[
-              ArtTile(
-                size: Tokens.artThumbSize,
-                radius: Tokens.rSmall,
-                image: artwork(track.artworkUrl),
+        child: Row(
+          children: <Widget>[
+            ArtTile(
+              size: Tokens.artThumbSize,
+              radius: Tokens.rSmall,
+              image: artwork(track.artworkUrl),
+            ),
+            const SizedBox(width: Tokens.s12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    track.title,
+                    style: Tokens.rowTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    track.artist,
+                    style: Tokens.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              const SizedBox(width: Tokens.s12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      track.title,
-                      style: Tokens.rowTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      track.artist,
-                      style: Tokens.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -191,8 +162,7 @@ class _TrackSummary extends StatelessWidget {
 }
 
 /// Wide windows: metadata left, transport centred, elapsed/total right. The
-/// horizontal padding matches the page margins, so the artwork lines up with
-/// the content above it.
+/// three zones read as one control set at a glance.
 class _WideContent extends StatelessWidget {
   const _WideContent({
     required this.state,

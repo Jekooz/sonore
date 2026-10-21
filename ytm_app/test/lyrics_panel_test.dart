@@ -13,7 +13,6 @@ import 'package:ytm_app/data/api_client.dart';
 import 'package:ytm_app/data/models.dart';
 import 'package:ytm_app/data/ytm_repository.dart';
 import 'package:ytm_app/features/lyrics/lyrics_controller.dart';
-import 'package:ytm_app/theme/icons.dart';
 import 'package:ytm_app/ui/screen_states.dart';
 
 import 'support/harness.dart';

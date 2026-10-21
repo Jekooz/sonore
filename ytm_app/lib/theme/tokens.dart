@@ -425,7 +425,20 @@ class Tokens {
 
   static const double seekBarThickness = 4;
   static const double seekBarThicknessActive = 8;
-  static const double progressLineThin = 2;
+
+  /// The hairline variant used inside the floating Now Playing bar: a
+  /// whisper-thin track by default that thickens under the pointer.
+  static const double seekBarThicknessCompact = 2;
+  static const double seekBarThicknessCompactActive = 3;
+
+  /// The compact scrubber's hit area — smaller than a full touch target,
+  /// because the bar's transport buttons carry the touch interactions, and a
+  /// taller zone would swallow taps meant for the track title beneath it.
+  static const double seekHitHeightCompact = 16;
+
+  /// A small round thumb that grows out of the track on hover and while
+  /// dragging, on both the full and the compact scrubber.
+  static const double seekThumbSize = 12;
 
   // ---------------------------------------------------------------- Glass ----
   //

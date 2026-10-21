@@ -19,13 +19,13 @@ import 'now_playing_bar.dart';
 /// persistent Now Playing bar all live here, so no page owns the player.
 ///
 /// Layout rules:
-/// - the navigation menu is the only floating chrome. Under
-///   [Tokens.breakpointPhone] it is the compact glass bottom pill; at
-///   [Tokens.breakpointPhone] and wider it is the floating glass top tab bar;
-/// - the Now Playing bar is docked, not floating. It is a normal child of the
-///   layout column at the bottom of the content area — above the phone
-///   navigation menu, flush with the window bottom on wide layouts — so it can
-///   never hover over content or overlap the navigation.
+/// - the navigation menu is floating chrome. Under [Tokens.breakpointPhone]
+///   it is the compact glass bottom pill; at [Tokens.breakpointPhone] and
+///   wider it is the floating glass top tab bar;
+/// - the Now Playing bar hovers too. It is the same thick-glass pill as the
+///   navigation, positioned in the same Stack layer order (content, then
+///   chrome), so it never displaces layout — pages simply receive a computed
+///   bottom inset to clear it.
 ///
 /// The top tab bar floats over a reserved strip ([Tokens.shellTopInset]) rather
 /// than taking a layout column, so it reads as chrome rather than a panel.
@@ -78,61 +78,110 @@ class AppShell extends ConsumerWidget {
       onOpenSettings: openSettings,
     );
 
+    // The Android gesture inset the floating chrome must clear; on Windows
+    // this is zero, so the pills simply float with their own margins.
+    final double safeBottom = MediaQuery.paddingOf(context).bottom;
+
     final Widget body = isPhone
-        ? Column(
+        ? Stack(
             children: <Widget>[
-              // Pages own their scrolling; the shell owns the system insets.
-              // The top inset keeps content out of the Android status bar and
-              // any notch, while the bottom is handled by the navigation pill.
-              Expanded(child: SafeArea(bottom: false, child: navigationShell)),
-              // Docked: it sits in the layout above the floating navigation
-              // pill, not over the page.
-              if (showNowPlayingBar) const NowPlayingBar(),
-              SafeArea(top: false, child: navigation),
-            ],
-          )
-        : Column(
-            children: <Widget>[
-              Expanded(
-                child: Stack(
-                  children: <Widget>[
-                    // The tab bar floats in this strip; reserving it here keeps
-                    // the floating chrome off the content without every page
-                    // having to know it exists. The Now Playing bar no longer
-                    // needs a scroll inset because it takes layout space below.
-                    Positioned.fill(
-                      child: SafeArea(
-                        bottom: false,
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            top: Tokens.shellTopInset,
-                          ),
-                          child: navigationShell,
-                        ),
-                      ),
+              // Pages own their scrolling; the shell owns the insets. The top
+              // inset is handled by SafeArea (status bar, notch); the bottom
+              // is computed from the floating chrome below.
+              Positioned.fill(
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      // Nav pill's outer bottom margin + the pill, plus the
+                      // mini player above it when there is a track, plus
+                      // breathing room for the page content.
+                      bottom:
+                          safeBottom +
+                          Tokens.s12 +
+                          Tokens.navBarHeight +
+                          (showNowPlayingBar
+                              ? Tokens.s8 + Tokens.nowPlayingBarHeight
+                              : 0) +
+                          Tokens.s16,
                     ),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: SafeArea(
-                        bottom: false,
-                        child: NavTabBar(
-                          currentIndex: highlighted,
-                          settingsActive: settingsActive,
-                          onSelect: select,
-                          onOpenSettings: openSettings,
-                        ),
-                      ),
-                    ),
-                  ],
+                    child: navigationShell,
+                  ),
                 ),
               ),
-              // Anchored to the bottom of the content area. SafeArea only
-              // reserves the Android gesture inset; on Windows this is zero,
-              // so the bar is flush with the window edge.
+              // The mini player floats just above the nav pill.
               if (showNowPlayingBar)
-                const SafeArea(top: false, child: NowPlayingBar()),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom:
+                      safeBottom +
+                      Tokens.s12 +
+                      Tokens.navBarHeight +
+                      Tokens.s8,
+                  child: const NowPlayingBar(),
+                ),
+              // The nav pill anchors to the very bottom; SafeArea inside the
+              // slot lifts it off Android's gesture zone.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(top: false, child: navigation),
+              ),
+            ],
+          )
+        : Stack(
+            children: <Widget>[
+              // The tab bar floats in the top strip and the Now Playing bar
+              // in the bottom gap; reserving both here keeps the floating
+              // chrome off the content without every page knowing they exist.
+              Positioned.fill(
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: Tokens.shellTopInset,
+                      bottom: showNowPlayingBar
+                          ? Tokens.nowPlayingBarHeight + Tokens.s16 * 2
+                          : 0,
+                    ),
+                    child: navigationShell,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: NavTabBar(
+                    currentIndex: highlighted,
+                    settingsActive: settingsActive,
+                    onSelect: select,
+                    onOpenSettings: openSettings,
+                  ),
+                ),
+              ),
+              // The floating pill: centred on the page gutters, held a margin
+              // off the window bottom, capped at the content width so it
+              // never sprawls across an ultrawide window.
+              if (showNowPlayingBar)
+                Positioned(
+                  left: Tokens.pageMarginDesktop,
+                  right: Tokens.pageMarginDesktop,
+                  bottom: Tokens.s16,
+                  child: Align(
+                    alignment: AlignmentDirectional.bottomCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: Tokens.contentMaxWidth,
+                      ),
+                      child: const NowPlayingBar(),
+                    ),
+                  ),
+                ),
             ],
           );
 

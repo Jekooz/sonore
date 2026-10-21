@@ -13,6 +13,7 @@ import 'package:ytm_app/routing/destinations.dart';
 import 'package:ytm_app/theme/icons.dart';
 import 'package:ytm_app/theme/tokens.dart';
 import 'package:ytm_app/ui/glass_surface.dart';
+import 'package:ytm_app/ui/seek_bar.dart';
 
 import 'support/harness.dart';
 
@@ -266,7 +267,7 @@ void main() {
   });
 
   testWidgets(
-    'desktop docks the Now Playing bar flush with the window bottom',
+    'desktop floats the Now Playing bar as a pill above the bottom edge',
     (WidgetTester tester) async {
       await pumpAtSize(tester, appScope(queue: testQueue()), size: kDesktop);
 
@@ -274,23 +275,58 @@ void main() {
       final Rect bar = tester.getRect(find.byType(NowPlayingBar));
       final Rect window = tester.getRect(find.byType(Scaffold).first);
 
-      // Full window width and flush with the bottom edge: a docked bar, not a
-      // centered pill with a gap under it.
-      expect(bar.left, closeTo(window.left, 1));
-      expect(bar.width, closeTo(window.width, 1));
-      expect(bar.bottom, closeTo(window.bottom, 1));
+      // Floating chrome, not a docked bar: held clear of the window bottom
+      // and inset from the page gutters, but still full-height content.
+      expect(bar.bottom, closeTo(window.bottom - Tokens.s16, 1));
+      expect(bar.left, greaterThan(window.left));
+      expect(bar.right, lessThan(window.right));
+      expect(bar.height, Tokens.nowPlayingBarHeight);
 
-      // The surface is explicitly docked, so it cannot paint the floating
-      // shadow or specular streak.
+      // The surface is explicitly floating, the same recipe as the nav pill.
       final GlassSurface surface = tester.widget<GlassSurface>(
         find.descendant(
           of: find.byType(NowPlayingBar),
           matching: find.byType(GlassSurface),
         ),
       );
-      expect(surface.isFloating, isFalse);
-      expect(surface.shape, Tokens.shapeAnchoredBar);
+      expect(surface.isFloating, isTrue);
+      expect(surface.shape, Tokens.shapePill);
     },
+  );
+
+  testWidgets('the desktop content clears the floating bar', (
+    WidgetTester tester,
+  ) async {
+    await pumpAtSize(tester, appScope(queue: testQueue()), size: kDesktop);
+
+    // The bar reserves its slot in the page inset: nothing can hide behind it
+    // by accident, so content can never collide with the chrome.
+    final Rect bar = tester.getRect(find.byType(NowPlayingBar));
+    expect(bar.top, greaterThan(0));
+
+    // The mini player carries its own thin scrubber now.
+    expect(find.byType(SeekBar), findsOneWidget);
+  },
+  );
+
+  testWidgets('the phone mini player floats above the nav pill', (
+    WidgetTester tester,
+  ) async {
+    await pumpAtSize(tester, appScope(queue: testQueue()), size: kPhone);
+
+    final Rect bar = tester.getRect(find.byType(NowPlayingBar));
+    final Rect pill = tester.getRect(
+      find.descendant(
+        of: find.byType(NavBottomBar),
+        matching: find.byType(GlassSurface),
+      ),
+    );
+
+    // Two floating layers, never stacked on each other: the mini player sits
+    // entirely above navigation, with a visible gap between them.
+    expect(bar.bottom, lessThanOrEqualTo(pill.top));
+    expect(pill.top - bar.bottom, greaterThanOrEqualTo(Tokens.s8 - 1));
+  },
   );
 
   testWidgets('phone docks the bar above the floating navigation menu', (

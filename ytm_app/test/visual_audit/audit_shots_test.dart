@@ -1,7 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+// Riverpod 3 exposes `Override` only through `misc.dart`.
+import 'package:riverpod/misc.dart' show Override;
+import 'package:ytm_app/core/app_settings.dart';
 
 import '../support/harness.dart';
 import '../support/recorded_sidecar.dart';
@@ -119,6 +123,25 @@ void main() {
         size: size,
       );
       await _capture(tester, 'sign_in_$name');
+    });
+
+    testWidgets('reduce transparency ${size.width}x${size.height}', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(
+          initialLocation: '/home',
+          queue: testQueue(),
+          extraOverrides: <Override>[
+            initialAppSettingsProvider.overrideWithValue(
+              const AppSettings(reduceTransparency: true),
+            ),
+          ],
+        ),
+        size: size,
+      );
+      await _capture(tester, 'reduce_transparency_$name');
     });
   }
 }

@@ -82,8 +82,9 @@ class _HomeContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin =
-        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+    final double margin = Tokens.pageMargin(
+      MediaQuery.sizeOf(context).width,
+    );
     final MediaItem? featured = featuredRelease(rows);
     final List<MediaItem> popular = popularTracks(rows);
     // Desktop only; and only when there is a real track to list.

@@ -224,6 +224,9 @@ Future<void> pumpAtSize(
   bool settle = true,
 }) async {
   ambientMotionEnabled = false;
+  // The generated artwork decodes on the real event loop; running it here in
+  // the warm-up keeps image timing out of every golden.
+  await tester.runAsync(warmSampleArtwork);
   addTearDown(() => ambientMotionEnabled = true);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;

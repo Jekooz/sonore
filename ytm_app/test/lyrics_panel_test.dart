@@ -13,6 +13,7 @@ import 'package:ytm_app/data/api_client.dart';
 import 'package:ytm_app/data/models.dart';
 import 'package:ytm_app/data/ytm_repository.dart';
 import 'package:ytm_app/features/lyrics/lyrics_controller.dart';
+import 'package:ytm_app/theme/icons.dart';
 import 'package:ytm_app/ui/screen_states.dart';
 
 import 'support/harness.dart';
@@ -100,8 +101,8 @@ void main() {
     });
   });
 
-  group('LyricsScreen states', () {
-    Future<void> pumpLyrics(
+  group('LyricsPanel states', () {
+    Future<void> pumpLyricsPanel(
       WidgetTester tester, {
       required List<Override> extraOverrides,
       List<Track>? queue,
@@ -110,13 +111,22 @@ void main() {
       await pumpAtSize(
         tester,
         appScope(
-          initialLocation: '/now-playing/lyrics',
+          initialLocation: '/now-playing',
           queue: queue ?? testQueue(),
           extraOverrides: extraOverrides,
         ),
         size: kDesktop,
         settle: settle,
       );
+      // Lyrics is a panel: open it the way the icon-only action does. When
+      // the caller opted out of settling (a pending future), a plain pump
+      // keeps the clock moving without demanding a quiet tree.
+      await tester.tap(find.bySemanticsLabel('Lyrics'));
+      if (settle) {
+        await tester.pumpAndSettle();
+      } else {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
       await tester.pump(const Duration(milliseconds: 50));
     }
 
@@ -129,7 +139,7 @@ void main() {
       addTearDown(() {
         if (!pending.isCompleted) pending.complete(null);
       });
-      await pumpLyrics(
+      await pumpLyricsPanel(
         tester,
         settle: false,
         extraOverrides: <Override>[
@@ -147,7 +157,7 @@ void main() {
       final LyricsResult result = LyricsResult.fromJson(
         await _decode(_timedBody),
       );
-      await pumpLyrics(
+      await pumpLyricsPanel(
         tester,
         extraOverrides: <Override>[
           lyricsProvider.overrideWith((Ref ref) async => result),
@@ -165,7 +175,7 @@ void main() {
       final LyricsResult result = LyricsResult.fromJson(
         await _decode(_staticBody),
       );
-      await pumpLyrics(
+      await pumpLyricsPanel(
         tester,
         extraOverrides: <Override>[
           lyricsProvider.overrideWith((Ref ref) async => result),
@@ -193,7 +203,7 @@ void main() {
       final LyricsResult result = LyricsResult.fromJson(
         await _decode(_timedBody),
       );
-      await pumpLyrics(
+      await pumpLyricsPanel(
         tester,
         extraOverrides: <Override>[
           lyricsProvider.overrideWith((Ref ref) async => result),
@@ -214,7 +224,7 @@ void main() {
     testWidgets('says plainly when the service has no lyrics', (
       WidgetTester tester,
     ) async {
-      await pumpLyrics(
+      await pumpLyricsPanel(
         tester,
         extraOverrides: <Override>[
           lyricsProvider.overrideWith((Ref ref) async => null),
@@ -228,7 +238,7 @@ void main() {
     testWidgets('an offline sidecar shows the offline state', (
       WidgetTester tester,
     ) async {
-      await pumpLyrics(
+      await pumpLyricsPanel(
         tester,
         extraOverrides: <Override>[
           connectionProvider.overrideWith(
@@ -244,7 +254,7 @@ void main() {
     testWidgets('a failed request shows the failure with a retry', (
       WidgetTester tester,
     ) async {
-      await pumpLyrics(
+      await pumpLyricsPanel(
         tester,
         extraOverrides: <Override>[
           lyricsProvider.overrideWith(
@@ -261,7 +271,7 @@ void main() {
     testWidgets('a signed-out session shows the sign-in state', (
       WidgetTester tester,
     ) async {
-      await pumpLyrics(
+      await pumpLyricsPanel(
         tester,
         extraOverrides: <Override>[
           connectionProvider.overrideWith(
@@ -277,15 +287,17 @@ void main() {
     testWidgets('nothing playing explains itself instead of showing an error', (
       WidgetTester tester,
     ) async {
+      // Without a track the panel is never offered; Now Playing itself
+      // explains, and its action goes to the library.
       await pumpAtSize(
         tester,
-        appScope(initialLocation: '/now-playing/lyrics'),
+        appScope(initialLocation: '/now-playing'),
         size: kDesktop,
       );
-      await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('Nothing is playing.'), findsOneWidget);
+      expect(find.text('Nothing is playing yet.'), findsOneWidget);
       expect(find.text('Browse library'), findsOneWidget);
+      expect(find.bySemanticsLabel('Lyrics'), findsNothing);
     });
   });
 }

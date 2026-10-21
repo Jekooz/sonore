@@ -153,12 +153,14 @@ void main() {
     expect(bar.settingsActive, isFalse);
     expect(tabIcon(AppIcons.musicNotesFill), findsOneWidget);
 
-    // The Equalizer sits on top of Now Playing: Settings is the active action
-    // there, and Now Playing must not stay lit.
-    await tester.ensureVisible(find.text('EQ'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('EQ'));
-    await tester.pumpAndSettle();
+    // The Equalizer is now a Settings-side page (the link lives there). On
+    // top of Now Playing it must still light the Settings action, and Now
+    // Playing must not stay lit.
+    await pumpAtSize(
+      tester,
+      appScope(initialLocation: '/now-playing/equalizer', queue: testQueue()),
+      size: kDesktop,
+    );
 
     expect(find.byType(EqualizerScreen), findsOneWidget);
     bar = tester.widget<NavTabBar>(find.byType(NavTabBar));

@@ -6,7 +6,6 @@ import '../features/collection/collection_screen.dart';
 import '../features/equalizer/equalizer_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
-import '../features/lyrics/lyrics_screen.dart';
 import '../features/now_playing/now_playing_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/queue/queue_screen.dart';
@@ -103,17 +102,14 @@ StatefulShellBranch _branch(
             path: 'settings',
             builder: (_, _) => const SettingsScreen(),
           ),
-          // Now Playing's three detail screens. Design.md sections F, G and H
-          // place the Queue, Lyrics and the Equalizer off Now Playing, not in
-          // the nav bar.
+          // Now Playing's two detail screens. The Queue and Lyrics panels
+          // belong to the Now Playing page itself; the Equalizer stays a
+          // route so Settings can link to it while Now Playing is the
+          // back-stack context.
           if (destination == AppDestination.nowPlaying) ...<RouteBase>[
             GoRoute(
               path: 'queue',
               builder: (_, _) => const QueueScreen(),
-            ),
-            GoRoute(
-              path: 'lyrics',
-              builder: (_, _) => const LyricsScreen(),
             ),
             GoRoute(
               path: 'equalizer',

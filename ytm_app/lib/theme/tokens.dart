@@ -66,6 +66,10 @@ class Tokens {
   /// Overlays behind modal content (black 90%).
   static const Color scrim = Color(0xE6000000);
 
+  /// Scrim behind on-demand panels (black 30%): the page dims, it does not
+  /// disappear — the panel is context, not a modal takeover.
+  static const Color panelScrim = Color(0x4D000000);
+
   /// Specular edge of a glass surface: the 1px border is a gradient from
   /// white 30% at the top-left corner down to white 5% at the bottom-right —
   /// a lit edge rather than a hairline. The top inner highlight carries the
@@ -330,15 +334,20 @@ class Tokens {
   /// Now Playing queue panel on desktop.
   static const double queuePanelWidth = 320;
 
+  /// Tallest an on-demand bottom sheet grows, so a full queue doesn't leave
+  /// the artwork unrecognisable on a small phone.
+  static const double sheetMaxHeight = 640;
+
+  /// Bottom sheet: a fling downward faster than this (logical px/s) dismisses
+  /// it. Slow drags snap back instead — dismissal needs intent.
+  static const double sheetFlingVelocity = 600;
+
   /// Now Playing artwork bounds.
   static const double artworkMaxPhone = 320;
-  static const double artworkMaxDesktop = 380;
+  static const double artworkMaxDesktop = 460;
 
   /// Widest the transport block (seek row + pill) grows on a wide screen.
   static const double transportMaxWidth = 460;
-
-  /// The fraction of the viewport one carousel artwork occupies.
-  static const double carouselViewportFraction = 0.68;
 
   /// Pressing previous restarts the track while it is past this point.
   static const Duration previousRestartThreshold = Duration(seconds: 3);
@@ -511,13 +520,6 @@ class Tokens {
   /// Play/pause artwork scale.
   static const double artworkPlayingScale = 1.0;
   static const double artworkPausedScale = 0.86;
-
-  /// Carousel geometry.
-  static const double carouselNeighborScale = 0.8;
-  static const double carouselNeighborOpacity = 0.35;
-  static const double carouselCurrentOpacity = 0.6;
-  static const double carouselPerspective = 0.001;
-  static const double carouselNeighborRotateY = 0.61; // 35 degrees in radians
 
   /// Default spring: mass 1, stiffness 320, damping 30.
   static const double springMass = 1;

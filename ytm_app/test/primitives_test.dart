@@ -10,6 +10,7 @@ import 'package:ytm_app/theme/app_theme.dart';
 import 'package:ytm_app/theme/icons.dart';
 import 'package:ytm_app/theme/tokens.dart';
 import 'package:ytm_app/ui/art_tile.dart';
+import 'package:ytm_app/ui/ambient/ambient_backdrop.dart';
 import 'package:ytm_app/ui/glass_surface.dart';
 import 'package:ytm_app/ui/pill_button.dart';
 import 'package:ytm_app/ui/seek_bar.dart';
@@ -271,6 +272,11 @@ void main() {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
+    // The specimen catalogue shows TrackRow samples, whose live badge dances
+    // forever; freeze motion so pumpAndSettle can settle.
+    ambientMotionEnabled = false;
+    addTearDown(() => ambientMotionEnabled = true);
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -297,6 +303,11 @@ void main() {
     // scale: the ceiling is what the user may choose, not what they get.
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    // Freeze badge motion: the catalogue has playing TrackRow samples whose
+    // tickers otherwise never let pumpAndSettle settle.
+    ambientMotionEnabled = false;
+    addTearDown(() => ambientMotionEnabled = true);
 
     await tester.pumpWidget(
       ProviderScope(

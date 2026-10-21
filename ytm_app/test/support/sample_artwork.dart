@@ -51,6 +51,12 @@ const int _artResolution = 256;
 
 final Map<int, Future<ui.Image>> _imageCache = <int, Future<ui.Image>>{};
 
+/// Images that finished decoding during warm-up. Reading these is
+/// synchronous, which is what the completer path needs: awaiting the
+/// decode *future* from inside the FakeAsync test zone suspends until the
+/// real event loop runs again, long after the golden was captured.
+final Map<int, ui.Image> _readyImages = <int, ui.Image>{};
+
 /// The three palette colors a fixture URL lifts for the ambient backdrop.
 List<Color> sampleArtworkColors(String? url) {
   final _Variant variant = _variantFor(url);
@@ -85,11 +91,24 @@ class SampleArtworkImage extends ImageProvider<SampleArtworkKey> {
     SampleArtworkKey key,
     ImageDecoderCallback decode,
   ) {
-    return OneFrameImageStreamCompleter(
-      _imageFor(key.variant).then(
-        (ui.Image image) => ImageInfo(image: image),
-      ),
-    );
+    // Warm path: the decoded [ui.Image] is straight to hand, synchronously.
+    // ImageStreamCompleter replays a set image to late listeners, so the
+    // widget paints the art on the very frame it first builds.
+    if (_readyImages[key.variant] case final ui.Image image) {
+      return OneFrameImageStreamCompleter(
+        SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
+      );
+    }
+    // Fallback for pumps that bypass warm-up: the async path, with one hop
+    // so the notification never fires inside the resolve chain itself.
+    return OneFrameImageStreamCompleter(_resolve(key));
+  }
+
+  /// Fallback for pumps that bypass warm-up: the async decode path. Still
+  /// routed through the same cache, so a later warm run finds it ready.
+  Future<ImageInfo> _resolve(SampleArtworkKey key) async {
+    final ui.Image image = await _imageFor(key.variant);
+    return ImageInfo(image: image);
   }
 }
 
@@ -113,6 +132,18 @@ class SampleArtworkKey {
 Future<ui.Image> _imageFor(int variant) {
   final int safe = variant.abs() % _variants.length;
   return _imageCache.putIfAbsent(safe, () => _decode(safe));
+}
+
+/// Pre-decodes every variant so widget tests and goldens never race the
+/// image pipeline. Call it inside `WidgetTester.runAsync` before pumping —
+/// the decode finishes on the real event loop, outside the fake-clock zone,
+/// and the results land in the synchronous map [loadImage] reads.
+Future<void> warmSampleArtwork() async {
+  final List<Future<void>> pending = <Future<void>>[
+    for (int i = 0; i < _variants.length; i++)
+      _imageFor(i).then((ui.Image image) => _readyImages[i] = image),
+  ];
+  await Future.wait(pending);
 }
 
 /// Build the RGBA pixel buffer and hand it to the platform decoder.

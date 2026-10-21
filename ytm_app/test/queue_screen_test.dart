@@ -231,7 +231,7 @@ void main() {
     expect(find.textContaining('Shuffle is on'), findsOneWidget);
   });
 
-  testWidgets('the compact Now Playing queue action opens this screen',
+  testWidgets('the queue panel links on to the full queue screen',
       (WidgetTester tester) async {
     await pumpAtSize(
       tester,
@@ -241,7 +241,12 @@ void main() {
 
     expect(find.byType(QueuePanel), findsNothing);
 
-    await tester.tap(find.text('Queue'));
+    // Open the on-demand panel, then travel on to the editing screen.
+    await tester.tap(find.bySemanticsLabel('Queue'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QueuePanel), findsOneWidget);
+
+    await tester.tap(find.text('Open full queue'));
     await tester.pumpAndSettle();
 
     expect(find.byType(QueueScreen), findsOneWidget);

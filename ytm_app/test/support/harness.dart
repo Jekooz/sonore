@@ -23,6 +23,7 @@ import 'package:ytm_app/ui/ambient/ambient_backdrop.dart';
 
 import 'fake_engine.dart';
 import 'recorded_sidecar.dart';
+import 'sample_artwork.dart';
 
 /// The font families the app declares in pubspec.yaml. Widget tests do not load
 /// them automatically, so goldens would otherwise render text and icon glyphs in
@@ -149,9 +150,12 @@ Widget appScope({
 
   return ProviderScope(
     overrides: [
-      artworkResolverProvider.overrideWithValue((String? url) => null),
+      // Fixture artwork: every URL resolves to one of the six generated
+      // gradient variants, so tiles, the Now Playing cover and the ambient
+      // backdrop all refract real art. No test ever touches the network.
+      artworkResolverProvider.overrideWithValue(sampleArtworkResolver),
       ambientPaletteLoaderProvider.overrideWithValue(
-        (String url) async => kTestAmbientColors,
+        (String url) async => sampleArtworkColors(url),
       ),
       // The shell watches the playback service, so every pumped app would
       // otherwise construct a real media_kit player and load libmpv.

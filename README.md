@@ -47,7 +47,11 @@ Everything below is present in the code on this branch:
   rotates future tracks toward the front, an "Up Next" panel, and a full queue
   screen with history.
 - **Mini player** — persistent across tabs, with play/pause/next/transport.
-- **Autoplay** — picks up the next track when enabled in settings.
+- **Autoplay** - picks up the next track when enabled in settings.
+- **Layered recommendations** - YouTube Music's own picks first, refined by
+  what this device has learned (plays, skips and likes) and, optionally, by
+  ListenBrainz and Last.fm. Settings → Recommendations turns the local
+  learning off, adds the outside tokens and clears what has been learned.
 - **Shuffle and repeat** — off / all / one, persisted between runs.
 - **Synced lyrics** — lyric lines with timestamps; the screen follows playback
   and seek-by-tap when a synced source is available.

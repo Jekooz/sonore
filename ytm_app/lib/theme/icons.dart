@@ -149,6 +149,28 @@ class AppIcons {
   static const IconData clockCounterClockwise =
       IconData(0xe1a0, fontFamily: _regular, matchTextDirection: true);
 
+  // ------------------------------------------------- Recommendation settings ---
+
+  /// Shows a hidden value (the token fields).
+  static const IconData eye =
+      IconData(0xe220, fontFamily: _regular, matchTextDirection: true);
+
+  /// Hides a value that is on screen.
+  static const IconData eyeSlash =
+      IconData(0xe224, fontFamily: _regular, matchTextDirection: true);
+
+  /// Forgets something (clear listening data).
+  static const IconData trash =
+      IconData(0xe4a6, fontFamily: _regular, matchTextDirection: true);
+
+  /// Stores something (saves the settings).
+  static const IconData floppyDisk =
+      IconData(0xe248, fontFamily: _regular, matchTextDirection: true);
+
+  /// Confirms (the check mark).
+  static const IconData check =
+      IconData(0xe182, fontFamily: _regular, matchTextDirection: true);
+
   // ----------------------------------------------- Windows caption buttons ---
 
   static const IconData minimize =

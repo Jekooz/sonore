@@ -10,12 +10,15 @@ import '../../core/app_settings.dart';
 import '../../core/sidecar/sidecar_launcher.dart';
 import '../../core/sidecar/sidecar_providers.dart';
 import '../../data/api_client.dart';
+import '../../data/models.dart';
 import '../../data/ytm_repository.dart';
 import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
+import '../../ui/media_actions.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/screen_header.dart';
+import '../../ui/screen_states.dart';
 
 /// Keeps this in step with `pubspec.yaml`'s `version:`; the build does not
 /// embed the package metadata, so the About row states it directly.
@@ -146,6 +149,8 @@ class SettingsScreen extends ConsumerWidget {
                       );
                     },
                   ),
+                  const _Section(title: 'Recommendations'),
+                  const _Recommendations(),
                   const _Section(title: 'Diagnostics'),
                   const _Diagnostics(),
                   const _Section(title: 'Account'),
@@ -397,6 +402,261 @@ class _SliderRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The recommendation settings: the local taste layer, the optional outside
+/// services, and the button that forgets what the app has learned.
+///
+/// The credentials live in the local service, encrypted on this machine; the
+/// app asks for them, shows them and sends them back. Nothing is written to
+/// the app's own preferences, and nothing leaves the machine.
+class _Recommendations extends ConsumerStatefulWidget {
+  const _Recommendations();
+
+  @override
+  ConsumerState<_Recommendations> createState() => _RecommendationsState();
+}
+
+class _RecommendationsState extends ConsumerState<_Recommendations> {
+  final TextEditingController _listenbrainz = TextEditingController();
+  final TextEditingController _lastfm = TextEditingController();
+
+  RecommenderSettings _settings = const RecommenderSettings();
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _listenbrainz.dispose();
+    _lastfm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final YtmRepository repository = ref.read(ytmRepositoryProvider);
+    RecommenderSettings settings = const RecommenderSettings();
+    try {
+      settings = await repository.recommenderSettings();
+    } on YtmException {
+      // The service could not be reached: the defaults are shown, and the
+      // rows stay usable so a retry is one tap away.
+    }
+    if (!mounted) return;
+    setState(() {
+      _settings = settings;
+      _listenbrainz.text = settings.listenbrainzToken;
+      _lastfm.text = settings.lastfmApiKey;
+      _loading = false;
+    });
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final YtmRepository repository = ref.read(ytmRepositoryProvider);
+    final RecommenderSettings next = _settings.copyWith(
+      localLearning: _settings.localLearning,
+      listenbrainzToken: _listenbrainz.text.trim(),
+      lastfmApiKey: _lastfm.text.trim(),
+    );
+    try {
+      await repository.saveRecommenderSettings(next);
+    } on YtmException catch (error) {
+      if (!mounted) return;
+      showAppMessage(context, error.message);
+      setState(() => _saving = false);
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _settings = next;
+      _saving = false;
+    });
+    showAppMessage(context, 'Recommendation settings saved');
+  }
+
+  /// A destructive action needs a deliberate second step.
+  Future<void> _confirmClear() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        backgroundColor: Tokens.surfaceRaised,
+        title: const Text('Clear listening data?', style: Tokens.rowTitle),
+        content: const Text(
+          'What this app has learned about your taste is forgotten: the plays, '
+          'skips and likes it recorded, and the listening history it shows. '
+          'Your YouTube Music account is not affected.',
+          style: Tokens.subtitle,
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel', style: Tokens.subtitle),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              'Clear',
+              style: Tokens.subtitle.copyWith(color: Tokens.accent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!(confirmed ?? false)) return;
+
+    final YtmRepository repository = ref.read(ytmRepositoryProvider);
+    try {
+      await repository.clearListeningData();
+    } on YtmException catch (error) {
+      if (!mounted) return;
+      showAppMessage(context, error.message);
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _settings = const RecommenderSettings();
+    });
+    await _load();
+    if (!mounted) return;
+    showAppMessage(context, 'Listening data cleared');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: Tokens.s8),
+        child: Skeleton(width: 220, height: Tokens.s16),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _SwitchRow(
+          title: 'Local learning',
+          subtitle:
+              'Learns from what you play, skip and like, and uses it to refine '
+              'the recommendations.',
+          value: _settings.localLearning,
+          onChanged: (bool value) {
+            setState(() => _settings = _settings.copyWith(localLearning: value));
+            _save();
+          },
+        ),
+        _TokenField(
+          title: 'ListenBrainz token',
+          subtitle:
+              'Optional. Adds the artists you listen to there as a signal.',
+          controller: _listenbrainz,
+          hint: 'Your ListenBrainz user token',
+        ),
+        _TokenField(
+          title: 'Last.fm API key',
+          subtitle: 'Optional. Adds similar artists and tracks.',
+          controller: _lastfm,
+          hint: 'Your Last.fm API key',
+        ),
+        const _Note(
+          'Outside services are optional and are only used when they are set '
+          'here. They are stored by the local service, encrypted on this '
+          'machine, and are never sent anywhere else.',
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: PillButton(
+            icon: AppIcons.floppyDisk,
+            label: _saving ? 'Saving…' : 'Save',
+            onPressed: _saving ? null : _save,
+          ),
+        ),
+        const SizedBox(height: Tokens.s8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: PillButton(
+            icon: AppIcons.trash,
+            label: 'Clear listening data',
+            onPressed: _confirmClear,
+          ),
+        ),
+        const SizedBox(height: Tokens.s8),
+        _Note(
+          _settings.localEventCount == 0
+              ? 'Nothing has been learned yet.'
+              : 'Learned from ${_settings.plays} plays, '
+                  '${_settings.skips} skips and ${_settings.likes} likes.',
+        ),
+      ],
+    );
+  }
+}
+
+/// One credential field.
+///
+/// The value is a secret, so it is obscured until the reader asks to see it.
+class _TokenField extends StatefulWidget {
+  const _TokenField({
+    required this.title,
+    required this.subtitle,
+    required this.controller,
+    required this.hint,
+  });
+
+  final String title;
+  final String subtitle;
+  final TextEditingController controller;
+  final String hint;
+
+  @override
+  State<_TokenField> createState() => _TokenFieldState();
+}
+
+class _TokenFieldState extends State<_TokenField> {
+  bool _hidden = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Tokens.s8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(widget.title, style: Tokens.rowTitle),
+          const SizedBox(height: Tokens.s4),
+          Text(widget.subtitle, style: Tokens.caption),
+          const SizedBox(height: Tokens.s8),
+          TextField(
+            controller: widget.controller,
+            obscureText: _hidden,
+            style: Tokens.subtitle,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: Tokens.surface,
+              hintText: widget.hint,
+              hintStyle: Tokens.caption,
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                tooltip: _hidden ? 'Show' : 'Hide',
+                icon: Icon(
+                  _hidden ? AppIcons.eye : AppIcons.eyeSlash,
+                  size: Tokens.iconSize,
+                  color: Tokens.textSecondary,
+                ),
+                onPressed: () => setState(() => _hidden = !_hidden),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

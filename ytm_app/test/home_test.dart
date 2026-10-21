@@ -110,6 +110,10 @@ void main() {
         '{"title":"A mix","playlistId":"PL1234567890",'
         '"thumbnails":[{"url":"https://example.invalid/c.jpg","width":500}]}]}]',
       ),
+      // Nothing to blend, so the feed stays exactly as the test set it up.
+      '/recommendations/home': jsonOk(
+        '{"title":"Recommended for you","items":[],"count":0}',
+      ),
     });
 
     await pumpAtSize(
@@ -317,6 +321,10 @@ void main() {
     final YtmRepository repository =
         testRepository(responses: <String, http.Response>{
       '/home': jsonOk(homeWithLongTitles()),
+      // Nothing to blend, so the cards under test are the feed's own.
+      '/recommendations/home': jsonOk(
+        '{"title":"Recommended for you","items":[],"count":0}',
+      ),
     });
 
     await pumpAtSize(

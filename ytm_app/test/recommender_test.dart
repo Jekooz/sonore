@@ -53,15 +53,58 @@ void main() {
       );
     });
 
-    testWidgets('a feed without that row is left alone',
+    testWidgets('is added when the feed has no such row',
         (WidgetTester tester) async {
       final YtmRepository repository = testRepository();
+
+      final List<HomeRow> rows = await repository.home();
+
+      // The recorded feed has no recommendation row, so the blended one is
+      // added at the top: a recommendation nobody sees is not a recommendation.
+      expect(rows.first.title, 'Recommended for you');
+      expect(
+        rows.first.items.map((MediaItem item) => item.title),
+        <String>['Blended Pick'],
+      );
+      // The service's own rows are all still there.
+      expect(rows.length, greaterThan(1));
+    });
+
+    testWidgets('is left out when the route fails', (WidgetTester tester) async {
+      final YtmRepository repository = testRepository(
+        responses: <String, http.Response>{
+          '/recommendations/home': http.Response('{"detail":"boom"}', 500),
+        },
+      );
 
       final List<HomeRow> rows = await repository.home();
 
       expect(
         rows.map((HomeRow row) => row.title),
         isNot(contains('Recommended for you')),
+      );
+    });
+
+    testWidgets('does not take over a row that only says "for you"',
+        (WidgetTester tester) async {
+      final YtmRepository repository = testRepository(
+        responses: <String, http.Response>{
+          '/home': jsonOk(_homeWithAlbumsForYou),
+        },
+      );
+
+      final List<HomeRow> rows = await repository.home();
+
+      // "Albums for you" is the service's own row of albums, not the row the
+      // blended recommendations belong in.
+      final HomeRow albums = rows.firstWhere(
+        (HomeRow row) => row.title == 'Albums for you',
+      );
+      expect(albums.items.map((MediaItem item) => item.title), <String>['An Album']);
+      // And the blended row was added beside it.
+      expect(
+        rows.map((HomeRow row) => row.title),
+        contains('Recommended for you'),
       );
     });
   });
@@ -181,6 +224,26 @@ const String _homeWithRecommendation = '''
         ],
         "duration": "3:07",
         "durationSeconds": 187
+      }
+    ]
+  }
+]
+''';
+
+/// A home feed with a row that only says "for you" — the service's own albums,
+/// which the blended recommendations must not take over.
+const String _homeWithAlbumsForYou = '''
+[
+  {
+    "title": "Albums for you",
+    "contents": [
+      {
+        "title": "An Album",
+        "browseId": "MPREb_album00001",
+        "artists": [{"name": "Service Artist", "id": "UCservice001"}],
+        "thumbnails": [
+          {"url": "https://example.invalid/art/album-120.jpg", "width": 120, "height": 120}
+        ]
       }
     ]
   }

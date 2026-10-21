@@ -153,9 +153,8 @@ class YtmRepository {
   /// The service's feed is the base. The "Recommended for you" row is then
   /// filled from the layered recommender, which ranks YouTube Music's own
   /// picks first and refines them with what this device has learned. When
-  /// that route is unavailable the service's own row stays exactly as it was:
-  /// the Home screen must never lose a rail because a ranking service is
-  /// down.
+  /// that route is unavailable the feed is left exactly as it was: the Home
+  /// screen must never lose a rail because a ranking service is down.
   Future<List<HomeRow>> home() async {
     final List<dynamic> rows = await _api.home();
     final List<HomeRow> result = <HomeRow>[];
@@ -172,35 +171,57 @@ class YtmRepository {
   /// The recommendation row, blended.
   ///
   /// The row the service returned is replaced by the blended one when the
-  /// route answers; when it does not, the service's row is kept untouched.
+  /// service has that row; when it does not, the blended row is added at the
+  /// top of the feed, because a recommendation the user never sees is not a
+  /// recommendation. When the route does not answer, the feed is left alone.
   Future<List<HomeRow>> _withBlendedRecommendation(List<HomeRow> rows) async {
     final int index = rows.indexWhere(
       (HomeRow row) => _isRecommendationRow(row.title),
     );
-    if (index < 0) return rows;
+    if (index >= 0) {
+      List<MediaItem> blended;
+      try {
+        blended = _items((await _api.recommendationHomeRow())['items']);
+      } on YtmException {
+        // The service's own row is still a good recommendation: keep it.
+        return rows;
+      }
+      if (blended.isEmpty) return rows;
+
+      final List<HomeRow> result = List<HomeRow>.of(rows);
+      result[index] = HomeRow(title: rows[index].title, items: blended);
+      return result;
+    }
 
     List<MediaItem> blended;
+    String title = _recommendationRowTitle;
     try {
-      blended = _items(await _api.recommendationsHome());
+      final Map<String, dynamic> payload =
+          await _api.recommendationHomeRow();
+      blended = _items(payload['items']);
+      final String served = (payload['title'] as String? ?? '').trim();
+      if (served.isNotEmpty) title = served;
     } on YtmException {
-      // The service's own row is still a good recommendation: keep it.
       return rows;
     }
     if (blended.isEmpty) return rows;
 
-    final List<HomeRow> result = List<HomeRow>.of(rows);
-    result[index] = HomeRow(title: rows[index].title, items: blended);
-    return result;
+    return <HomeRow>[
+      HomeRow(title: title, items: blended),
+      ...rows,
+    ];
   }
 
-  /// Whether a feed row is the provider's recommendation row.
+  /// The title of the row the service names for its own recommendations.
+  static const String _recommendationRowTitle = 'Recommended for you';
+
+  /// Whether a feed row is the provider's own recommendation row.
   ///
-  /// The title changes with the service's locale, so the match is loose and
-  /// the first row that names a recommendation wins.
-  bool _isRecommendationRow(String title) {
-    final String lower = title.toLowerCase();
-    return lower.contains('recommended') || lower.contains('for you');
-  }
+  /// The match is exact on purpose: the feed also carries rows like "Albums
+  /// for you" and "Featured playlists for you", and those are not the row the
+  /// blended recommendations belong in.
+  bool _isRecommendationRow(String title) =>
+      title.trim().toLowerCase() == _recommendationRowTitle.toLowerCase();
 
   /// GET /library/{segment}
   ///

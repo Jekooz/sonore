@@ -70,8 +70,10 @@ void main() {
       expect(rows, isNotEmpty);
       expect(rows.first.title, isNotEmpty);
       expect(rows.first.items, isNotEmpty);
-      // The recording holds three rails, each with cards.
-      expect(rows, hasLength(3));
+      // The recording holds three rails, each with cards, and the blended
+      // recommendation row is added in front of them.
+      expect(rows, hasLength(4));
+      expect(rows.first.title, 'Recommended for you');
       for (final HomeRow row in rows) {
         expect(row.items, isNotEmpty, reason: row.title);
       }
@@ -142,6 +144,9 @@ void main() {
       final YtmRepository repo = repositoryOver(
         recordedSidecar(responses: <String, http.Response>{
           '/home': jsonOk('[]'),
+          // Nothing to blend, so nothing is added either.
+          '/recommendations/home': jsonOk('{"title":"Recommended for you",'
+              '"items":[],"count":0}'),
         }),
       );
 

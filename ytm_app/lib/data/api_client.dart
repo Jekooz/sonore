@@ -465,14 +465,13 @@ class YtmApiClient {
   /// The service ranks YouTube Music's own row first and refines it with what
   /// this device has learned. The items come back in the same shape as the
   /// service's own rows, so the Home screen renders them like any other rail.
-  Future<List<dynamic>> recommendationsHome({int limit = 20}) async {
+  Future<Map<String, dynamic>> recommendationHomeRow({int limit = 20}) async {
     final Uri uri = Uri(
       path: '/recommendations/home',
       queryParameters: <String, String>{'limit': '$limit'},
     );
     final Map<String, dynamic> body = _asMap(await _getJson(uri.toString()));
-    final dynamic items = body['items'];
-    return items is List ? items : const <dynamic>[];
+    return body;
   }
 
   /// GET /recommendations/next?seed=&limit=&exclude= — the blended candidates

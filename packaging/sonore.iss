@@ -9,7 +9,7 @@
 ; quoting can go wrong.
 
 #define AppName "Sonore"
-#define AppVersion "1.6.5"
+#define AppVersion "1.6.6-beta.1"
 #define AppExeName "sonore.exe"
 #define AppPublisher "Jekooz"
 #define AppUrl "https://github.com/Jekooz/sonore"

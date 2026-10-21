@@ -19,7 +19,7 @@ import '../../ui/screen_header.dart';
 
 /// Keeps this in step with `pubspec.yaml`'s `version:`; the build does not
 /// embed the package metadata, so the About row states it directly.
-const String appVersion = '1.6.5';
+const String appVersion = '1.6.6-beta.1';
 
 /// Settings, built from preferences that really change the app.
 ///

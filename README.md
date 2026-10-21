@@ -12,8 +12,11 @@ a small local Python service. Playback, search, library and account data come
 from a FastAPI sidecar on `127.0.0.1`; the app never talks to YouTube directly
 and never ships credentials.
 
-Current version: **1.6.5** (tracked in `VERSION`). Status: working desktop app,
-actively developed — the latest GitHub release carries the single-file installer.
+Current version: **1.6.6-beta.1** (tracked in `VERSION`). Status: working desktop app,
+actively developed — the latest stable GitHub release carries the single-file
+installer. **1.6.6-beta.1** is the Android beta: the same app with the floating
+navigation menu and the docked Now Playing bar, and an Android build that can
+reach its music service. It is published as a GitHub *pre-release*.
 
 > **Unofficial.** This project is not affiliated with, endorsed by, or sponsored
 > by YouTube or Google. "YouTube Music" is a trademark of Google LLC. It is a

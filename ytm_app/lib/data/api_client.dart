@@ -197,8 +197,13 @@ class YtmApiClient {
       candidates.add('http://127.0.0.1:$published');
     }
 
-    if (Platform.isAndroid) candidates.add('http://10.0.2.2:8000');
+    // The service only accepts a loopback host name, so the device's own
+    // loopback is the address that actually works: on a phone the service
+    // runs there, and in an emulator `adb reverse` maps it to the host. The
+    // emulator's host alias is tried last, because a request that arrives
+    // with that host name is refused by the service.
     candidates.add('http://127.0.0.1:8000');
+    if (Platform.isAndroid) candidates.add('http://10.0.2.2:8000');
     return candidates;
   }
 

@@ -54,6 +54,20 @@ typedef TrackPrefetcher = Future<void> Function(Track track);
 /// Reports one aggregated listening event (see [ListeningEvent]).
 typedef ListeningReporter = Future<void> Function(ListeningEvent event);
 
+/// Reports one thing the listener did, for the local taste layer.
+///
+/// [kind] is one of `play`, `skip` or `like`. The seam exists for the same
+/// reason the others do: the audio layer never imports the API client, and
+/// the report is a ranking signal that must never interrupt playback.
+typedef TasteReporter = Future<void> Function(
+  String kind,
+  Track track, {
+  double listenedSeconds,
+  double durationSeconds,
+  bool completed,
+  double playedFraction,
+});
+
 /// The three sidecar-backed seams the audio layer needs, all supplied by
 /// `main.dart`. Each throws when it is read without an override, so a missing
 /// wire-up is a loud failure in development rather than silence in production.
@@ -77,6 +91,13 @@ final Provider<ListeningReporter> listeningReporterProvider =
     Provider<ListeningReporter>(
   (ref) => throw StateError(
     'listeningReporterProvider must be overridden with the sidecar-backed '
+    'reporter (see main.dart).',
+  ),
+);
+
+final Provider<TasteReporter> tasteReporterProvider = Provider<TasteReporter>(
+  (ref) => throw StateError(
+    'tasteReporterProvider must be overridden with the sidecar-backed '
     'reporter (see main.dart).',
   ),
 );
@@ -253,6 +274,32 @@ class PlaybackService {
     _heard = Duration.zero;
     _startedAt = null;
     _ref.read(listeningReporterProvider)(event).ignore();
+
+    // The local taste layer learns from the same moment: a track that was
+    // heard to the end is a play, one that was left early is a skip with the
+    // fraction that was heard. A track that merely stopped — the queue was
+    // cleared — says nothing about the track, so it is not reported.
+    final String kind = switch (outcome) {
+      ListeningOutcome.completed => 'play',
+      ListeningOutcome.skipped => 'skip',
+      ListeningOutcome.stopped => '',
+    };
+    if (kind.isNotEmpty) {
+      final double listened = heard.inMilliseconds / 1000;
+      final double duration = (known ?? Duration.zero).inMilliseconds / 1000;
+      final double fraction =
+          duration > 0 ? (listened / duration).clamp(0.0, 1.0) : 0.0;
+      _ref
+          .read(tasteReporterProvider)(
+            kind,
+            track,
+            listenedSeconds: listened,
+            durationSeconds: duration,
+            completed: outcome == ListeningOutcome.completed,
+            playedFraction: fraction,
+          )
+          .ignore();
+    }
   }
 
   Future<void> _reconcile(PlaybackState state) async {

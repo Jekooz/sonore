@@ -76,6 +76,28 @@ Future<void> main() async {
           (Ref ref) => (ListeningEvent event) =>
               ref.read(ytmRepositoryProvider).reportListeningEvent(event),
         ),
+        // The local taste layer: one play, skip or like, reported as it
+        // happens. Fire and forget — a failure there must never interrupt
+        // playback.
+        tasteReporterProvider.overrideWith(
+          (Ref ref) =>
+              (
+                String kind,
+                Track track, {
+                double listenedSeconds = 0,
+                double durationSeconds = 0,
+                bool completed = false,
+                double playedFraction = 0,
+              }) =>
+                  ref.read(ytmRepositoryProvider).reportTasteEvent(
+                        kind,
+                        track,
+                        listenedSeconds: listenedSeconds,
+                        durationSeconds: durationSeconds,
+                        completed: completed,
+                        playedFraction: playedFraction,
+                      ),
+        ),
         // The sidecar owns its own lifecycle only on Windows, where the app
         // ships next to the repo. Elsewhere the default no-op launcher is kept,
         // so no platform-specific spawn assumption is made.

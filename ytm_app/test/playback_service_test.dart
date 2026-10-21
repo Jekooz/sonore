@@ -32,6 +32,10 @@ late List<String> prefetched;
 /// Listening events the service reported, in order.
 late List<ListeningEvent> reported;
 
+/// What the local taste layer was told: (kind, track id, completed, the
+/// fraction of the track that was heard).
+late List<(String, String, bool, double)> tasted;
+
 /// What the Autoplay seam answers with. Empty means "nothing to add".
 late List<Track> autoplayResult;
 
@@ -55,6 +59,7 @@ void main() {
     resolved = <String>[];
     prefetched = <String>[];
     reported = <ListeningEvent>[];
+    tasted = <(String, String, bool, double)>[];
     autoplayResult = <Track>[];
     autoplayRequest = null;
     autoplayError = null;
@@ -77,6 +82,16 @@ void main() {
         }),
         listeningReporterProvider.overrideWithValue((ListeningEvent event) async {
           reported.add(event);
+        }),
+        tasteReporterProvider.overrideWithValue((
+          String kind,
+          Track track, {
+          double listenedSeconds = 0,
+          double durationSeconds = 0,
+          bool completed = false,
+          double playedFraction = 0,
+        }) async {
+          tasted.add((kind, track.id, completed, playedFraction));
         }),
         autoplayResolverProvider.overrideWithValue((
           Track seed,
@@ -626,6 +641,52 @@ void main() {
         'listenedSeconds': 12.5,
         'durationSeconds': 238,
       });
+    });
+  });
+
+  group('taste events', () {
+    test('a finished track is a play', () async {
+      controller.setQueue(testQueue());
+      await settle();
+      engine.emitPosition(const Duration(seconds: 90));
+      engine.emitEndOfMedia();
+      await settle();
+
+      expect(tasted, hasLength(1));
+      expect(tasted.single.$1, 'play');
+      expect(tasted.single.$2, 'a');
+      expect(tasted.single.$3, isTrue);
+    });
+
+    test('moving on early is a skip, with the fraction that was heard',
+        () async {
+      controller.setQueue(testQueue());
+      await settle();
+      engine.emitPlaying(true);
+      engine.emitPosition(const Duration(seconds: 12));
+      await settle();
+      controller.playAt(2);
+      await settle();
+
+      expect(tasted, hasLength(1));
+      expect(tasted.single.$1, 'skip');
+      expect(tasted.single.$2, 'a');
+      expect(tasted.single.$3, isFalse);
+      // 12 of 238 seconds is about 5% — an early skip, which the local layer
+      // reads as a negative signal.
+      expect(tasted.single.$4, lessThan(0.1));
+    });
+
+    test('clearing the queue says nothing about the track', () async {
+      controller.setQueue(testQueue());
+      await settle();
+      engine.emitPlaying(true);
+      engine.emitPosition(const Duration(seconds: 30));
+      await settle();
+      controller.clear();
+      await settle();
+
+      expect(tasted, isEmpty);
     });
   });
 

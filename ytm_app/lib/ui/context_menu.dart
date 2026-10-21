@@ -37,7 +37,7 @@ const double _menuWidth = 232;
 /// Opens the shared context menu at [position] (a global offset).
 ///
 /// The menu is glass (spec section 2: "Glass is for things that float above
-/// content: … context menus"), with 44px rows and a 12px radius (section 3.J).
+/// content: … context menus"), with 44px rows and the glass radius (section 3.J).
 /// It closes on Escape, on a click outside, and on selecting an entry; Up/Down
 /// and Enter drive it from the keyboard, and each entry is a labelled button
 /// for screen readers.
@@ -156,8 +156,8 @@ class _ContextMenuState extends State<_ContextMenu> {
         child: SizedBox(
           width: _menuWidth,
           child: GlassSurface(
-            radius: Tokens.rMenuItem,
-            isStrong: true,
+            radius: Tokens.rGlassSmall,
+            tier: GlassTier.thick,
             // A menu is a functional surface; the specular streak belongs to
             // floating transport chrome, not to a list of actions.
             showSpecular: false,
@@ -199,8 +199,13 @@ class _ContextMenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color foreground =
-        entry.isDestructive ? Tokens.accent : Tokens.text;
+    // Monochrome chrome: there is no accent hue for destructive rows, so they
+    // read through full brightness and weight; the caller still confirms first.
+    final Color foreground = Tokens.text;
+    final TextStyle labelStyle = Tokens.rowTitle.copyWith(
+      color: foreground,
+      fontWeight: entry.isDestructive ? FontWeight.w700 : Tokens.rowTitle.fontWeight,
+    );
 
     return Semantics(
       button: true,
@@ -222,7 +227,7 @@ class _ContextMenuRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     entry.label,
-                    style: Tokens.rowTitle.copyWith(color: foreground),
+                    style: labelStyle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

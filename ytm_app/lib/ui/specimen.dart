@@ -53,15 +53,17 @@ class SpecimenBoard extends StatelessWidget {
   }
 
   List<Widget> _swatches() {
-    const List<(String, Color)> entries = <(String, Color)>[
+    // Swatches only; the gesture layer is built below.
+    final List<(String, Color)> entries = <(String, Color)>[
       ('bg', Tokens.bg),
       ('surface', Tokens.surface),
       ('surfaceRaised', Tokens.surfaceRaised),
-      ('glass', Tokens.glass),
-      ('glassStrong', Tokens.glassStrong),
+      ('glassThin', Tokens.glassThin),
+      ('glassRegular', Tokens.glassRegular),
+      ('glassThick', Tokens.glassThick),
+      ('glassFallback', Tokens.glassFallback),
       ('border', Tokens.border),
       ('borderStrong', Tokens.borderStrong),
-      ('accent', Tokens.accent),
       ('text', Tokens.text),
       ('textSecondary', Tokens.textSecondary),
       ('textMuted', Tokens.textMuted),
@@ -121,11 +123,11 @@ class SpecimenBoard extends StatelessWidget {
       ),
       SizedBox(height: Tokens.s16),
       GlassSurface(
-        isStrong: true,
+        tier: GlassTier.thick,
         shape: Tokens.shapePill,
         child: SizedBox(
           height: Tokens.nowPlayingBarHeight,
-          child: Center(child: Text('glassStrong pill', style: Tokens.rowTitle)),
+          child: Center(child: Text('glass thick pill', style: Tokens.rowTitle)),
         ),
       ),
     ];
@@ -181,7 +183,7 @@ class SpecimenBoard extends StatelessWidget {
         trailing: Icon(
           AppIcons.heartFill,
           size: Tokens.iconSize,
-          color: Tokens.accent,
+          color: Tokens.text,
         ),
       ),
       const TrackRow(title: 'Row title', subtitle: 'Subtitle'),

@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
+import 'format.dart';
+import 'glass_surface.dart';
 
 /// The progress control from the spec's `lib/ui/` list.
 ///
@@ -87,7 +91,7 @@ class _SeekBarState extends State<SeekBar> {
         _interactive ? Tokens.surfaceRaised : Tokens.surface;
     final Color bufferedColor =
         _interactive ? Tokens.textMuted : Tokens.surfaceRaised;
-    final Color playedColor = _interactive ? Tokens.accent : Tokens.border;
+    final Color playedColor = _interactive ? Tokens.text : Tokens.border;
 
     return MouseRegion(
       cursor: _interactive ? SystemMouseCursors.click : MouseCursor.defer,
@@ -98,6 +102,10 @@ class _SeekBarState extends State<SeekBar> {
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final double width = constraints.maxWidth;
+            final double shownFraction =
+                (_preview ?? played).clamp(0.0, 1.0);
+            final bool showPreview =
+                _interactive && (_hovered || _preview != null);
 
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -128,10 +136,25 @@ class _SeekBarState extends State<SeekBar> {
                   height: thickness,
                   child: Stack(
                     alignment: AlignmentDirectional.centerStart,
+                    clipBehavior: Clip.none,
                     children: <Widget>[
                       _segment(1, remainingColor),
                       _segment(buffered, bufferedColor),
                       _segment(played, playedColor),
+                      if (showPreview)
+                        Positioned(
+                          // Above the thumb, clamped to the edges so the tag
+                          // never escapes the bar's own width.
+                          left: (shownFraction * width)
+                              .clamp(Tokens.s24, math.max(Tokens.s24, width - Tokens.s24)),
+                          top: -Tokens.s12,
+                          child: FractionalTranslation(
+                            translation: const Offset(-0.5, -1),
+                            child: _HoverTimePreview(
+                              position: _at(shownFraction),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -150,6 +173,33 @@ class _SeekBarState extends State<SeekBar> {
       child: DecoratedBox(
         decoration: ShapeDecoration(color: color, shape: Tokens.shapePill),
         child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+/// The hover time preview: a small glass tag with the position the pointer is
+/// over. Mouse-only affordance — on touch nothing shows, since a finger on the
+/// bar already thickens it and the seek commits on release.
+class _HoverTimePreview extends StatelessWidget {
+  const _HoverTimePreview({required this.position});
+
+  final Duration position;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassSurface(
+      tier: GlassTier.thin,
+      shape: Tokens.shapePill,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Tokens.s8,
+          vertical: Tokens.s4,
+        ),
+        child: Text(
+          formatDuration(position),
+          style: Tokens.caption,
+        ),
       ),
     );
   }

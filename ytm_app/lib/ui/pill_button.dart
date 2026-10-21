@@ -5,9 +5,10 @@ import 'pressable.dart';
 
 /// The pill-shaped action button from the spec's `lib/ui/` list.
 ///
-/// Accent marks the active state only; an inactive pill sits on surfaceRaised
-/// with muted text. The glyph is a single Phosphor icon at 24px and the hit
-/// area is never smaller than 48x48.
+/// Monochrome take: the primary action (active) is a solid white pill with a
+/// dark glyph — the app's strongest control — while an inactive pill sits on
+/// surfaceRaised with muted text. The glyph is a single Phosphor icon at 24px
+/// and the hit area is never smaller than 48x48.
 class PillButton extends StatelessWidget {
   const PillButton({
     super.key,
@@ -27,9 +28,9 @@ class PillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color fill = isActive ? Tokens.accent : Tokens.surfaceRaised;
+    final Color fill = isActive ? Tokens.text : Tokens.surfaceRaised;
     final TextStyle labelStyle = isActive
-        ? Tokens.subtitle.copyWith(color: Tokens.text)
+        ? Tokens.subtitle.copyWith(color: Tokens.bg)
         : Tokens.subtitle;
 
     return Pressable(
@@ -48,7 +49,11 @@ class PillButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             if (icon != null)
-              Icon(icon, size: Tokens.iconSize, color: Tokens.text),
+              Icon(
+                icon,
+                size: Tokens.iconSize,
+                color: isActive ? Tokens.bg : Tokens.text,
+              ),
             if (icon != null && label != null)
               const SizedBox(width: Tokens.s8),
             if (label != null) Text(label!, style: labelStyle),

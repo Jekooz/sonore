@@ -8,38 +8,45 @@ import 'package:flutter/material.dart';
 /// numeric font sizes outside `lib/theme/` and `GlassSurface` must return
 /// nothing. Screens and widgets read the values below; they never invent them.
 ///
-/// Batch 1 note: the dark palette values below were re-verified against the
-/// exported Figma spec (design.pdf, "Resonance for Windows"). Three color
-/// deltas were extracted from the vector fills — secondary text #A0A0A8,
-/// muted text #686870, and the glass tint at white 8% — replacing values
-/// taken from the earlier mock draft. The opaque glass fallback is #242427,
-/// confirmed by the materials board ("Solid raised #242427, no backdrop
-/// blur").
+/// Full-glass direction: the chrome is monochrome — white at varying opacity
+/// for fills, borders, text and icons — and the only color the app *owns* is
+/// its dark base. Every other color is lifted from the current artwork as the
+/// ambient backdrop, so `accent` is gone and active states are white +
+/// raised-tint pills instead of a hue.
 class Tokens {
   Tokens._();
 
   // --------------------------------------------------------------- Colors ---
 
-  /// Page background, always true black.
-  static const Color bg = Color(0xFF000000);
+  /// The dark base of the ambient backdrop, near-black with a cold cast. The
+  /// art-derived blobs sit on top of it and every screen's chrome is drawn
+  /// above the layer; with no artwork (idle) it stays as the neutral gradient
+  /// defined by [backdropNeutralTop]/[backdropNeutralBottom].
+  static const Color bg = Color(0xFF08080C);
 
-  /// Opaque fallbacks: art placeholders, avatars.
+  /// Opaque/placeholding fills: art placeholders, avatars.
   static const Color surface = Color(0xFF141417);
 
-  /// Pressed rows, disabled fills.
+  /// Pressed rows, active pills, disabled fills.
   static const Color surfaceRaised = Color(0xFF1C1C21);
 
-  /// Top bar, bottom nav, Follow glass (white 8%). Extracted from the Figma
-  /// fills; the previous 6% came from the older mock draft.
-  static const Color glass = Color(0x14FFFFFF);
+  /// Glass fills, one per tier: white at varying opacity over the artwork.
+  /// Thin (rows, quiet cards, inputs) — white 6%.
+  static const Color glassThin = Color(0x0FFFFFFF);
 
-  /// Anchored Now Playing bar, transport pill, sheets (white 10%).
-  static const Color glassStrong = Color(0x1AFFFFFF);
+  /// Regular (navigation pill, tab bar, hero, cards) — white 9%.
+  static const Color glassRegular = Color(0x17FFFFFF);
 
-  /// Reduce-transparency / dropped-frames fallback. The materials board pins
-  /// this to solid #242427 with no backdrop blur — layout and contrast must
-  /// not change when the fallback engages.
+  /// Thick (transport pill, Now Playing bar, sheets, dialogs, menus) — 14%.
+  static const Color glassThick = Color(0x24FFFFFF);
+
+  /// Reduce-transparency / dropped-frames fallback. The fallback is a *solid
+  /// tinted* surface (a solid gradient derived from the ambient palette, dimmed
+  /// to the dark base), never raw artwork color — layout and contrast must not
+  /// change when the fallback engages, only the fill solidifies. These two are
+  /// the neutral end of that ramp, used when no palette exists yet.
   static const Color glassFallback = Color(0xFF242427);
+  static const Color glassFallbackThin = Color(0xFF212125);
 
   /// Hairlines on glass (white 10%).
   static const Color border = Color(0x1AFFFFFF);
@@ -47,33 +54,39 @@ class Tokens {
   /// Focus and hover on glass (white 16%).
   static const Color borderStrong = Color(0x29FFFFFF);
 
-  /// Active state only: playing track, progress fill, liked heart, active nav.
-  static const Color accent = Color(0xFFFA2D48);
-
   /// Titles, active labels.
   static const Color text = Color(0xFFFFFFFF);
 
-  /// Subtitles, metadata (passes 4.5:1 on the true-black background).
-  /// #A0A0A8 was extracted from the most common non-white text fill in the
-  /// Figma export.
+  /// Subtitles, metadata (passes 4.5:1 on the dark base). #A0A0A8.
   static const Color textSecondary = Color(0xFFA0A0A8);
 
-  /// Durations, hints, large text only. #686870 from the Figma fills; the
-  /// earlier #7A7A7A came from the mock draft.
+  /// Durations, hints, large text only. #686870.
   static const Color textMuted = Color(0xFF686870);
 
   /// Overlays behind modal content (black 90%).
   static const Color scrim = Color(0xE6000000);
 
-  /// Specular streak start (white 16%) and full transparency.
+  /// Specular edge of a glass surface: the 1px border is a gradient from
+  /// white 30% at the top-left corner down to white 5% at the bottom-right —
+  /// a lit edge rather than a hairline. The top inner highlight carries the
+  /// same story with a broad soft band.
+  static const Color edgeStrong = Color(0x4DFFFFFF);
+  static const Color edgeFaint = Color(0x0DFFFFFF);
+  static const Color highlightTop = Color(0x1FFFFFFF);
+
+  /// The 120° floating-surface streak start (white 16%) and full transparency.
   static const Color specular = Color(0x29FFFFFF);
   static const Color transparent = Color(0x00000000);
 
-  /// Shadow under floating chrome (black 40%).
-  static const Color shadow = Color(0x66000000);
+  /// Shadow under floating chrome (black 45%).
+  static const Color shadow = Color(0x73000000);
 
-  /// Black 45% overlay over the ambient artwork blur, for legibility.
+  /// Black 45% overlay over the ambient backdrop, for legibility.
   static const Color ambientOverlay = Color(0x73000000);
+
+  /// Neutral idle backdrop: a narrow monochrome ramp with no hue.
+  static const Color backdropNeutralTop = Color(0xFF121218);
+  static const Color backdropNeutralBottom = Color(0xFF08080C);
 
   // ----------------------------------------------------------- Typography ---
   //
@@ -145,8 +158,12 @@ class Tokens {
     color: text,
   );
 
-  /// The playing-track variant. Accent is the only active-state color.
-  static final TextStyle rowTitleActive = rowTitle.copyWith(color: accent);
+  /// The playing-track variant. There is no accent anymore, so the playing
+  /// row reads through weight and brightness rather than hue.
+  static TextStyle get rowTitleActive => rowTitle.copyWith(
+        fontWeight: FontWeight.w700,
+        color: text,
+      );
 
   static const TextStyle subtitle = TextStyle(
     fontFamily: fontFamily,
@@ -167,37 +184,34 @@ class Tokens {
   // ---------------------------------------------------------------- Shape ---
   //
   // Nested rounded shapes are concentric: inner radius = outer radius minus the
-  // padding between them. rCard and rLarge use squircle corners.
+  // padding between them. Squircle corners are reserved for the largest radii.
 
   static const double rSmall = 8;
   static const double rCard = 14;
+
+  /// Glass surfaces live in the 20–28 range: menus and small sheets at 20,
+  /// dialogs and large panels at 24.
+  static const double rGlassSmall = 20;
   static const double rLarge = 24;
 
-  /// The spec's middle radius step, used by context menus: "44 px rows,
-  /// 12 px radius" (section 3.J).
-  ///
-  /// Note: the spec's radius scale is 8 / 12 / 20 / pill, while `rCard` and
-  /// `rLarge` are 14 and 24 from the Phase 2 pass. That gap predates this work
-  /// and is recorded as P11 in `proof/phase4.txt` rather than changed here,
-  /// because Phase 4 must preserve the existing design system.
-  static const double rMenuItem = 12;
-
-  /// Context-menu row height (spec section 3.J).
+  /// Context-menu rows. The spec's row metrics ("44 px rows") are unchanged;
+  /// the container radius joins the glass scale.
   static const double menuRowHeight = 44;
 
   /// Rounded rectangle (rSmall and pill-ish shapes).
   static OutlinedBorder rounded(double radius) =>
       RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius));
 
-  /// Squircle corners for rCard and rLarge.
+  /// Squircle corners for the largest radii.
   static OutlinedBorder squircle(double radius) =>
       RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(radius));
 
-  /// Picks the corner family the spec assigns to a radius token.
+  /// Picks the corner family a radius token carries: the big shapes are
+  /// squircles, everything else a plain rounded rectangle.
   static OutlinedBorder shapeFor(double radius) =>
-      (radius == rCard || radius == rLarge)
-      ? squircle(radius)
-      : rounded(radius);
+      (radius == rCard || radius == rGlassSmall || radius == rLarge)
+          ? squircle(radius)
+          : rounded(radius);
 
   /// Full-radius pill used by buttons, nav pill, transport controls.
   static const OutlinedBorder shapePill = StadiumBorder();
@@ -210,6 +224,17 @@ class Tokens {
   /// clips) rather than an [OutlinedBorder]. Radius values live here only.
   static const BorderRadius rSmallBorder = BorderRadius.all(
     Radius.circular(rSmall),
+  );
+
+  /// Ink-well radii for the floating glass chrome: the tab pill and the
+  /// bottom-bar pill are full-height pills, so the sweep radius is half
+  /// their height. Radius values live here only.
+  static final BorderRadius tabBarPillRadius = BorderRadius.all(
+    Radius.circular(tabBarHeight / 2),
+  );
+
+  static final BorderRadius navPillRadius = BorderRadius.all(
+    Radius.circular(navBarHeight / 2),
   );
 
   // -------------------------------------------------------------- Spacing ---
@@ -236,7 +261,7 @@ class Tokens {
   static const double iconSize = 24;
   static const double minTouchTarget = 48;
 
-  // ------------------------------------------------------------- Layout -----
+  // ------------------------------------------------------------- Layout ------
   //
   // Shell measurements, defined once here so no screen carries a literal.
 
@@ -284,10 +309,23 @@ class Tokens {
   /// The floating glass top tab bar (wide layouts, i.e. at and above
   /// [breakpointPhone]): its own height, the widest it grows before it stops
   /// stretching, and the strip it floats over so content is never hidden behind
-  /// it. Only a pill is drawn in that strip; the rest is the page background.
+  /// it. Only a pill is drawn in that strip; the rest is the backdrop.
   static const double tabBarHeight = 56;
   static const double tabBarMaxWidth = 760;
   static const double shellTopInset = 72;
+
+  /// The widest a form control grows: a slider or text field spanning a 1920
+  /// window would make every input an unusable mouse expedition.
+  static const double formControlMaxWidth = 480;
+
+  /// The widest any page's content may grow. Everything inside scrolls under
+  /// floating chrome; on a 1920 window the rails and rows would otherwise run
+  /// edge to edge and every line of text becomes nearly 1900 px long.
+  static const double contentMaxWidth = 1240;
+
+  /// The width under which the Popular rail leaves Home: it is a third column
+  /// on wide windows, and pushing it below the rails would bury it.
+  static const double popularRailVisibleWidth = 1280;
 
   /// Now Playing queue panel on desktop.
   static const double queuePanelWidth = 320;
@@ -307,18 +345,72 @@ class Tokens {
 
   // -------------------------------------------------------------- Ambient ---
   //
-  // Now Playing only: 2-3 colors lifted from the current artwork as blurred
-  // radial gradients, with a black 45% overlay on top for legibility.
+  // One app-wide ambient backdrop. 2-3 colors lifted from the current artwork
+  // are painted as large soft radial blobs over [Tokens.bg] and drift very
+  // slowly; the layer cross-fades to the next track's palette. On idle the
+  // layer is the neutral monochrome ramp. A faint grain keeps the gradients
+  // from banding, and a fixed dark overlay keeps text above 4.5:1.
 
-  static const double ambientBlur = 90;
-  static const double ambientOpacity = 0.55;
   static const int ambientColorCount = 3;
 
+  /// Blob softness: the fraction of its alignment lane each blob occupies, so
+  /// the light reads as atmosphere, not as three circles.
+  static const double ambientBlobExtent = 0.9;
+
+  /// Peak alpha of the strongest blob. Over the veil below it, this keeps
+  /// white chrome text at 4.5:1 or better against the worst-bright artwork.
+  static const double ambientBlobOpacity = 0.42;
+
+  /// Drift span in alignment units per nudge (±span/2); tiny on purpose.
+  static const double ambientDriftSpan = 0.14;
+
+  /// The legibility veil ramps between these two alphas depending on the mean
+  /// brightness of the palette — the adaptive part of the contrast guarantee.
+  static const double ambientVeilMinAlpha = 0.42;
+  static const double ambientVeilMaxAlpha = 0.62;
+
+  /// Grain texture: specks at alpha 0..23, tiled at [grainOpacity].
+  static const int grainMaxAlpha = 24;
+
+  /// Rec.709 luma of one color (0..1), used to weight the legibility veil.
+  static double lumaOf(Color color) {
+    final double r = color.r, g = color.g, b = color.b;
+    return _luma[0] * r + _luma[1] * g + _luma[2] * b;
+  }
+
   /// How strongly the Home hero's art-derived tint reads inside the banner.
-  ///
   /// The hero is the one card the approved layout lets artwork color into;
-  /// everywhere else color comes only from the artwork itself or the accent.
+  /// everywhere else color comes only from the ambient layer behind glass.
   static const double heroTintOpacity = 0.45;
+
+  /// Adaptive text scrim for the hero: when the tint's luma passes this gate,
+  /// a black wash ramps in underneath the hero type, reaching full strength
+  /// at luma 1.0 — the guarantee behind "title holds 4.5:1 whatever the art".
+  static const double heroScrimLumaGate = 0.45;
+  static const double heroScrimMaxAlpha = 0.55;
+
+  /// Blob geometry: three anchors, the first near the top-left, so the palette
+  /// reads immediately behind floating chrome and settles toward the base.
+  static const List<Alignment> ambientPlacements = <Alignment>[
+    Alignment(-0.55, -0.65),
+    Alignment(0.75, -0.05),
+    Alignment(-0.15, 0.85),
+  ];
+
+  /// Drift: each blob nudges to a new anchor offset once per period and moves
+  /// there slowly over the move window. Slow on purpose — it should read as
+  /// light, not as motion.
+  static const Duration ambientDriftPeriod = Duration(seconds: 24);
+  static const Duration ambientDriftMove = Duration(seconds: 10);
+
+  /// Track change: the whole layer cross-fades, so a palette swap is a breath,
+  /// not a jump.
+  static const Duration dAmbientCrossfade = Duration(milliseconds: 600);
+
+  /// Grain overlay: a seeded random alpha texture, tiled, at this opacity —
+  /// just enough to stop the gradients from banding, invisible up close.
+  static const double grainOpacity = 0.05;
+  static const int grainSize = 128;
 
   // --------------------------------------------------------------- Seek bar ---
 
@@ -329,19 +421,32 @@ class Tokens {
   // ---------------------------------------------------------------- Glass ----
   //
   // One [GlassSurface] widget owns the recipe; nothing else may call
-  // BackdropFilter.
+  // BackdropFilter. Three tiers share it: blur + saturation of what is behind,
+  // the gradient edge, the top highlight and (for floating surfaces) a shadow.
 
-  static const double glassBlur = 30;
-  static const double glassSaturation = 1.8;
+  static const double glassBlurThin = 18;
+  static const double glassBlurRegular = 30;
+  static const double glassBlurThick = 42;
+
+  /// Backdrop saturation boost, shared by all tiers (spec: ~1.4–1.8).
+  static const double glassSaturation = 1.6;
   static const double borderWidth = 1;
-  static const double glassShadowOffset = 8;
-  static const double glassShadowBlur = 24;
+  static const double glassShadowOffset = 12;
+  static const double glassShadowBlur = 32;
 
   /// Specular streak: a 120-degree linear gradient from white 16% to
   /// transparent at 60%, clipped to the pill.
   static const double glassSpecularStop = 0.6;
   static const Alignment specularBegin = Alignment(-0.866, -0.5);
   static const Alignment specularEnd = Alignment(0.866, 0.5);
+
+  /// Top inner highlight: a vertical gradient from [Tokens.highlightTop] to
+  /// transparent, gone by this fraction of the surface height.
+  static const double glassHighlightStop = 0.4;
+
+  /// Edge gradient: lit at the top-left, fading to almost nothing bottom-right.
+  static const Alignment edgeBegin = Alignment(-0.7, -0.7);
+  static const Alignment edgeEnd = Alignment(0.7, 0.7);
 
   /// Limit: three live blurs per screen.
   static const int maxLiveBlurs = 3;
@@ -369,7 +474,7 @@ class Tokens {
   static const Duration dPress = Duration(milliseconds: 80);
   static const Duration dPageChange = Duration(milliseconds: 200);
   static const Duration dFadeIn = Duration(milliseconds: 200);
-  static const Duration dAmbientCrossfade = Duration(milliseconds: 300);
+  static const Duration dHover = Duration(milliseconds: 200);
 
   /// Skeleton shimmer while a screen is loading (1.4 s loop per the states
   /// board; the earlier 1.2 s came from the mock draft).
@@ -402,10 +507,6 @@ class Tokens {
   /// Tile hover: scale keeps at 103% per the motion spec ("Tile hover 103%,
   /// deeper shadow"). Used by artwork tiles in Batch 3.
   static const double hoverScale = 1.03;
-
-  /// Hover transition: the spec gives 200-300 ms ease-out for the hover state;
-  /// the low end keeps hover responsive without flutter.
-  static const Duration dHover = Duration(milliseconds: 200);
 
   /// Play/pause artwork scale.
   static const double artworkPlayingScale = 1.0;

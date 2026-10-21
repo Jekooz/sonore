@@ -9,6 +9,22 @@ Two requests are answered here and nowhere else:
 Both follow the same shape: YouTube Music first, the local taste layer and
 the outside signals refining it, and every optional layer degrading to
 nothing rather than to an error.
+
+Adding a fourth source later
+----------------------------
+The Gonic/FLAC library of the v2 plan slots in here without touching the
+blender. A source is a callable that returns candidates in the shared shape
+and never raises; the steps are:
+
+  1. add the name and its weight to ``config.SOURCES`` / ``config.WEIGHTS``;
+  2. write ``recommender/sources/<name>.py`` with a function that returns
+     candidates (or nothing, when the library is not there);
+  3. call it from ``recommend_home`` / ``recommend_next`` and put the result
+     in the ``sources`` dict the blender is given.
+
+The blender already merges an unknown source, and an item that carries no
+video id is dropped rather than returned, so a local library of files that
+cannot be played by this app cannot break the result.
 """
 
 from __future__ import annotations

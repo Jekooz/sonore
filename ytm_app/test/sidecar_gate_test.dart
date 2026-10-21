@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ytm_app/core/sidecar/sidecar_launcher.dart';
 
@@ -21,6 +23,17 @@ class ScriptedLauncher implements SidecarLauncher {
 
   @override
   Future<void> shutdown() async => shutdowns++;
+}
+
+/// A launcher that takes its time, like the real one while the service boots.
+class SlowLauncher implements SidecarLauncher {
+  final Completer<SidecarStatus> completer = Completer<SidecarStatus>();
+
+  @override
+  Future<SidecarStatus> start() => completer.future;
+
+  @override
+  Future<void> shutdown() async {}
 }
 
 void main() {
@@ -69,5 +82,35 @@ void main() {
 
     expect(find.text('Good evening'), findsOneWidget);
     expect(find.text('The music service could not be started.'), findsNothing);
+  });
+
+  testWidgets('the first launch shows a starting state, never an error',
+      (WidgetTester tester) async {
+    // The service takes a few seconds to come up on a cold start. The app must
+    // not probe it before then: the old first screen was the "not reachable"
+    // error, which is a dead end on the very first launch.
+    final SlowLauncher launcher = SlowLauncher();
+
+    await pumpAtSize(
+      tester,
+      appScope(sidecarLauncher: launcher),
+      size: kPhone,
+      settle: false,
+    );
+    await tester.pump();
+
+    // A calm starting screen, and no error anywhere on it.
+    expect(find.text('Starting the music service…'), findsOneWidget);
+    expect(find.text('YouTube Music is not reachable.'), findsNothing);
+    expect(find.text('The music service could not be started.'), findsNothing);
+    // The app is not built yet, so no page has asked for data that is not
+    // there yet.
+    expect(find.text('Good evening'), findsNothing);
+
+    launcher.completer.complete(const SidecarStatus.ready(port: 8000));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Starting the music service…'), findsNothing);
+    expect(find.text('Good evening'), findsOneWidget);
   });
 }

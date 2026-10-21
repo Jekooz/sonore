@@ -85,7 +85,12 @@ Future<void> main() async {
         settingsStoreProvider.overrideWithValue(settingsStore),
         initialAppSettingsProvider.overrideWithValue(initialSettings),
       ],
-      child: YtmApp(router: createAppRouter(titleBar: titleBar)),
+      child: YtmApp(
+        router: createAppRouter(titleBar: titleBar),
+        // The startup gate draws the same title bar while the service comes
+        // up, so the window has its chrome from the first frame.
+        titleBar: titleBar,
+      ),
     ),
   );
 }

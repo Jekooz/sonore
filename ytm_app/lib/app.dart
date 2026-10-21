@@ -15,9 +15,15 @@ import 'theme/tokens.dart';
 /// Text scaling is clamped to the spec's ceiling, adjusted by the user's
 /// preference, for every screen.
 class YtmApp extends ConsumerWidget {
-  const YtmApp({super.key, required this.router});
+  const YtmApp({super.key, required this.router, this.titleBar});
 
   final GoRouter router;
+
+  /// The window's own title bar, when the platform has one.
+  ///
+  /// The routed app draws it as part of its shell, and the startup gate draws
+  /// it too, so the window keeps its chrome from the very first frame.
+  final Widget? titleBar;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,9 +43,11 @@ class YtmApp extends ConsumerWidget {
         // screen because every animated widget already asks MediaQuery.
         final MediaQueryData media = MediaQuery.of(context);
         return SidecarStartupGate(
+          titleBar: titleBar,
           child: MediaQuery(
             data: media.copyWith(
-              disableAnimations: media.disableAnimations || settings.reduceMotion,
+              disableAnimations:
+                  media.disableAnimations || settings.reduceMotion,
             ),
             child: MediaQuery.withClampedTextScaling(
               minScaleFactor: Tokens.textScaleMin,

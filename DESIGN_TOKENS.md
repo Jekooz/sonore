@@ -7,9 +7,14 @@ same tokens.
 
 ## Core principle
 Pitch black by default. Color appears only from real album art and one fixed accent — never
-from decorative gradients, mesh backgrounds, or unrelated color washes. Glass/blur is reserved
-for floating chrome (tab bar, mini player, Now Playing transport pill) — content itself stays
-flat black, not boxed in bordered cards everywhere.
+from decorative gradients, mesh backgrounds, or unrelated color washes.
+
+**Only the navigation menu floats.** Glass/blur is reserved for that floating chrome (the
+top tab bar / bottom navigation pill) and for the Now Playing transport pill. The persistent
+Now Playing bar is not floating chrome: it is docked to the bottom of the application content
+area, so it may keep a subtle glass tint, but it must never read as a detached pill, a
+floating card, or a surface hovering over the page. Content itself stays flat black, not
+boxed in bordered cards everywhere.
 
 ## Colors
 ```
@@ -17,7 +22,7 @@ flat black, not boxed in bordered cards everywhere.
                            progress fill, liked heart, active nav icon. Never decorative.)
 --bg: #000000             (page background, always true black, never dark gray)
 --glass: rgba(255,255,255,0.06)         (tab bar / standard chrome)
---glass-strong: rgba(255,255,255,0.10)  (mini player / floating pill)
+--glass-strong: rgba(255,255,255,0.10)  (floating pill / docked Now Playing bar)
 --border: rgba(255,255,255,0.10)
 --border-strong: rgba(255,255,255,0.16)
 --text-primary: #FFFFFF
@@ -40,13 +45,18 @@ confident, not muted small-caps labels.
 Sentence case everywhere. No all-caps labels, no tracked-out eyebrow text above headings.
 
 ## Glass / chrome treatment
-Applies ONLY to: top titlebar+tab bar, mini player (docked views), Now Playing transport pill.
+Applies ONLY to: the floating navigation menu (top titlebar+tab bar, phone bottom pill) and
+the Now Playing transport pill.
 ```
 background: var(--glass) or var(--glass-strong)
 backdrop-filter: blur(40–46px) saturate(180–200%)
 border: 1px solid var(--border) or var(--border-strong)
 ```
-Floating pills (mini player, Now Playing transport) additionally get a specular highlight —
+The anchored Now Playing bar is a docked surface, not floating chrome: it keeps the
+translucent fill and the blur, but it has square corners, spans the full content width, is
+flush with the bottom edge, and carries no drop shadow and no specular streak.
+
+Floating pills (Now Playing transport) additionally get a specular highlight —
 a diagonal light streak, NOT a colored glow:
 ```css
 .player::before {
@@ -68,6 +78,29 @@ Top tab bar merged into the title bar, styled as a pill segmented control (round
 active tab = white bg + black text, inactive = transparent + `--text-secondary`). Real
 Windows caption buttons (– ▢ ×) at the top-right, drawn as thin-stroke SVG, not emoji or
 web-style X. Tabs: Home | Search | Library | Now Playing.
+
+The navigation menu is the only floating surface in the app: the pill stays detached from the
+window edges with generous margins, and on Android it floats above the system gesture area.
+It keeps its hover, focus and selected states, and every icon-only item carries a tooltip and
+an accessible label.
+
+### Now Playing bar (docked)
+The persistent playback bar is docked to the bottom of the application content area, never
+floating. It spans the full content width, has square corners, sits flush with the bottom
+edge (on phones it sits directly above the floating navigation pill), and casts no shadow and
+no specular streak. A 2 px accent progress line runs along its top edge. It carries the
+album artwork, the track title and artist, the previous / play-pause / next controls and, on
+wide layouts, the elapsed / total time on the right. Because the bar takes real space in the
+layout, pages scroll above it instead of under it, and it can never overlap the navigation.
+
+## First run
+The local music service takes a few seconds to come up on a cold start, and every
+page asks it for data the moment it is built. So the app waits for the service
+before it builds any page: the first thing on screen is a calm starting state
+(product name, a quiet spinner, "Starting the music service…"), never an error
+the reader has to dismiss. The first real screen is the Home page, or the
+sign-in prompt when there is no session. Only a service that genuinely failed to
+start shows an error, and it says what failed with one real action (retry).
 
 ## Screen-specific notes
 

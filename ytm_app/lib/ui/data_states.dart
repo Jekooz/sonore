@@ -99,15 +99,33 @@ class SignedOutState extends ConsumerWidget {
       ),
       SignInStage.idle => StateMessage(
         message: 'Not signed in to YouTube Music.',
-        footnote: 'Sign in with Google in the browser window that opens. Your '
-            'session is kept by the local service — the app itself never stores '
-            'it, and there is nothing to install.',
+        footnote: _signInExplanation(context),
         actionLabel: 'Sign in',
         actionIcon: AppIcons.user,
         onAction: controller.start,
       ),
     };
   }
+}
+
+/// How the sign-in works, which is not the same on every platform.
+///
+/// On a phone the service runs on another machine, so the browser window
+/// opens over there. Saying so is the difference between "this is broken" and
+/// "look at your computer" — and it is the honest description of what the
+/// service does.
+String _signInExplanation(BuildContext context) {
+  final bool onAnotherMachine =
+      Theme.of(context).platform == TargetPlatform.android;
+
+  if (onAnotherMachine) {
+    return 'Sign in with Google in the browser window on the computer running '
+        'the service. Your session is kept by that service — the app itself '
+        'never stores it, and there is nothing to install.';
+  }
+  return 'Sign in with Google in the browser window that opens. Your session '
+      'is kept by the local service — the app itself never stores it, and '
+      'there is nothing to install.';
 }
 
 /// The window to name in the waiting copy: the browser the sidecar said it is

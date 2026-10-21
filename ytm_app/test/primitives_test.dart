@@ -275,6 +275,9 @@ void main() {
         ),
       ),
     );
+    // The app waits for the music service before it builds its pages, so the
+    // catalogue only exists after that step.
+    await tester.pumpAndSettle();
 
     final BuildContext context = tester.element(find.byType(SpecimenBoard));
     expect(MediaQuery.textScalerOf(context).scale(1), Tokens.textScaleCap);
@@ -294,6 +297,9 @@ void main() {
         ),
       ),
     );
+    // The app waits for the music service before it builds its pages, so the
+    // catalogue only exists after that step.
+    await tester.pumpAndSettle();
 
     final BuildContext context = tester.element(find.byType(SpecimenBoard));
     expect(MediaQuery.textScalerOf(context).scale(1), Tokens.textScaleDefault);

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The app talks to a local service over plain HTTP: the sidecar on loopback,
+  and the host machine when the app runs in an emulator (10.0.2.2). Android 9
+  and newer block cleartext traffic by default, which left the app unable to
+  reach its own service at all, so those hosts are opened explicitly here.
+
+  Everything else stays HTTPS-only: `base-config` keeps cleartext off for any
+  host that is not listed below.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- The sidecar on the device itself. -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <!-- The host machine, from the Android emulator. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

@@ -1,7 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The app talks to the local music service over the network, so it needs
+         internet access in every build type. The debug and profile manifests
+         declare it for the Flutter tooling; the main manifest has to declare
+         it too, or a release build can never reach the service. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="ytm_app"
         android:name="${applicationName}"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

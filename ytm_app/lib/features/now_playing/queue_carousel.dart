@@ -30,10 +30,21 @@ class QueueCarousel extends ConsumerStatefulWidget {
 }
 
 class _QueueCarouselState extends ConsumerState<QueueCarousel> {
-  late final PageController _pageController = PageController(
-    viewportFraction: Tokens.carouselViewportFraction,
-    initialPage: ref.read(playbackProvider).index,
-  );
+  /// The queue as pages, but circular: pages repeat modulo the queue length,
+  /// so a neighbour always exists on both sides — the first track never sits
+  /// against a blank left edge, and swiping past the end wraps the queue.
+  /// [_page] is the unbounded page position; the queue index is its modulo.
+  static const int _warps = 512;
+
+  /// The initial page sits `_warps` full loops in, so a full queue of
+  /// swipe-left pages is always available in front.
+  late final PageController _pageController = () {
+    final PlaybackState state = ref.read(playbackProvider);
+    return PageController(
+      viewportFraction: Tokens.carouselViewportFraction,
+      initialPage: _warps * state.queue.length + state.index,
+    );
+  }();
 
   @override
   void dispose() {
@@ -41,21 +52,39 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
     super.dispose();
   }
 
+  /// Queue index for an unbounded page position. Safe for negatives.
+  int _queueIndexOf(int page, int length) =>
+      length <= 0 ? 0 : ((page % length) + length) % length;
+
   @override
   Widget build(BuildContext context) {
     final PlaybackState state = ref.watch(playbackProvider);
     if (!state.hasTrack) return const SizedBox.shrink();
 
     final bool reduceMotion = MediaQuery.of(context).disableAnimations;
+    final int queueLength = state.queue.length;
+    final bool circular = queueLength > 1;
 
-    // Follow queue changes that did not come from this carousel (next/previous).
+    // Follow queue changes that did not come from this carousel (next/previous,
+    // or a queue edit). The carousel moves to the nearest page of the new
+    // track, so a wrap-around skip travels the short way, not across the map.
+    // A carousel whose page has not been laid out yet (an offstage branch under
+    // a pushed route, the first frame) has no position to animate from, so it
+    // waits: the initial page lands correctly on layout.
     ref.listen<int>(playbackProvider.select((PlaybackState s) => s.index),
         (int? previous, int next) {
       if (!_pageController.hasClients) return;
-      final int shown = _pageController.page?.round() ?? next;
-      if (shown == next) return;
+      final double? page = _pageController.page;
+      if (page == null) return;
+      final int current = page.round();
+      if (_queueIndexOf(current, queueLength) == next) return;
+      // Shortest signed step from `current` onto a page congruent to `next`.
+      final int delta = (_queueIndexOf(next, queueLength) -
+              _queueIndexOf(current, queueLength))
+          .remainder(queueLength);
+      final int step = delta > queueLength ~/ 2 ? delta - queueLength : delta;
       _pageController.animateToPage(
-        next,
+        current + step,
         duration: reduceMotion ? Duration.zero : Tokens.dPageChange,
         curve: Tokens.curvePageChange,
       );
@@ -65,12 +94,23 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
 
     return PageView.builder(
       controller: _pageController,
-      itemCount: state.queue.length,
-      onPageChanged: (int index) =>
-          ref.read(playbackProvider.notifier).playAt(index),
+      itemCount: circular ? queueLength * 2 * _warps : queueLength,
+      onPageChanged: (int page) {
+        if (!circular) {
+          ref.read(playbackProvider.notifier).playAt(page);
+          return;
+        }
+        final int queueIndex = _queueIndexOf(page, queueLength);
+        if (queueIndex != state.index) {
+          ref.read(playbackProvider.notifier).playAt(queueIndex);
+        }
+      },
       itemBuilder: (BuildContext context, int index) {
-        final Track track = state.queue[index];
-        final bool isCurrent = index == state.index;
+        final int playIndex = circular
+            ? _queueIndexOf(index, queueLength)
+            : index;
+        final Track track = state.queue[playIndex];
+        final bool isCurrent = playIndex == state.index;
 
         return LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
@@ -90,8 +130,9 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
                   behavior: HitTestBehavior.opaque,
                   onTap: isCurrent
                       ? null
-                      : () =>
-                          ref.read(playbackProvider.notifier).playAt(index),
+                      : () => ref
+                          .read(playbackProvider.notifier)
+                          .playAt(playIndex),
                   child: art,
                 ),
               );
@@ -141,8 +182,9 @@ class _QueueCarouselState extends ConsumerState<QueueCarousel> {
                     // the transport owns play/pause.
                     onTap: isCurrent
                         ? null
-                        : () =>
-                            ref.read(playbackProvider.notifier).playAt(index),
+                        : () => ref
+                            .read(playbackProvider.notifier)
+                            .playAt(playIndex),
                     child: art,
                   ),
                 ),

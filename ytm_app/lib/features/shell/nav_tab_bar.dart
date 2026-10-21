@@ -62,11 +62,13 @@ class NavTabBar extends StatelessWidget {
               child: Row(
                 children: <Widget>[
                   const SizedBox(width: Tokens.s8),
-                  for (final AppDestination destination in AppDestination.values)
+                  for (final AppDestination destination
+                      in AppDestination.values)
                     Expanded(
                       child: _Tab(
                         destination: destination,
-                        selected: !settingsActive &&
+                        selected:
+                            !settingsActive &&
                             AppDestination.values.indexOf(destination) ==
                                 currentIndex,
                         reduceMotion: reduceMotion,
@@ -123,25 +125,31 @@ class _Tab extends StatelessWidget {
       button: true,
       selected: selected,
       label: destination.label,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Tokens.s4,
-              vertical: Tokens.s8,
-            ),
-            child: AnimatedContainer(
-              duration: reduceMotion ? Duration.zero : Tokens.dPress,
-              curve: Tokens.curvePress,
-              alignment: Alignment.center,
-              decoration: ShapeDecoration(
-                color: selected ? Tokens.surfaceRaised : Tokens.transparent,
-                shape: Tokens.shapePill,
+      child: Tooltip(
+        message: destination.label,
+        excludeFromSemantics: true,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(Tokens.tabBarHeight / 2),
+            hoverColor: Tokens.glass,
+            focusColor: Tokens.surfaceRaised,
+            splashColor: Tokens.surfaceRaised,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Tokens.s4,
+                vertical: Tokens.s8,
               ),
-              child: Row(
+              child: AnimatedContainer(
+                duration: reduceMotion ? Duration.zero : Tokens.dPress,
+                curve: Tokens.curvePress,
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: selected ? Tokens.surfaceRaised : Tokens.transparent,
+                  shape: Tokens.shapePill,
+                ),
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Icon(
@@ -164,6 +172,7 @@ class _Tab extends StatelessWidget {
             ),
           ),
         ),
+      ),
     );
   }
 }
@@ -190,29 +199,36 @@ class _SettingsAction extends StatelessWidget {
       button: true,
       selected: selected,
       label: 'Settings',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: SizedBox(
-            width: Tokens.minTouchTarget,
-            height: Tokens.tabBarHeight,
-            child: Center(
-              child: AnimatedContainer(
-                duration: reduceMotion ? Duration.zero : Tokens.dPress,
-                curve: Tokens.curvePress,
-                width: Tokens.s32 + Tokens.s4,
-                height: Tokens.s32 + Tokens.s4,
-                alignment: Alignment.center,
-                decoration: ShapeDecoration(
-                  color: selected ? Tokens.surfaceRaised : Tokens.transparent,
-                  shape: Tokens.shapePill,
-                ),
-                child: Icon(
-                  AppIcons.dotsThree,
-                  size: Tokens.iconSize,
-                  color: foreground,
+      child: Tooltip(
+        message: 'Settings',
+        excludeFromSemantics: true,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(Tokens.tabBarHeight / 2),
+            hoverColor: Tokens.glass,
+            focusColor: Tokens.surfaceRaised,
+            splashColor: Tokens.surfaceRaised,
+            child: SizedBox(
+              width: Tokens.minTouchTarget,
+              height: Tokens.tabBarHeight,
+              child: Center(
+                child: AnimatedContainer(
+                  duration: reduceMotion ? Duration.zero : Tokens.dPress,
+                  curve: Tokens.curvePress,
+                  width: Tokens.s32 + Tokens.s4,
+                  height: Tokens.s32 + Tokens.s4,
+                  alignment: Alignment.center,
+                  decoration: ShapeDecoration(
+                    color: selected ? Tokens.surfaceRaised : Tokens.transparent,
+                    shape: Tokens.shapePill,
+                  ),
+                  child: Icon(
+                    AppIcons.dotsThree,
+                    size: Tokens.iconSize,
+                    color: foreground,
+                  ),
                 ),
               ),
             ),

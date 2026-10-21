@@ -11,7 +11,7 @@ import 'package:ytm_app/core/app_settings.dart';
 import 'package:ytm_app/data/models.dart';
 import 'package:ytm_app/features/collection/collection_screen.dart';
 import 'package:ytm_app/features/settings/settings_screen.dart';
-import 'package:ytm_app/features/shell/mini_player.dart';
+import 'package:ytm_app/features/shell/now_playing_bar.dart';
 import 'package:ytm_app/theme/icons.dart';
 import 'package:ytm_app/theme/tokens.dart';
 import 'package:ytm_app/ui/data_states.dart';
@@ -559,8 +559,8 @@ void main() {
         size: kDesktop,
       );
 
-      // Nothing is playing, so there is no mini player yet.
-      expect(find.byType(MiniPlayer), findsNothing);
+      // Nothing is playing, so there is no Now Playing bar yet.
+      expect(find.byType(NowPlayingBar), findsNothing);
 
       final Map<String, dynamic> album =
           fixtureJson('album.json') as Map<String, dynamic>;
@@ -572,13 +572,13 @@ void main() {
       await tester.tap(find.text('Play'));
       await tester.pumpAndSettle();
 
-      // The mini player is the shell's view of the shared controller, so its
+      // The Now Playing bar is the shell's view of the shared controller, so its
       // appearing with the album's first track proves the queue was filled and
       // started there rather than a single row being played.
-      expect(find.byType(MiniPlayer), findsOneWidget);
+      expect(find.byType(NowPlayingBar), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(MiniPlayer),
+          of: find.byType(NowPlayingBar),
           matching: find.text(firstTrack),
         ),
         findsOneWidget,
@@ -711,10 +711,10 @@ void main() {
       await tester.tap(find.text('Play now'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(MiniPlayer), findsOneWidget);
+      expect(find.byType(NowPlayingBar), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(MiniPlayer),
+          of: find.byType(NowPlayingBar),
           matching: find.text(songs.first),
         ),
         findsOneWidget,
@@ -736,7 +736,7 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byType(MiniPlayer),
+          of: find.byType(NowPlayingBar),
           matching: find.text('Falling For You'),
         ),
         findsOneWidget,
@@ -751,7 +751,7 @@ void main() {
       // The current track is untouched: Play next inserted after it.
       expect(
         find.descendant(
-          of: find.byType(MiniPlayer),
+          of: find.byType(NowPlayingBar),
           matching: find.text('Falling For You'),
         ),
         findsOneWidget,
@@ -762,7 +762,7 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byType(MiniPlayer),
+          of: find.byType(NowPlayingBar),
           matching: find.text(songs.first),
         ),
         findsOneWidget,
@@ -1164,7 +1164,7 @@ void main() {
   });
 
   group('selection reaches the player', () {
-    testWidgets('tapping a search result plays it and opens the mini player', (
+    testWidgets('tapping a search result plays it and opens the Now Playing bar', (
       WidgetTester tester,
     ) async {
       await pumpAtSize(
@@ -1182,10 +1182,10 @@ void main() {
       await tester.tap(find.byType(MediaRow).first);
       await tester.pumpAndSettle();
 
-      expect(find.byType(MiniPlayer), findsOneWidget);
+      expect(find.byType(NowPlayingBar), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(MiniPlayer),
+          of: find.byType(NowPlayingBar),
           matching: find.text(firstSong.item.title),
         ),
         findsOneWidget,

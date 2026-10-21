@@ -19,7 +19,7 @@ enum RepeatMode {
 
 /// Everything the player surfaces render.
 ///
-/// The queue and index are owned here so the mini player, Now Playing, the
+/// The queue and index are owned here so the Now Playing bar, Now Playing, the
 /// carousel and the queue panel all read the same source and cannot drift.
 @immutable
 class PlaybackState {

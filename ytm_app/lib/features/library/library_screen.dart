@@ -154,7 +154,7 @@ class _LibraryList extends ConsumerWidget {
         margin,
         0,
         margin,
-        Tokens.shellBottomInset,
+        Tokens.s24,
       ),
       itemCount: items.length,
       itemBuilder: (BuildContext context, int index) {

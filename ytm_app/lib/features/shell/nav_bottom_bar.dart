@@ -8,7 +8,7 @@ import '../../ui/glass_surface.dart';
 /// Phone navigation.
 ///
 /// Spec: "Phone: glass bottom bar (pill, active icon filled and accented) with
-/// the mini player docked just above it." Touch targets stay at or above
+/// the Now Playing bar docked just above it." Touch targets stay at or above
 /// [Tokens.minTouchTarget].
 ///
 /// Settings is a trailing action rather than a fifth destination: the spec
@@ -59,7 +59,8 @@ class NavBottomBar extends StatelessWidget {
                 Expanded(
                   child: _NavBarItem(
                     destination: destination,
-                    selected: AppDestination.values.indexOf(destination) ==
+                    selected:
+                        AppDestination.values.indexOf(destination) ==
                         highlighted,
                     onTap: () =>
                         onSelect(AppDestination.values.indexOf(destination)),
@@ -68,7 +69,10 @@ class NavBottomBar extends StatelessWidget {
               if (onOpenSettings != null) ...<Widget>[
                 const SizedBox(
                   height: Tokens.s24,
-                  child: VerticalDivider(width: Tokens.s8, color: Tokens.border),
+                  child: VerticalDivider(
+                    width: Tokens.s8,
+                    color: Tokens.border,
+                  ),
                 ),
                 _NavAction(
                   icon: AppIcons.dotsThree,
@@ -106,17 +110,29 @@ class _NavAction extends StatelessWidget {
       button: true,
       selected: selected,
       label: label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Tokens.minTouchTarget),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Tokens.s12),
-            child: Icon(
-              icon,
-              size: Tokens.iconSize,
-              color: selected ? Tokens.accent : Tokens.textSecondary,
+      child: Tooltip(
+        message: label,
+        excludeFromSemantics: true,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(Tokens.navBarHeight / 2),
+            hoverColor: Tokens.glass,
+            focusColor: Tokens.surfaceRaised,
+            splashColor: Tokens.surfaceRaised,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: Tokens.minTouchTarget,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Tokens.s12),
+                child: Icon(
+                  icon,
+                  size: Tokens.iconSize,
+                  color: selected ? Tokens.accent : Tokens.textSecondary,
+                ),
+              ),
             ),
           ),
         ),
@@ -144,27 +160,39 @@ class _NavBarItem extends StatelessWidget {
       button: true,
       selected: selected,
       label: destination.label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Tokens.minTouchTarget),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(
-                selected ? destination.activeIcon : destination.icon,
-                size: Tokens.iconSize,
-                color: foreground,
+      child: Tooltip(
+        message: destination.label,
+        excludeFromSemantics: true,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(Tokens.navBarHeight / 2),
+            hoverColor: Tokens.glass,
+            focusColor: Tokens.surfaceRaised,
+            splashColor: Tokens.surfaceRaised,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: Tokens.minTouchTarget,
               ),
-              const SizedBox(height: Tokens.s4),
-              Text(
-                destination.label,
-                style: Tokens.caption.copyWith(color: foreground),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(
+                    selected ? destination.activeIcon : destination.icon,
+                    size: Tokens.iconSize,
+                    color: foreground,
+                  ),
+                  const SizedBox(height: Tokens.s4),
+                  Text(
+                    destination.label,
+                    style: Tokens.caption.copyWith(color: foreground),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

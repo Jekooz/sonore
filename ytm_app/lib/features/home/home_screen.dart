@@ -110,7 +110,7 @@ class _HomeContent extends ConsumerWidget {
                 margin,
                 Tokens.s24,
                 margin,
-                Tokens.shellBottomInset,
+                Tokens.s24,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

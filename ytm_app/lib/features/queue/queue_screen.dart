@@ -22,7 +22,7 @@ import '../now_playing/artwork.dart';
 /// Now Playing's panel is the glanceable "Up Next"; this screen is where the
 /// queue is actually edited. It is a real list with real consequences — every
 /// control here changes what plays next through the same
-/// [PlaybackController] the transport uses, so the mini player and Now Playing
+/// [PlaybackController] the transport uses, so the Now Playing bar and Now Playing
 /// move with it immediately (§F).
 ///
 /// Two affordances exist for reordering because the spec asks for both: drag

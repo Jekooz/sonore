@@ -106,7 +106,7 @@ class _CollectionView extends ConsumerWidget {
         margin,
         Tokens.s16,
         margin,
-        Tokens.shellBottomInset,
+        Tokens.s24,
       ),
       itemCount: rows.length + 1,
       itemBuilder: (BuildContext context, int index) {

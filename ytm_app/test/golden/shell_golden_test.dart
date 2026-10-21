@@ -5,7 +5,7 @@ import 'package:ytm_app/features/shell/window_title_bar.dart';
 
 import '../support/harness.dart';
 
-/// The shell itself: navigation, content area and the persistent mini player, on
+/// The shell itself: navigation, content area and the persistent Now Playing bar, on
 /// the real routed app.
 void main() {
   setUpAll(loadAppFonts);
@@ -30,7 +30,7 @@ void main() {
     );
   });
 
-  testWidgets('library with the mini player — tablet 800x1280',
+  testWidgets('library with the Now Playing bar — tablet 800x1280',
       (WidgetTester tester) async {
     await pumpAtSize(
       tester,

@@ -7,7 +7,7 @@ import '../theme/tokens.dart';
 /// an optional trailing control.
 ///
 /// The back action goes to Now Playing because that is where Lyrics, Equalizer
-/// and Settings are opened from, and because it keeps the mini player and the
+/// and Settings are opened from, and because it keeps the Now Playing bar and the
 /// adaptive navigation exactly where the reader left them.
 class ScreenHeader extends StatelessWidget {
   const ScreenHeader({

@@ -29,11 +29,11 @@ class Tokens {
   /// Pressed rows, disabled fills.
   static const Color surfaceRaised = Color(0xFF1C1C21);
 
-  /// Top bar, bottom nav, mini player, Follow glass (white 8%). Extracted
-  /// from the Figma fills; the previous 6% came from the older mock draft.
+  /// Top bar, bottom nav, Follow glass (white 8%). Extracted from the Figma
+  /// fills; the previous 6% came from the older mock draft.
   static const Color glass = Color(0x14FFFFFF);
 
-  /// Mini player, transport pill, sheets (white 10%).
+  /// Anchored Now Playing bar, transport pill, sheets (white 10%).
   static const Color glassStrong = Color(0x1AFFFFFF);
 
   /// Reduce-transparency / dropped-frames fallback. The materials board pins
@@ -199,8 +199,12 @@ class Tokens {
       ? squircle(radius)
       : rounded(radius);
 
-  /// Full-radius pill used by buttons, nav pill, mini player, transport pill.
+  /// Full-radius pill used by buttons, nav pill, transport controls.
   static const OutlinedBorder shapePill = StadiumBorder();
+
+  /// The anchored Now Playing bar is part of the layout, not a floating pill:
+  /// square corners, flush with the window's sides and bottom edge.
+  static const OutlinedBorder shapeAnchoredBar = RoundedRectangleBorder();
 
   /// The same radius, for widgets that take a `BorderRadius` (ink wells and
   /// clips) rather than an [OutlinedBorder]. Radius values live here only.
@@ -242,7 +246,11 @@ class Tokens {
 
   static const double sidebarWidth = 200;
   static const double sidebarRailWidth = 72;
-  static const double miniPlayerHeight = 64;
+
+  /// The persistent Now Playing bar docked to the bottom of the content area.
+  /// Its progress line sits inside this height, at the top edge.
+  static const double nowPlayingBarHeight = 64;
+
   static const double listRowHeight = 64;
   static const double artTileSize = 108;
   static const double artThumbSize = 48;
@@ -250,6 +258,11 @@ class Tokens {
   /// A Home rail card: 108px artwork plus two text lines, measured so the text
   /// still fits at the 1.3x text-scale ceiling rather than overflowing.
   static const double railCardHeight = 172;
+
+  /// Below this width the Home hero stacks its artwork above the title and the
+  /// actions instead of sitting them side by side, which is what a 320 px
+  /// phone needs for the pills to fit.
+  static const double heroStackBelowWidth = 300;
 
   /// A collection header's artwork (album / playlist / artist page).
   static const double collectionArtSize = 160;
@@ -276,16 +289,8 @@ class Tokens {
   static const double tabBarMaxWidth = 760;
   static const double shellTopInset = 72;
 
-  /// Widest the centered mini player pill grows. The pill is pinned to the
-  /// bottom centre of wide layouts rather than spanning the window.
-  static const double miniPlayerMaxWidth = 560;
-
   /// Now Playing queue panel on desktop.
   static const double queuePanelWidth = 320;
-
-  /// Space the floating mini player occupies, so scrollable content is never
-  /// permanently hidden behind the glass.
-  static const double shellBottomInset = 96;
 
   /// Now Playing artwork bounds.
   static const double artworkMaxPhone = 320;

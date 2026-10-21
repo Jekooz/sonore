@@ -266,7 +266,7 @@ class _SearchResultsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.only(bottom: Tokens.shellBottomInset),
+      padding: const EdgeInsets.only(bottom: Tokens.s24),
       children: <Widget>[
         _Group(title: 'Songs', items: results.songs),
         _Group(title: 'Albums', items: results.albums),

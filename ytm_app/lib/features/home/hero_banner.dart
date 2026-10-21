@@ -46,59 +46,80 @@ class HomeHeroBanner extends ConsumerWidget {
               Positioned.fill(child: _HeroTint(url: item.artworkUrl)),
               Padding(
                 padding: EdgeInsets.all(isDesktop ? Tokens.s24 : Tokens.s16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    ArtTile(
+                child: LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints constraints) {
+                    final Widget art = ArtTile(
                       size: artSize,
                       radius: Tokens.rCard,
                       image: ref.watch(artworkResolverProvider)(item.artworkUrl),
-                    ),
-                    const SizedBox(width: Tokens.s16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
+                    );
+                    final Widget text = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          item.title,
+                          style: Tokens.nowPlayingTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (item.subtitle.isNotEmpty) ...<Widget>[
+                          const SizedBox(height: Tokens.s4),
                           Text(
-                            item.title,
-                            style: Tokens.nowPlayingTitle,
-                            maxLines: 2,
+                            item.subtitle,
+                            style: Tokens.subtitle,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (item.subtitle.isNotEmpty) ...<Widget>[
-                            const SizedBox(height: Tokens.s4),
-                            Text(
-                              item.subtitle,
-                              style: Tokens.subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                          const SizedBox(height: Tokens.s16),
-                          Wrap(
-                            spacing: Tokens.s8,
-                            runSpacing: Tokens.s8,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: <Widget>[
-                              PillButton(
-                                icon: AppIcons.playFill,
-                                label: 'Play',
-                                isActive: true,
-                                // Play opens the release; its page owns the
-                                // queueing, so this never starts a second,
-                                // parallel playback path.
-                                onPressed: target == null
-                                    ? null
-                                    : () => openCollection(context, target),
-                              ),
-                              if (item.artistId != null)
-                                _FollowButton(artistId: item.artistId!),
-                            ],
-                          ),
                         ],
-                      ),
-                    ),
-                  ],
+                        const SizedBox(height: Tokens.s16),
+                        Wrap(
+                          spacing: Tokens.s8,
+                          runSpacing: Tokens.s8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: <Widget>[
+                            PillButton(
+                              icon: AppIcons.playFill,
+                              label: 'Play',
+                              isActive: true,
+                              // Play opens the release; its page owns the
+                              // queueing, so this never starts a second,
+                              // parallel playback path.
+                              onPressed: target == null
+                                  ? null
+                                  : () => openCollection(context, target),
+                            ),
+                            if (item.artistId != null)
+                              _FollowButton(artistId: item.artistId!),
+                          ],
+                        ),
+                      ],
+                    );
+
+                    // A narrow phone cannot fit the artwork and the actions
+                    // side by side: the text column would be squeezed until
+                    // the pills overflow. Below the threshold the hero
+                    // stacks instead, which is the same content in a shape
+                    // that fits.
+                    if (constraints.maxWidth < Tokens.heroStackBelowWidth) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          art,
+                          const SizedBox(height: Tokens.s16),
+                          text,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        art,
+                        const SizedBox(width: Tokens.s16),
+                        Expanded(child: text),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],

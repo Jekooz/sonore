@@ -28,7 +28,7 @@ class PopularRail extends StatelessWidget {
         padding: const EdgeInsets.only(
           top: Tokens.s24,
           right: Tokens.pageMarginDesktop,
-          bottom: Tokens.shellBottomInset,
+          bottom: Tokens.s24,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

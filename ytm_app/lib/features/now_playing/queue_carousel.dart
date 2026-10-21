@@ -21,7 +21,7 @@ import 'artwork.dart';
 /// the same tap-to-skip.
 ///
 /// Swiping (or tapping) changes track through the shared playback controller, so
-/// the mini player and queue panel follow immediately.
+/// the Now Playing bar and queue panel follow immediately.
 class QueueCarousel extends ConsumerStatefulWidget {
   const QueueCarousel({super.key});
 

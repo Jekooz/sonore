@@ -8,7 +8,7 @@ import 'package:ytm_app/audio/track.dart';
 import 'package:ytm_app/core/app_settings.dart';
 import 'package:ytm_app/features/now_playing/queue_panel.dart';
 import 'package:ytm_app/features/queue/queue_screen.dart';
-import 'package:ytm_app/features/shell/mini_player.dart';
+import 'package:ytm_app/features/shell/now_playing_bar.dart';
 import 'package:ytm_app/theme/icons.dart';
 import 'package:ytm_app/ui/context_menu.dart';
 
@@ -82,10 +82,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(stateOf(tester).current!.id, 'c');
 
-    // §F: "Queue changes must be reflected in the mini-player and Now Playing
-    // immediately." The shell hides the mini player while Now Playing's branch
+    // §F: "Queue changes must be reflected in the Now Playing bar and Now Playing
+    // immediately." The shell hides the Now Playing bar while Now Playing's branch
     // is on screen, so both halves are checked where each is visible: the Now
-    // Playing title here, the mini player on a normal destination.
+    // Playing title here, the Now Playing bar on a normal destination.
     await tester.tap(find.byTooltip('Back to Now Playing'));
     await tester.pumpAndSettle();
     expect(find.text('Paper Boats'), findsWidgets);
@@ -94,7 +94,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.descendant(
-        of: find.byType(MiniPlayer),
+        of: find.byType(NowPlayingBar),
         matching: find.text('Paper Boats'),
       ),
       findsOneWidget,

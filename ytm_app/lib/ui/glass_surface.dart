@@ -8,13 +8,15 @@ import '../theme/tokens.dart';
 
 /// The one and only place the app may call [BackdropFilter].
 ///
-/// The spec bans `BackdropFilter` outside `GlassSurface`, so every floating
-/// chrome surface (top bar, bottom nav, mini player, transport pill, sheets)
-/// is built from this widget.
+/// The spec bans `BackdropFilter` outside `GlassSurface`, so every glass
+/// surface (top bar, bottom nav, Now Playing bar, transport pill, sheets) is
+/// built from this widget.
 ///
 /// Recipe: clip to the shape, then compose a 30-sigma blur with 1.8x
 /// saturation, then paint the glass/glassStrong fill and a 1px border.
-/// Floating pills add a specular streak; the surface casts a soft shadow.
+/// Floating surfaces add a specular streak and cast a soft shadow; docked
+/// surfaces (the anchored Now Playing bar) paint neither, so they read as part
+/// of the layout rather than as a card hovering over it.
 /// Reduce Transparency (or a device that drops frames) switches to
 /// surfaceRaised at 92% opacity.
 class GlassSurface extends ConsumerWidget {
@@ -25,6 +27,7 @@ class GlassSurface extends ConsumerWidget {
     this.shape,
     this.isStrong = false,
     this.showSpecular = true,
+    this.isFloating = true,
   });
 
   final Widget child;
@@ -32,14 +35,21 @@ class GlassSurface extends ConsumerWidget {
   /// Corner radius token. Ignored when [shape] is given.
   final double radius;
 
-  /// Overrides the shape entirely, e.g. [Tokens.shapePill] for the mini player.
+  /// Overrides the shape entirely, e.g. [Tokens.shapePill] for the navigation
+  /// pill or [Tokens.shapeAnchoredBar] for the docked Now Playing bar.
   final OutlinedBorder? shape;
 
-  /// Use the stronger 10% fill (mini player, transport pill, sheets).
+  /// Use the stronger 10% fill (Now Playing bar, transport pill, sheets).
   final bool isStrong;
 
-  /// Whether to paint the specular streak (floating pills only).
+  /// Whether to paint the specular streak (floating surfaces only).
   final bool showSpecular;
+
+  /// Whether this surface floats above the page. Docked surfaces are flush
+  /// with the layout edge, so they skip both the drop shadow and the specular
+  /// streak. Their blur and translucency are kept, because the anchored Now
+  /// Playing bar may still use the glass treatment.
+  final bool isFloating;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -53,7 +63,10 @@ class GlassSurface extends ConsumerWidget {
 
     if (reduceTransparency) {
       return DecoratedBox(
-        decoration: ShapeDecoration(color: Tokens.glassFallback, shape: resolved),
+        decoration: ShapeDecoration(
+          color: Tokens.glassFallback,
+          shape: resolved,
+        ),
         child: child,
       );
     }
@@ -62,10 +75,48 @@ class GlassSurface extends ConsumerWidget {
       side: const BorderSide(color: Tokens.border, width: Tokens.borderWidth),
     );
 
+    final Widget surface = ClipPath(
+      clipper: ShapeBorderClipper(
+        shape: resolved,
+        textDirection: Directionality.maybeOf(context),
+      ),
+      child: BackdropFilter(
+        filter: ImageFilter.compose(
+          outer: ColorFilter.matrix(
+            Tokens.saturationMatrix(Tokens.glassSaturation),
+          ),
+          inner: ImageFilter.blur(
+            sigmaX: Tokens.glassBlur,
+            sigmaY: Tokens.glassBlur,
+          ),
+        ),
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            color: isStrong ? Tokens.glassStrong : Tokens.glass,
+            shape: bordered,
+          ),
+          child: isFloating
+              ? Stack(
+                  children: <Widget>[
+                    if (showSpecular)
+                      const Positioned.fill(
+                        child: IgnorePointer(child: _SpecularStreak()),
+                      ),
+                    child,
+                  ],
+                )
+              : child,
+        ),
+      ),
+    );
+
+    if (!isFloating) return surface;
+
     return Stack(
       clipBehavior: Clip.none,
       children: <Widget>[
         // Soft shadow under the floating chrome, cast from the shape itself.
+        // A docked surface is part of the layout, so it never casts one.
         Positioned.fill(
           child: DecoratedBox(
             decoration: ShapeDecoration(
@@ -81,38 +132,7 @@ class GlassSurface extends ConsumerWidget {
             ),
           ),
         ),
-        ClipPath(
-          clipper: ShapeBorderClipper(
-            shape: resolved,
-            textDirection: Directionality.maybeOf(context),
-          ),
-          child: BackdropFilter(
-            filter: ImageFilter.compose(
-              outer: ColorFilter.matrix(
-                Tokens.saturationMatrix(Tokens.glassSaturation),
-              ),
-              inner: ImageFilter.blur(
-                sigmaX: Tokens.glassBlur,
-                sigmaY: Tokens.glassBlur,
-              ),
-            ),
-            child: DecoratedBox(
-              decoration: ShapeDecoration(
-                color: isStrong ? Tokens.glassStrong : Tokens.glass,
-                shape: bordered,
-              ),
-              child: Stack(
-                children: <Widget>[
-                  if (showSpecular)
-                    const Positioned.fill(
-                      child: IgnorePointer(child: _SpecularStreak()),
-                    ),
-                  child,
-                ],
-              ),
-            ),
-          ),
-        ),
+        surface,
       ],
     );
   }

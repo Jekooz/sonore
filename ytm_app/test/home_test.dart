@@ -137,7 +137,7 @@ void main() {
     await tester.tap(find.text('Popular One').first);
     await tester.pumpAndSettle();
 
-    // The mini player is the shell's view of the shared controller, so a title
+    // The Now Playing bar is the shell's view of the shared controller, so a title
     // there proves the row really queued and started.
     expect(
       find.descendant(

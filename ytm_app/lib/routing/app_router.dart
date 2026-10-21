@@ -64,7 +64,7 @@ GoRouter createAppRouter({
 /// Collection pages are nested inside every branch rather than being a branch of
 /// their own. A shell branch's default location may not take parameters (go_router
 /// asserts this), and nesting keeps what matters: the adaptive navigation and the
-/// mini player stay on screen while browsing, the destination the page was opened
+/// Now Playing bar stay on screen while browsing, the destination the page was opened
 /// from stays highlighted, and Back pops to it.
 ///
 /// The path is therefore `<destination>/collection/<kind>/<id>`, e.g.
@@ -91,7 +91,7 @@ StatefulShellBranch _branch(
             },
           ),
           // Settings sits in every branch so opening it keeps the destination
-          // the reader came from highlighted and leaves the mini player where
+          // the reader came from highlighted and leaves the Now Playing bar where
           // it is — the same reason collections are nested this way.
           GoRoute(
             path: 'settings',

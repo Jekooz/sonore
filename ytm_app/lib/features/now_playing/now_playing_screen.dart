@@ -344,7 +344,7 @@ class _ActionRow extends ConsumerWidget {
           label: 'Queue',
           onPressed: onToggleQueue,
         ),
-        // Design.md section J: the mini-player menu offers lyrics and EQ. They
+        // Design.md section J: the Now Playing bar menu offers lyrics and EQ. They
         // open as real pages, not popups, so the spec's "not tiny desktop-style
         // popups" rule holds at every size.
         PillButton(

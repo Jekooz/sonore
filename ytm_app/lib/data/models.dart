@@ -32,7 +32,7 @@ class CollectionRef {
   /// The in-app route for this page.
   ///
   /// Collection pages are a shell branch of their own, so opening one keeps the
-  /// adaptive navigation and the mini player in place (see `routing/`).
+  /// adaptive navigation and the Now Playing bar in place (see `routing/`).
   String get routePath => '/collection/${kind.name}/${Uri.encodeComponent(id)}';
 
   /// Parses the branch's two path segments, or null when either is unknown.

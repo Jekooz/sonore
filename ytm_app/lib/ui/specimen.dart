@@ -115,7 +115,7 @@ class SpecimenBoard extends StatelessWidget {
     return const <Widget>[
       GlassSurface(
         child: SizedBox(
-          height: Tokens.miniPlayerHeight,
+          height: Tokens.nowPlayingBarHeight,
           child: Center(child: Text('glass', style: Tokens.rowTitle)),
         ),
       ),
@@ -124,7 +124,7 @@ class SpecimenBoard extends StatelessWidget {
         isStrong: true,
         shape: Tokens.shapePill,
         child: SizedBox(
-          height: Tokens.miniPlayerHeight,
+          height: Tokens.nowPlayingBarHeight,
           child: Center(child: Text('glassStrong pill', style: Tokens.rowTitle)),
         ),
       ),

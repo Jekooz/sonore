@@ -10,19 +10,21 @@ import '../../routing/app_router.dart';
 import '../../routing/destinations.dart';
 import '../../theme/tokens.dart';
 import '../search/search_controller.dart';
-import 'mini_player.dart';
 import 'nav_bottom_bar.dart';
 import 'nav_tab_bar.dart';
+import 'now_playing_bar.dart';
 
 /// The adaptive shell: navigation, the responsive content area and the
-/// persistent mini player all live here, so no page owns the player.
+/// persistent Now Playing bar all live here, so no page owns the player.
 ///
-/// Layout rules from the approved layout:
-/// - under [Tokens.breakpointPhone]: the compact glass bottom bar, with the
-///   mini player pill docked just above it;
-/// - [Tokens.breakpointPhone] and wider: a floating glass top tab bar that
-///   replaces the old left sidebar, with the mini player floating at the bottom
-///   centre so content scrolls under it.
+/// Layout rules:
+/// - the navigation menu is the only floating chrome. Under
+///   [Tokens.breakpointPhone] it is the compact glass bottom pill; at
+///   [Tokens.breakpointPhone] and wider it is the floating glass top tab bar;
+/// - the Now Playing bar is docked, not floating. It is a normal child of the
+///   layout column at the bottom of the content area — above the phone
+///   navigation menu, flush with the window bottom on wide layouts — so it can
+///   never hover over content or overlap the navigation.
 ///
 /// The top tab bar floats over a reserved strip ([Tokens.shellTopInset]) rather
 /// than taking a layout column, so it reads as chrome rather than a panel.
@@ -56,76 +58,80 @@ class AppShell extends ConsumerWidget {
     final bool hasTrack = ref.watch(
       playbackProvider.select((PlaybackState state) => state.hasTrack),
     );
-    final bool onNowPlaying =
-        currentIndex == AppDestination.nowPlaying.index;
+    final bool onNowPlaying = currentIndex == AppDestination.nowPlaying.index;
 
-    // The page is the player on Now Playing, so the mini player steps aside.
-    final bool showMiniPlayer = hasTrack && !onNowPlaying;
+    // The page is the player on Now Playing, so the bar steps aside.
+    final bool showNowPlayingBar = hasTrack && !onNowPlaying;
 
-    void select(int index) => navigationShell.goBranch(
-          index,
-          initialLocation: index == currentIndex,
-        );
+    void select(int index) =>
+        navigationShell.goBranch(index, initialLocation: index == currentIndex);
 
     // Settings is a page on top of the current branch, so the reader keeps
-    // their place, their mini player and their destination highlight.
+    // their place, their Now Playing bar and their destination highlight.
     void openSettings() => context.go(settingsLocation(context));
+
+    final Widget navigation = NavBottomBar(
+      currentIndex: highlighted,
+      settingsActive: settingsActive,
+      onSelect: select,
+      onOpenSettings: openSettings,
+    );
 
     final Widget body = isPhone
         ? Column(
             children: <Widget>[
-              Expanded(child: navigationShell),
-              if (showMiniPlayer)
-                const Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: Tokens.pageMarginPhone,
-                  ),
-                  child: MiniPlayer(),
-                ),
-              SafeArea(
-                top: false,
-                child: NavBottomBar(
-                  currentIndex: highlighted,
-                  settingsActive: settingsActive,
-                  onSelect: select,
-                  onOpenSettings: openSettings,
-                ),
-              ),
+              // Pages own their scrolling; the shell owns the system insets.
+              // The top inset keeps content out of the Android status bar and
+              // any notch, while the bottom is handled by the navigation pill.
+              Expanded(child: SafeArea(bottom: false, child: navigationShell)),
+              // Docked: it sits in the layout above the floating navigation
+              // pill, not over the page.
+              if (showNowPlayingBar) const NowPlayingBar(),
+              SafeArea(top: false, child: navigation),
             ],
           )
-        : Stack(
+        : Column(
             children: <Widget>[
-              // The tab bar floats in this strip; reserving it here keeps the
-              // floating chrome off the content without every page having to
-              // know it exists (unlike the mini player, whose inset the
-              // scrollables already carry).
-              Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: Tokens.shellTopInset),
-                  child: navigationShell,
+              Expanded(
+                child: Stack(
+                  children: <Widget>[
+                    // The tab bar floats in this strip; reserving it here keeps
+                    // the floating chrome off the content without every page
+                    // having to know it exists. The Now Playing bar no longer
+                    // needs a scroll inset because it takes layout space below.
+                    Positioned.fill(
+                      child: SafeArea(
+                        bottom: false,
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            top: Tokens.shellTopInset,
+                          ),
+                          child: navigationShell,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: SafeArea(
+                        bottom: false,
+                        child: NavTabBar(
+                          currentIndex: highlighted,
+                          settingsActive: settingsActive,
+                          onSelect: select,
+                          onOpenSettings: openSettings,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: NavTabBar(
-                    currentIndex: highlighted,
-                    settingsActive: settingsActive,
-                    onSelect: select,
-                    onOpenSettings: openSettings,
-                  ),
-                ),
-              ),
-              if (showMiniPlayer)
-                const Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: Tokens.s16,
-                  child: Center(child: MiniPlayer()),
-                ),
+              // Anchored to the bottom of the content area. SafeArea only
+              // reserves the Android gesture inset; on Windows this is zero,
+              // so the bar is flush with the window edge.
+              if (showNowPlayingBar)
+                const SafeArea(top: false, child: NowPlayingBar()),
             ],
           );
 
@@ -134,9 +140,7 @@ class AppShell extends ConsumerWidget {
       body: Column(
         children: <Widget>[
           ?titleBar,
-          Expanded(
-            child: _GlobalShortcuts(child: body),
-          ),
+          Expanded(child: _GlobalShortcuts(child: body)),
         ],
       ),
     );

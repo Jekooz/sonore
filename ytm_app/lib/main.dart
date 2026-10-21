@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_acrylic/flutter_acrylic.dart' as acrylic;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -39,6 +40,19 @@ Future<void> main() async {
       await windowManager.show();
       await windowManager.focus();
     });
+    // Native window material under the in-app ambient backdrop: Mica on
+    // Windows 11, nothing (the app's own backdrop fills the window) where the
+    // OS cannot provide it. The plugin answers with an error on Windows 10
+    // builds that lack the effect; the backdrop is the design either way.
+    try {
+      await acrylic.Window.initialize();
+      await acrylic.Window.setEffect(
+        effect: acrylic.WindowEffect.mica,
+        dark: true,
+      );
+    } catch (_) {
+      // No Mica available: keep the plain window surface.
+    }
     titleBar = const WindowsTitleBar();
   }
 

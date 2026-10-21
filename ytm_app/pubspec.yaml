@@ -37,6 +37,9 @@ dependencies:
   cached_network_image: ^4.0.4
   palette_generator: ^0.3.3+7
   window_manager: ^0.5.2
+  # Native window material on Windows (Mica on Win11; Acrylic/effect fallbacks
+  # on older builds) under the in-app ambient backdrop.
+  flutter_acrylic: ^1.1.4
   go_router: ^18.0.2
   riverpod: ^3.4.3
   flutter_riverpod: ^3.4.3

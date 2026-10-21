@@ -105,14 +105,14 @@ void main() {
   ) async {
     await pumpAtSize(tester, appScope(), size: kDesktop);
 
-    // A tab is active when it wears its filled glyph, painted with the accent;
+    // A tab is active when it wears its filled glyph, painted full-bright;
     // every other tab stays outlined and secondary.
     void expectOnlyActive(IconData filled) {
       expect(tabIcon(filled), findsOneWidget, reason: '${filled.codePoint}');
       expect(
         tester.widget<Icon>(tabIcon(filled)).color,
-        Tokens.accent,
-        reason: 'the active tab uses the accent',
+        Tokens.text,
+        reason: 'the active tab is full-bright white',
       );
       for (final AppDestination destination in AppDestination.values) {
         if (destination.activeIcon == filled) continue;
@@ -175,7 +175,7 @@ void main() {
             ),
           )
           .color,
-      Tokens.accent,
+      Tokens.text,
     );
 
     // Settings itself, opened from a different destination, behaves the same.

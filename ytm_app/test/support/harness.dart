@@ -19,6 +19,7 @@ import 'package:ytm_app/core/sidecar/sidecar_providers.dart';
 import 'package:ytm_app/data/ytm_repository.dart';
 import 'package:ytm_app/features/now_playing/artwork.dart';
 import 'package:ytm_app/routing/app_router.dart';
+import 'package:ytm_app/ui/ambient/ambient_backdrop.dart';
 
 import 'fake_engine.dart';
 import 'recorded_sidecar.dart';
@@ -209,6 +210,8 @@ Widget appScope({
 ///
 /// Uses the platform text-scale value so the app's own clamping is exercised,
 /// and settles so asynchronous palette loads finish before a golden is captured.
+/// Ambient motion is frozen for the pumped window: goldens and audit shots must
+/// not depend on where a drift animation happens to be.
 Future<void> pumpAtSize(
   WidgetTester tester,
   Widget app, {
@@ -216,6 +219,8 @@ Future<void> pumpAtSize(
   double textScale = 1,
   bool settle = true,
 }) async {
+  ambientMotionEnabled = false;
+  addTearDown(() => ambientMotionEnabled = true);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   tester.platformDispatcher.textScaleFactorTestValue = textScale;

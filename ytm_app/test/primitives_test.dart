@@ -98,7 +98,11 @@ void main() {
       );
       final AnimatedContainer container =
           tester.widget<AnimatedContainer>(find.byType(AnimatedContainer));
-      expect((container.decoration! as ShapeDecoration).color, Tokens.accent);
+      expect(
+        (container.decoration! as ShapeDecoration).color,
+        Tokens.text,
+        reason: 'the active pill is raised to a white fill with no accent',
+      );
     });
 
     testWidgets('inactive pill sits on surfaceRaised', (WidgetTester tester) async {
@@ -132,9 +136,13 @@ void main() {
           const TrackRow(title: 'Row title', subtitle: 'Subtitle', isPlaying: true),
         ),
       );
+      final TextStyle style =
+          tester.widget<Text>(find.text('Row title')).style!;
+      expect(style.color, Tokens.text);
       expect(
-        tester.widget<Text>(find.text('Row title')).style?.color,
-        Tokens.accent,
+        style.fontWeight,
+        FontWeight.w700,
+        reason: 'the playing row reads through weight and brightness, not hue',
       );
     });
 

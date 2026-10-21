@@ -13,8 +13,8 @@ import 'package:ytm_app/features/collection/collection_screen.dart';
 import 'package:ytm_app/features/settings/settings_screen.dart';
 import 'package:ytm_app/features/shell/now_playing_bar.dart';
 import 'package:ytm_app/theme/icons.dart';
-import 'package:ytm_app/theme/tokens.dart';
 import 'package:ytm_app/ui/data_states.dart';
+import 'package:ytm_app/ui/glass_surface.dart';
 import 'package:ytm_app/ui/media_rows.dart';
 import 'package:ytm_app/ui/pill_button.dart';
 import 'package:ytm_app/ui/screen_header.dart';
@@ -960,18 +960,12 @@ void main() {
         find.ancestor(of: header, matching: find.byType(Scrollable)),
         findsNothing,
       );
-      // And it paints the page background rather than leaving a hole.
-      final Iterable<DecoratedBox> ancestors = tester.widgetList<DecoratedBox>(
-        find.ancestor(of: header, matching: find.byType(DecoratedBox)),
-      );
+      // And it carries the glass spec's pinned-chrome fill: a thin GlassSurface
+      // over the ambient backdrop rather than an opaque page paint.
       expect(
-        ancestors.any(
-          (DecoratedBox box) =>
-              box.decoration is BoxDecoration &&
-              (box.decoration as BoxDecoration).color == Tokens.bg,
-        ),
-        isTrue,
-        reason: 'the header has an opaque backdrop',
+        find.ancestor(of: header, matching: find.byType(GlassSurface)),
+        findsOneWidget,
+        reason: 'the pinned header is a thin glass surface, not a hole',
       );
     });
 

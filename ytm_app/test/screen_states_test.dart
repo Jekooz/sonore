@@ -77,7 +77,11 @@ void main() {
 
       final Text message = tester.widget<Text>(find.text("You're offline."));
       expect(message.style?.color, Tokens.text);
-      expect(message.style?.color, isNot(Tokens.accent));
+      expect(
+        message.style?.color,
+        isNot(Tokens.textMuted),
+        reason: 'the primary message is full-bright, not muted',
+      );
     });
   });
 

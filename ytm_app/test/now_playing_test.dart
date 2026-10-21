@@ -28,7 +28,7 @@ double paintedFill(WidgetTester tester) {
         ),
       )
       .where((DecoratedBox box) =>
-          (box.decoration as ShapeDecoration).color == Tokens.accent)
+          (box.decoration as ShapeDecoration).color == Tokens.text)
       .map((DecoratedBox box) => tester.getRect(find.byWidget(box)))
       .single;
   return played.width / bar.width;
@@ -221,12 +221,17 @@ void main() {
 
     expect(find.text('Falling For You'), findsOneWidget);
 
-    final Finder tiles = find.byType(ArtTile);
-    expect(tiles, findsWidgets);
-    // The neighbour only hangs partly into the viewport, so the tap lands on
-    // the part of it that is actually on screen.
-    final Rect neighbour = tester.getRect(tiles.at(1));
+    // The carousel is circular, so both neighbours hang partly into the
+    // viewport. Pick the right one by geometry: the tile that runs off the
+    // right edge, and tap the part of it that is actually on screen.
     final Rect viewport = tester.getRect(find.byType(QueueCarousel));
+    final List<Rect> rects = <Rect>[
+      for (int i = 0; i < tester.widgetList(find.byType(ArtTile)).length; i++)
+        tester.getRect(find.byType(ArtTile).at(i)),
+    ];
+    final Rect neighbour = rects.singleWhere(
+      (Rect rect) => rect.left < viewport.right && rect.right > viewport.right,
+    );
     final double left = neighbour.left.clamp(viewport.left, viewport.right);
     final double right = neighbour.right.clamp(viewport.left, viewport.right);
     await tester.tapAt(Offset((left + right) / 2, neighbour.center.dy));

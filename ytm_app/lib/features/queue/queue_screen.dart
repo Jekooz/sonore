@@ -80,15 +80,25 @@ class _QueueBody extends ConsumerWidget {
       children: <Widget>[
         // §F: "Autoplay has a visible on/off state." This is the same persisted
         // mode the transport's autoplay behaviour reads.
-        SwitchListTile(
-          value: state.autoplay,
-          activeThumbColor: Tokens.text,
-          title: const Text('Autoplay', style: Tokens.rowTitle),
-          subtitle: const Text(
-            'Keeps playing real recommendations when the queue runs out.',
-            style: Tokens.caption,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: margin),
+          child: SwitchListTile(
+            value: state.autoplay,
+            activeTrackColor: Tokens.text,
+            activeThumbColor: Tokens.bg,
+            inactiveThumbColor: Tokens.textMuted,
+            inactiveTrackColor: Tokens.surfaceRaised,
+            trackOutlineColor: const WidgetStatePropertyAll<Color>(
+              Tokens.transparent,
+            ),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Autoplay', style: Tokens.rowTitle),
+            subtitle: const Text(
+              'Keeps playing real recommendations when the queue runs out.',
+              style: Tokens.caption,
+            ),
+            onChanged: controller.setAutoplay,
           ),
-          onChanged: controller.setAutoplay,
         ),
         if (state.shuffle)
           Padding(
@@ -101,7 +111,7 @@ class _QueueBody extends ConsumerWidget {
           ),
         const _SectionLabel('Now playing'),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Tokens.s8),
+          padding: EdgeInsets.symmetric(horizontal: margin),
           child: TrackRow(
             title: current.title,
             subtitle: current.subtitle,
@@ -139,17 +149,20 @@ class _QueueBody extends ConsumerWidget {
                   ),
                   itemBuilder: (BuildContext context, int index) {
                     final Track track = upNext[index];
-                    return _QueueRow(
-                      // A queue may hold the same track twice, so the id alone
-                      // is not a unique key.
+                    return Padding(
+                      // A queue may hold the same track twice, so the id
+                      // alone is not a unique key.
                       key: ValueKey<String>('${track.id}@$index'),
-                      track: track,
-                      position: index,
-                      lastPosition: upNext.length - 1,
-                      queueIndex: state.index + 1 + index,
-                      siblings: state.queue,
-                      artwork: artwork,
-                      controller: controller,
+                      padding: EdgeInsets.symmetric(horizontal: margin),
+                      child: _QueueRow(
+                        track: track,
+                        position: index,
+                        lastPosition: upNext.length - 1,
+                        queueIndex: state.index + 1 + index,
+                        siblings: state.queue,
+                        artwork: artwork,
+                        controller: controller,
+                      ),
                     );
                   },
                 ),
@@ -291,8 +304,8 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: Tokens.pageMarginPhone,
+      padding: EdgeInsets.only(
+        left: Tokens.pageMargin(MediaQuery.sizeOf(context).width),
         top: Tokens.s16,
         bottom: Tokens.s8,
       ),

@@ -44,10 +44,9 @@ class SettingsScreen extends ConsumerWidget {
     final AppSettingsNotifier controller =
         ref.read(appSettingsProvider.notifier);
 
-    final bool isDesktop =
-        MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin =
-        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+    final double margin = Tokens.pageMargin(
+      MediaQuery.sizeOf(context).width,
+    );
 
     return Scaffold(
       body: SafeArea(
@@ -221,29 +220,47 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-/// The pinned header: the page title with the save status under it.
+/// The pinned header: a floating glass pill with the page title, the save
+/// status riding under it.
 ///
 /// It sits outside the scrolling list, so it stays put while the page scrolls,
-/// and it carries a thin glass fill so the reader can see content slide
-/// beneath it without the header itself losing the backdrop.
+/// and it is the same floating chrome as every other shell surface — held
+/// clear of the page edges rather than docked edge to edge.
 class _StickyHeader extends StatelessWidget {
   const _StickyHeader();
 
   @override
   Widget build(BuildContext context) {
-    return GlassSurface(
-      tier: GlassTier.thin,
-      isFloating: false,
-      shape: Tokens.shapeAnchoredBar,
-      child: Column(
-        children: <Widget>[
-          ScreenHeader(
-            title: 'Settings',
-            onBack: () => context.go(AppDestination.home.path),
-            backLabel: 'Back to Home',
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Tokens.pageMarginPhone,
+        Tokens.s8,
+        Tokens.pageMarginPhone,
+        Tokens.s8,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: Tokens.contentMaxWidth,
           ),
-          const _SaveStatusBanner(),
-        ],
+          child: GlassSurface(
+            tier: GlassTier.thin,
+            shape: Tokens.shapePill,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Tokens.s4),
+              child: Column(
+                children: <Widget>[
+                  ScreenHeader(
+                    title: 'Settings',
+                    onBack: () => context.go(AppDestination.home.path),
+                    backLabel: 'Back to Home',
+                  ),
+                  const _SaveStatusBanner(),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -334,14 +351,26 @@ class _SwitchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Monochrome glass styling: a filled white track with the inverted dark
+    // thumb when on, and no outline — the usual system-colored default would
+    // read as a second accent the glass system does not have.
     return Semantics(
       toggled: value,
       label: title,
       child: SwitchListTile(
         value: value,
-        activeThumbColor: Tokens.text,
-        // No inset of its own: the row shares the list's content column, so the
-        // control sits on the same right edge the notes end on.
+        activeTrackColor: Tokens.text,
+        activeThumbColor: Tokens.bg,
+        inactiveThumbColor: Tokens.textMuted,
+        inactiveTrackColor: Tokens.surfaceRaised,
+        trackOutlineColor: const WidgetStatePropertyAll<Color>(
+          Tokens.transparent,
+        ),
+        tileColor: Tokens.transparent,
+        // Hover, pressed and focus states share one glass fill overlay.
+        overlayColor: const WidgetStatePropertyAll<Color>(Tokens.glassThin),
+        // No inset of its own: the row shares the list's content column, so
+        // the control sits on the same right edge the notes end on.
         contentPadding: EdgeInsets.zero,
         title: Text(title, style: Tokens.rowTitle),
         subtitle: Text(subtitle, style: Tokens.caption),
@@ -398,7 +427,7 @@ class _SliderRow extends StatelessWidget {
                 divisions: divisions,
                 label: label,
                 activeColor: Tokens.text,
-                inactiveColor: Tokens.border,
+                inactiveColor: Tokens.surfaceRaised,
                 onChanged: onChanged,
               ),
             ),

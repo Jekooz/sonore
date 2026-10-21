@@ -9,7 +9,8 @@ import '../../ui/glass_surface.dart';
 ///
 /// Spec: "Phone: glass bottom bar (pill, active icon filled and accented) with
 /// the Now Playing bar docked just above it." Touch targets stay at or above
-/// [Tokens.minTouchTarget].
+/// [Tokens.minTouchTarget]. Under the glass direction the accent is white on
+/// the pill's raised tint instead of a hue.
 ///
 /// Settings is a trailing action rather than a fifth destination: the spec
 /// keeps four destinations but lists Settings in the navigation menu, so it
@@ -117,10 +118,10 @@ class _NavAction extends StatelessWidget {
           type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(Tokens.navBarHeight / 2),
-            hoverColor: Tokens.glass,
-            focusColor: Tokens.surfaceRaised,
-            splashColor: Tokens.surfaceRaised,
+            borderRadius: Tokens.navPillRadius,
+            hoverColor: Tokens.glassThick,
+            focusColor: Tokens.glassThick,
+            splashColor: Tokens.transparent,
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 minHeight: Tokens.minTouchTarget,
@@ -130,7 +131,7 @@ class _NavAction extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: Tokens.iconSize,
-                  color: selected ? Tokens.accent : Tokens.textSecondary,
+                  color: selected ? Tokens.text : Tokens.textSecondary,
                 ),
               ),
             ),
@@ -154,7 +155,7 @@ class _NavBarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color foreground = selected ? Tokens.accent : Tokens.textSecondary;
+    final Color foreground = selected ? Tokens.text : Tokens.textSecondary;
 
     return Semantics(
       button: true,
@@ -167,10 +168,10 @@ class _NavBarItem extends StatelessWidget {
           type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(Tokens.navBarHeight / 2),
-            hoverColor: Tokens.glass,
-            focusColor: Tokens.surfaceRaised,
-            splashColor: Tokens.surfaceRaised,
+            borderRadius: Tokens.navPillRadius,
+            hoverColor: Tokens.glassThick,
+            focusColor: Tokens.glassThick,
+            splashColor: Tokens.transparent,
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 minHeight: Tokens.minTouchTarget,

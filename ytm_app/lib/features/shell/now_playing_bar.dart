@@ -50,7 +50,7 @@ class NowPlayingBar extends ConsumerWidget {
       container: true,
       label: 'Now playing',
       child: GlassSurface(
-        isStrong: true,
+        tier: GlassTier.thick,
         isFloating: false,
         shape: Tokens.shapeAnchoredBar,
         child: Column(
@@ -95,7 +95,7 @@ class NowPlayingBar extends ConsumerWidget {
   }
 }
 
-/// A 2 px accent line at the very top of the bar. It is an indicator only; the
+/// A 2 px white line at the very top of the bar. It is an indicator only; the
 /// full seek control lives on Now Playing.
 class _ProgressLine extends StatelessWidget {
   const _ProgressLine({required this.fraction});
@@ -119,7 +119,7 @@ class _ProgressLine extends StatelessWidget {
               child: FractionallySizedBox(
                 widthFactor: fraction.clamp(0.0, 1.0),
                 heightFactor: 1,
-                child: const ColoredBox(color: Tokens.accent),
+                child: const ColoredBox(color: Tokens.text),
               ),
             ),
           ],
@@ -148,10 +148,10 @@ class _TrackSummary extends StatelessWidget {
       type: MaterialType.transparency,
       child: InkWell(
         onTap: onOpen,
-        borderRadius: BorderRadius.circular(Tokens.rSmall),
-        hoverColor: Tokens.glass,
-        focusColor: Tokens.surfaceRaised,
-        splashColor: Tokens.surfaceRaised,
+        borderRadius: Tokens.rSmallBorder,
+        hoverColor: Tokens.glassThick,
+        focusColor: Tokens.glassThick,
+        splashColor: Tokens.transparent,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: Tokens.s8),
           child: Row(
@@ -309,8 +309,8 @@ class _BarButton extends StatelessWidget {
         minimumSize: const Size.square(Tokens.minTouchTarget),
         fixedSize: const Size.square(Tokens.minTouchTarget),
         padding: EdgeInsets.zero,
-        hoverColor: Tokens.glass,
-        focusColor: Tokens.surfaceRaised,
+        hoverColor: Tokens.glassThick,
+        focusColor: Tokens.glassThick,
         highlightColor: Tokens.surfaceRaised,
       ),
       icon: Icon(icon, size: Tokens.iconSize),
@@ -318,8 +318,8 @@ class _BarButton extends StatelessWidget {
   }
 }
 
-/// The white primary play/pause control from the spec: black glyph on white,
-/// with the accent reserved for state elsewhere.
+/// The white primary play/pause control: dark glyph on a white circle,
+/// monochrome like everything else in the bar.
 class _PlayPauseButton extends StatelessWidget {
   const _PlayPauseButton({required this.isPlaying, required this.onTap});
 
@@ -339,7 +339,7 @@ class _PlayPauseButton extends StatelessWidget {
         padding: EdgeInsets.zero,
         shape: const CircleBorder(),
         hoverColor: Tokens.surfaceRaised,
-        focusColor: Tokens.surfaceRaised,
+        focusColor: Tokens.glassThick,
         highlightColor: Tokens.surfaceRaised,
       ),
       icon: Icon(

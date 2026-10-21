@@ -13,6 +13,7 @@ import '../features/queue/queue_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/app_shell.dart';
 import '../theme/tokens.dart';
+import '../ui/ambient/ambient_backdrop.dart';
 import '../ui/screen_states.dart';
 import '../ui/specimen.dart';
 import 'destinations.dart';
@@ -51,8 +52,13 @@ GoRouter createAppRouter({
       GoRoute(
         path: devCataloguePath,
         builder: (_, _) => const Scaffold(
-          backgroundColor: Tokens.bg,
-          body: SafeArea(child: SpecimenBoard()),
+          backgroundColor: Tokens.transparent,
+          body: Stack(
+            children: <Widget>[
+              Positioned.fill(child: AmbientBackdrop()),
+              SafeArea(child: SpecimenBoard()),
+            ],
+          ),
         ),
       ),
     ],
@@ -163,7 +169,7 @@ class _UnknownCollection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Tokens.bg,
+      backgroundColor: Tokens.transparent,
       body: SafeArea(
         child: StateMessage(
           message: 'That page does not exist.',

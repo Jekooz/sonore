@@ -9,7 +9,7 @@ import '../../ui/glass_surface.dart';
 ///
 /// Approved layout ("Navigation"): the left sidebar is gone. The four
 /// destinations are tabs in one floating glass capsule and Settings is an icon
-/// button at its right end. Active state is carried by [Tokens.accent] alone —
+/// button at its right end. Active state is white on a raised pill —
 /// the tab the reader is on, or the Settings action when its own page (Settings
 /// or the Equalizer) is the one on screen.
 ///
@@ -102,8 +102,8 @@ class NavTabBar extends StatelessWidget {
   }
 }
 
-/// One destination tab: glyph (filled while active), label, and the accent on
-/// the active state only.
+/// One destination tab: glyph (filled while active), label, and white foreground
+/// on the raised pill when active.
 class _Tab extends StatelessWidget {
   const _Tab({
     required this.destination,
@@ -119,7 +119,7 @@ class _Tab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color foreground = selected ? Tokens.accent : Tokens.textSecondary;
+    final Color foreground = selected ? Tokens.text : Tokens.textSecondary;
 
     return Semantics(
       button: true,
@@ -132,10 +132,10 @@ class _Tab extends StatelessWidget {
           type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(Tokens.tabBarHeight / 2),
-            hoverColor: Tokens.glass,
-            focusColor: Tokens.surfaceRaised,
-            splashColor: Tokens.surfaceRaised,
+            borderRadius: Tokens.tabBarPillRadius,
+            hoverColor: Tokens.glassThick,
+            focusColor: Tokens.glassThick,
+            splashColor: Tokens.transparent,
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: Tokens.s4,
@@ -193,7 +193,7 @@ class _SettingsAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color foreground = selected ? Tokens.accent : Tokens.textSecondary;
+    final Color foreground = selected ? Tokens.text : Tokens.textSecondary;
 
     return Semantics(
       button: true,
@@ -206,10 +206,10 @@ class _SettingsAction extends StatelessWidget {
           type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(Tokens.tabBarHeight / 2),
-            hoverColor: Tokens.glass,
-            focusColor: Tokens.surfaceRaised,
-            splashColor: Tokens.surfaceRaised,
+            borderRadius: Tokens.tabBarPillRadius,
+            hoverColor: Tokens.glassThick,
+            focusColor: Tokens.glassThick,
+            splashColor: Tokens.transparent,
             child: SizedBox(
               width: Tokens.minTouchTarget,
               height: Tokens.tabBarHeight,

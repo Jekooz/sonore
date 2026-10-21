@@ -9,6 +9,7 @@ import '../../audio/playback_state.dart';
 import '../../routing/app_router.dart';
 import '../../routing/destinations.dart';
 import '../../theme/tokens.dart';
+import '../../ui/ambient/ambient_backdrop.dart';
 import '../search/search_controller.dart';
 import 'nav_bottom_bar.dart';
 import 'nav_tab_bar.dart';
@@ -136,11 +137,19 @@ class AppShell extends ConsumerWidget {
           );
 
     return Scaffold(
-      backgroundColor: Tokens.bg,
-      body: Column(
+      backgroundColor: Tokens.transparent,
+      // The ambient layer sits behind everything the shell draws: the app's
+      // single artwork-derived surface. The veil on top of it is what keeps
+      // the chrome readable, so no page paints a background of its own.
+      body: Stack(
         children: <Widget>[
-          ?titleBar,
-          Expanded(child: _GlobalShortcuts(child: body)),
+          const Positioned.fill(child: AmbientBackdrop()),
+          Column(
+            children: <Widget>[
+              ?titleBar,
+              Expanded(child: _GlobalShortcuts(child: body)),
+            ],
+          ),
         ],
       ),
     );

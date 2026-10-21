@@ -118,6 +118,15 @@ INSTALL_TOKEN_FILE = os.path.join(_SONORE_DIR, "install_token.dat")
 UPDATE_STATE_FILE = os.path.join(_SONORE_DIR, "update_state.json")
 
 
+def app_data_dir() -> str:
+    """
+    The app's own data directory.
+
+    Everything the app stores that outlives it lives here and nowhere else.
+    """
+    return _SONORE_DIR
+
+
 class _DATA_BLOB(ctypes.Structure):
     _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(wintypes.BYTE))]
 
@@ -534,18 +543,25 @@ class YtmusicService:
 ytmusic_service = YtmusicService()
 
 
-# ---------- per-install API token (encrypted at rest) ----------
+# ---------- encrypted files in the app's own data directory ----------
 
 
-def _install_token_path() -> str:
-    return os.path.join(_SONORE_DIR, "install_token.dat")
+def secret_path(name: str) -> str:
+    """Where a named encrypted secret lives, inside the app's data dir."""
+    return os.path.join(_SONORE_DIR, name)
 
 
-def install_token_get() -> str | None:
-    """The per-install token, decrypted, or None when none exists yet."""
+def secret_get(name: str) -> str | None:
+    """
+    Read a named secret, decrypted, or None when there is none.
+
+    A file that cannot be decrypted (another machine, a changed key) is
+    removed once and treated as absent: a secret that cannot be read is not
+    an error the app has to survive loudly.
+    """
     if not _DPAPI_AVAILABLE:
         return None
-    path = _install_token_path()
+    path = secret_path(name)
     if not os.path.exists(path):
         return None
     try:
@@ -553,32 +569,54 @@ def install_token_get() -> str | None:
             encrypted = f.read()
         return _dpapi_decrypt(encrypted).decode("utf-8")
     except StorageError as e:
-        logger.warning("Install token decryption failed: %s — removing stale file.", e)
+        logger.warning("Secret decryption failed: %s — removing stale file.", e)
         try:
             os.remove(path)
         except OSError:
             pass
         return None
     except OSError as e:
-        logger.warning("Could not read install token: %s.", e)
+        logger.warning("Could not read secret %s: %s.", name, e)
         return None
 
 
-def install_token_set(value: str) -> None:
+def secret_set(name: str, value: str) -> None:
     """Encrypt *value* with DPAPI and write it atomically."""
     if not _DPAPI_AVAILABLE:
         raise StorageError("DPAPI not available on this platform")
     os.makedirs(_SONORE_DIR, exist_ok=True)
     encrypted = _dpapi_encrypt(value.encode("utf-8"))
-    tmp_path = _install_token_path() + ".tmp"
+    tmp_path = secret_path(name) + ".tmp"
     with open(tmp_path, "wb") as f:
         f.write(encrypted)
-    os.replace(tmp_path, _install_token_path())
+    os.replace(tmp_path, secret_path(name))
+
+
+def secret_delete(name: str) -> None:
+    """Remove a named secret, if it is there."""
+    try:
+        if os.path.exists(secret_path(name)):
+            os.remove(secret_path(name))
+    except OSError as e:
+        logger.warning("Could not remove secret %s: %s.", name, e)
+
+
+# ---------- per-install API token (encrypted at rest) ----------
+
+
+def _install_token_path() -> str:
+    return secret_path("install_token.dat")
+
+
+def install_token_get() -> str | None:
+    """The per-install token, decrypted, or None when none exists yet."""
+    return secret_get("install_token.dat")
+
+
+def install_token_set(value: str) -> None:
+    """Encrypt *value* with DPAPI and write it atomically."""
+    secret_set("install_token.dat", value)
 
 
 def install_token_delete() -> None:
-    try:
-        if os.path.exists(_install_token_path()):
-            os.remove(_install_token_path())
-    except OSError as e:
-        logger.warning("Could not remove install token: %s.", e)
+    secret_delete("install_token.dat")

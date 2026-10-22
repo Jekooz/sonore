@@ -1113,6 +1113,12 @@ void main() {
         expect(activeChips(), 0);
         expect(chipIsSelected('Flat'), isFalse);
 
+        // With the EQ off the preset row is dimmed and inert by design — the
+        // shape cannot be edited while nothing is being shaped. Turn it on
+        // before the chips respond.
+        await tester.tap(find.byType(Switch).first);
+        await tester.pumpAndSettle();
+
         await tester.tap(find.text('Bass boost'));
         await tester.pumpAndSettle();
 
@@ -1162,6 +1168,11 @@ void main() {
           for (final double gain in bass.gains)
             '${gain.round() > 0 ? '+' : ''}${gain.round()} dB',
         ];
+
+        // Same as the preset test: the shape is editable only while the EQ
+        // is on, so turn it on before moving the bands.
+        await tester.tap(find.byType(Switch).first);
+        await tester.pumpAndSettle();
 
         await tester.tap(find.text('Bass boost'));
         await tester.pumpAndSettle();

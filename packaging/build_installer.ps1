@@ -108,10 +108,13 @@ function Find-Iscc {
 
 Write-Step 'Checking the installer version matches the app'
 $pubspec = Get-Content -LiteralPath (Join-Path $AppProject 'pubspec.yaml') -Raw
-if ($pubspec -notmatch '(?m)^version:\s*([0-9][0-9.]*)') {
+if ($pubspec -notmatch '(?m)^version:\s*(\S+)') {
     throw 'ytm_app\pubspec.yaml has no version line to read.'
 }
-$appVersion = $Matches[1]
+# The build number (+7) is the Android/Windows build's own counter and is not
+# part of the product version the installer advertises, so the comparison and
+# the setup filename both stop before the plus.
+$appVersion = ($Matches[1] -split '\+')[0]
 $issText = Get-Content -LiteralPath $IssFile -Raw
 if ($issText -notmatch '(?m)^#define AppVersion "([^"]+)"') {
     throw "packaging\sonore.iss has no AppVersion define to read."

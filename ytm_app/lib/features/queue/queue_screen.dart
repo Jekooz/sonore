@@ -198,7 +198,6 @@ class _QueueBody extends ConsumerWidget {
 
 class _QueueRow extends ConsumerWidget {
   const _QueueRow({
-    super.key,
     required this.track,
     required this.position,
     required this.lastPosition,

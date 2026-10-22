@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 // Riverpod 3 exposes `Override` only through `misc.dart`.
 import 'package:riverpod/misc.dart' show Override;

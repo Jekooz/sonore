@@ -402,7 +402,7 @@ class _SeekRow extends StatelessWidget {
               width: Tokens.s48,
               child: Text(
                 formatDuration(canSeek ? state.position : null),
-                style: Tokens.caption,
+                style: Tokens.subtitle,
                 textAlign: TextAlign.right,
               ),
             ),
@@ -422,7 +422,7 @@ class _SeekRow extends StatelessWidget {
               width: Tokens.s48,
               child: Text(
                 formatDuration(canSeek ? state.duration : null),
-                style: Tokens.caption,
+                style: Tokens.subtitle,
               ),
             ),
           ],

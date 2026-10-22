@@ -58,9 +58,9 @@ class NowPlayingBar extends ConsumerWidget {
                   // bottom edge below this row.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
-                      Tokens.s16,
+                      Tokens.s24,
                       Tokens.s4,
-                      Tokens.s16,
+                      Tokens.s24,
                       Tokens.s12,
                     ),
                     child: wide
@@ -80,11 +80,12 @@ class NowPlayingBar extends ConsumerWidget {
                           ),
                   ),
                   // A thin, fully interactive scrubber along the bottom edge,
-                  // inset so it never climbs into the pill's rounded corners.
+                  // inset past the pill's rounded corners so its ends never
+                  // get clipped by the radius.
                   Positioned(
-                    left: Tokens.s16,
-                    right: Tokens.s16,
-                    bottom: Tokens.s4,
+                    left: Tokens.s24,
+                    right: Tokens.s24,
+                    bottom: Tokens.s8,
                     child: SeekBar(
                       compact: true,
                       position: state.position,
@@ -334,7 +335,9 @@ class _TimeReadout extends StatelessWidget {
 
     return Text(
       '$position / $duration',
-      style: Tokens.caption,
+      // textSecondary, not the muted caption: the elapsed/total readout is
+      // information the reader actually uses while scrubbing.
+      style: Tokens.subtitle,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );

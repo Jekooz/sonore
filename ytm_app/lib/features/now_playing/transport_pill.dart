@@ -16,6 +16,11 @@ import '../../ui/pressable.dart';
 class TransportPill extends ConsumerWidget {
   const TransportPill({super.key});
 
+  /// What the pill needs at minimum: five 48px controls plus its own
+  /// horizontal padding. Parents shrinking around it — like the player
+  /// column that follows the artwork's width — must not go below this.
+  static const double minWidth = Tokens.minTouchTarget * 5 + Tokens.s16 * 2;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final PlaybackState state = ref.watch(playbackProvider);
@@ -84,7 +89,9 @@ class TransportPill extends ConsumerWidget {
               child: Icon(
                 AppIcons.repeat,
                 size: Tokens.iconSize,
-                color: state.repeat.isActive ? Tokens.text : Tokens.textSecondary,
+                color: state.repeat.isActive
+                    ? Tokens.text
+                    : Tokens.textSecondary,
               ),
             ),
           ],

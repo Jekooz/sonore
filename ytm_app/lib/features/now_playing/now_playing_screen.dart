@@ -291,9 +291,20 @@ class _PlayerColumnState extends ConsumerState<_PlayerColumn> {
                 valueListenable: _artSide,
                 builder:
                     (BuildContext context, double side, Widget? controls) =>
+                        // The art is the cap on wide windows, but never below
+                        // the transport pill's own width — on the narrowest
+                        // phones the art can render smaller than the pill can
+                        // compress to.
                         ConstrainedBox(
                           constraints: BoxConstraints(
-                            maxWidth: math.min(Tokens.transportMaxWidth, side),
+                            maxWidth: math.max(
+                              math.min(Tokens.transportMaxWidth, side),
+                              // The player column's own padding rides on
+                              // top of the pill's, so the floor has to
+                              // cover both before the Row can hold its
+                              // five 48px controls.
+                              TransportPill.minWidth + Tokens.s16 * 2,
+                            ),
                           ),
                           child: controls,
                         ),

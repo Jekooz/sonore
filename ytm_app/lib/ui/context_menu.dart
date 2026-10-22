@@ -47,9 +47,10 @@ Future<void> showContextMenu(
   required List<ContextMenuEntry> entries,
 }) async {
   if (entries.isEmpty) return;
-  await Navigator.of(context, rootNavigator: true).push<void>(
-    _ContextMenuRoute(position: position, entries: entries),
-  );
+  await Navigator.of(
+    context,
+    rootNavigator: true,
+  ).push<void>(_ContextMenuRoute(position: position, entries: entries));
 }
 
 class _ContextMenuRoute extends PopupRoute<void> {
@@ -82,12 +83,14 @@ class _ContextMenuRoute extends PopupRoute<void> {
       Tokens.s8,
       (screen.width - _menuWidth - Tokens.s8).clamp(Tokens.s8, screen.width),
     );
-    final double estimatedHeight = entries.length * Tokens.menuRowHeight +
-        Tokens.s16;
+    final double estimatedHeight =
+        entries.length * Tokens.menuRowHeight + Tokens.s16;
     final double top = position.dy.clamp(
       Tokens.s8,
-      (screen.height - estimatedHeight - Tokens.s8)
-          .clamp(Tokens.s8, screen.height),
+      (screen.height - estimatedHeight - Tokens.s8).clamp(
+        Tokens.s8,
+        screen.height,
+      ),
     );
 
     return Stack(
@@ -128,13 +131,14 @@ class _ContextMenuState extends State<_ContextMenu> {
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      setState(() =>
-          _highlighted = (_highlighted + 1) % widget.entries.length);
+      setState(() => _highlighted = (_highlighted + 1) % widget.entries.length);
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      setState(() => _highlighted =
-          (_highlighted - 1 + widget.entries.length) % widget.entries.length);
+      setState(
+        () => _highlighted =
+            (_highlighted - 1 + widget.entries.length) % widget.entries.length,
+      );
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -204,7 +208,9 @@ class _ContextMenuRow extends StatelessWidget {
     final Color foreground = Tokens.text;
     final TextStyle labelStyle = Tokens.rowTitle.copyWith(
       color: foreground,
-      fontWeight: entry.isDestructive ? FontWeight.w700 : Tokens.rowTitle.fontWeight,
+      fontWeight: entry.isDestructive
+          ? FontWeight.w700
+          : Tokens.rowTitle.fontWeight,
     );
 
     return Semantics(
@@ -244,8 +250,10 @@ class _ContextMenuRow extends StatelessWidget {
 /// An overflow button that opens [entries] at its own position.
 ///
 /// Used as a row's trailing affordance; the same menu opens on right-click or
-/// long-press through [openMenuAt].
-class ContextMenuButton extends StatelessWidget {
+/// long-press through [openMenuAt]. The glyph is full-strength text and the
+/// button carries a tooltip, a hover fill and a hairline rim — three dots at
+/// secondary contrast were too easy to lose on the page.
+class ContextMenuButton extends StatefulWidget {
   const ContextMenuButton({
     super.key,
     required this.entries,
@@ -256,14 +264,43 @@ class ContextMenuButton extends StatelessWidget {
   final String semanticLabel;
 
   @override
+  State<ContextMenuButton> createState() => _ContextMenuButtonState();
+}
+
+class _ContextMenuButtonState extends State<ContextMenuButton> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Pressable(
-      semanticLabel: semanticLabel,
-      onTap: () => showContextMenuAt(context, entries),
-      child: const Icon(
-        AppIcons.dotsThree,
-        size: Tokens.iconSize,
-        color: Tokens.textSecondary,
+    return Tooltip(
+      message: widget.semanticLabel,
+      excludeFromSemantics: true,
+      child: Pressable(
+        semanticLabel: widget.semanticLabel,
+        onTap: () => showContextMenuAt(context, widget.entries),
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: AnimatedContainer(
+            duration: Tokens.dPress,
+            curve: Tokens.curvePress,
+            padding: const EdgeInsets.all(Tokens.s4),
+            decoration: ShapeDecoration(
+              color: _hovered ? Tokens.glassThick : Tokens.transparent,
+              shape: Tokens.shapePill.copyWith(
+                side: BorderSide(
+                  color: _hovered ? Tokens.border : Tokens.transparent,
+                  width: Tokens.borderWidth,
+                ),
+              ),
+            ),
+            child: const Icon(
+              AppIcons.dotsThree,
+              size: Tokens.iconSize,
+              color: Tokens.text,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -287,5 +324,8 @@ Future<void> showContextMenuFromTap(
   BuildContext context,
   TapDownDetails details,
   List<ContextMenuEntry> entries,
-) =>
-    showContextMenu(context, position: details.globalPosition, entries: entries);
+) => showContextMenu(
+  context,
+  position: details.globalPosition,
+  entries: entries,
+);

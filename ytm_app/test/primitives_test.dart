@@ -106,7 +106,8 @@ void main() {
       );
     });
 
-    testWidgets('inactive pill sits on surfaceRaised', (WidgetTester tester) async {
+    testWidgets('inactive pill sits on the thick glass tier with a rim',
+        (WidgetTester tester) async {
       await tester.pumpWidget(
         _host(
           PillButton(icon: AppIcons.heart, onPressed: () {}),
@@ -114,9 +115,19 @@ void main() {
       );
       final AnimatedContainer container =
           tester.widget<AnimatedContainer>(find.byType(AnimatedContainer));
+      final ShapeDecoration decoration =
+          container.decoration! as ShapeDecoration;
       expect(
-        (container.decoration! as ShapeDecoration).color,
-        Tokens.surfaceRaised,
+        decoration.color,
+        Tokens.glassThick,
+        reason: 'the inactive pill stays glass, not an opaque slab',
+      );
+      expect(
+        decoration.shape,
+        Tokens.shapePill.copyWith(
+          side: BorderSide(color: Tokens.border, width: Tokens.borderWidth),
+        ),
+        reason: 'the hairline rim keeps the pill visible on glass panels',
       );
     });
   });

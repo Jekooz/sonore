@@ -358,7 +358,7 @@ class _IconAction extends StatelessWidget {
         onPressed: onPressed,
         style: IconButton.styleFrom(
           foregroundColor: active ? Tokens.text : Tokens.textSecondary,
-          backgroundColor: active ? Tokens.surfaceRaised : null,
+          backgroundColor: active ? Tokens.glassThick : null,
           minimumSize: const Size.square(Tokens.minTouchTarget),
           fixedSize: const Size.square(Tokens.minTouchTarget),
           padding: EdgeInsets.zero,

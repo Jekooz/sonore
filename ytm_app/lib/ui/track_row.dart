@@ -7,7 +7,7 @@ import 'live_badge.dart';
 /// One track row: 48px artwork (rSmall), title and subtitle, optional trailing.
 ///
 /// Rows are real controls with spoken states: hover and pressed fill
-/// ([Tokens.glassThin] and [Tokens.surfaceRaised]), keyboard focus rings via
+/// ([Tokens.glassThin] and [Tokens.glassThick]), keyboard focus rings via
 /// [FocusableActionDetector], and a [LiveBadge] beside the title of the playing
 /// track (no accent color — the mark plus weight carry it).
 class TrackRow extends StatefulWidget {
@@ -52,7 +52,7 @@ class _TrackRowState extends State<TrackRow> {
         widget.isPlaying ? Tokens.rowTitleActive : Tokens.rowTitle;
 
     final Color fill = _pressed
-        ? Tokens.surfaceRaised
+        ? Tokens.glassThick
         : _hovered || _focused
             ? Tokens.glassThin
             : Tokens.transparent;

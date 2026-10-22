@@ -219,7 +219,7 @@ class _ContextMenuRow extends StatelessWidget {
           child: Container(
             height: Tokens.menuRowHeight,
             padding: const EdgeInsets.symmetric(horizontal: Tokens.s16),
-            color: highlighted ? Tokens.surfaceRaised : Tokens.transparent,
+            color: highlighted ? Tokens.glassThick : Tokens.transparent,
             child: Row(
               children: <Widget>[
                 Icon(entry.icon, size: Tokens.iconSize, color: foreground),

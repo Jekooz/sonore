@@ -107,10 +107,11 @@ class _SeekBarState extends State<SeekBar> {
     final double buffered =
         _totalMs == 0 ? 0 : (widget.buffered.inMilliseconds / _totalMs).clamp(0.0, 1.0);
 
-    final Color remainingColor =
-        _interactive ? Tokens.surfaceRaised : Tokens.surface;
+    // The unplayed remainder stays translucent over glass; the old opaque
+    // grey filled a solid slab onto whatever it sat on.
+    final Color remainingColor = Tokens.border;
     final Color bufferedColor =
-        _interactive ? Tokens.textMuted : Tokens.surfaceRaised;
+        _interactive ? Tokens.textMuted : Tokens.border;
     final Color playedColor = _interactive ? Tokens.text : Tokens.border;
 
     return MouseRegion(

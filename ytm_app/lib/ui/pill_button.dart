@@ -7,8 +7,10 @@ import 'pressable.dart';
 ///
 /// Monochrome take: the primary action (active) is a solid white pill with a
 /// dark glyph — the app's strongest control — while an inactive pill sits on
-/// surfaceRaised with muted text. The glyph is a single Phosphor icon at 24px
-/// and the hit area is never smaller than 48x48.
+/// the thick glass tier with a hairline rim and muted text, so it stays a
+/// readable control even when it is placed on a panel that is glass itself.
+/// The glyph is a single Phosphor icon at 24px and the hit area is never
+/// smaller than 48x48.
 class PillButton extends StatelessWidget {
   const PillButton({
     super.key,
@@ -28,11 +30,14 @@ class PillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color fill = isActive ? Tokens.text : Tokens.surfaceRaised;
+    final Color fill = isActive ? Tokens.text : Tokens.glassThick;
     final TextStyle labelStyle = isActive
         ? Tokens.subtitle.copyWith(color: Tokens.bg)
         : Tokens.subtitle;
 
+    // Active: solid white, the app's strongest control. Inactive: glass tier
+    // thick with a hairline rim, so it stays visible when it sits on a panel
+    // that is itself glass.
     return Pressable(
       onTap: onPressed,
       enabled: onPressed != null,
@@ -44,7 +49,17 @@ class PillButton extends StatelessWidget {
           horizontal: Tokens.s16,
           vertical: Tokens.s8,
         ),
-        decoration: ShapeDecoration(color: fill, shape: Tokens.shapePill),
+        decoration: ShapeDecoration(
+          color: fill,
+          shape: isActive
+              ? Tokens.shapePill
+              : Tokens.shapePill.copyWith(
+                  side: BorderSide(
+                    color: Tokens.border,
+                    width: Tokens.borderWidth,
+                  ),
+                ),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[

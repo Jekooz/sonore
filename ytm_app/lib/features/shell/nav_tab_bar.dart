@@ -219,10 +219,9 @@ class _SettingsAction extends StatelessWidget {
                   width: Tokens.s32 + Tokens.s4,
                   height: Tokens.s32 + Tokens.s4,
                   alignment: Alignment.center,
-                  decoration: ShapeDecoration(
-                    color: selected ? Tokens.surfaceRaised : Tokens.transparent,
-                    shape: Tokens.shapePill,
-                  ),
+                  decoration: selected
+                      ? navSelectionDecoration(Tokens.shapePill)
+                      : null,
                   child: Icon(
                     AppIcons.dotsThree,
                     size: Tokens.iconSize,

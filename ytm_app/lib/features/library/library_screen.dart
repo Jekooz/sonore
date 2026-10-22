@@ -11,6 +11,7 @@ import '../../ui/context_menu.dart';
 import '../../ui/data_states.dart';
 import '../../ui/media_rows.dart';
 import '../../ui/pressable.dart';
+import '../shell/app_shell.dart';
 
 /// How the current segment is ordered.
 ///
@@ -154,7 +155,7 @@ class _LibraryList extends ConsumerWidget {
         margin,
         0,
         margin,
-        Tokens.s24,
+        Tokens.s24 + ShellClearance.of(context),
       ),
       itemCount: items.length,
       itemBuilder: (BuildContext context, int index) {

@@ -18,6 +18,7 @@ import '../../ui/media_rows.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/pressable.dart';
 import '../../ui/screen_states.dart';
+import '../shell/app_shell.dart';
 
 /// One album, playlist or artist page.
 ///
@@ -106,7 +107,7 @@ class _CollectionView extends ConsumerWidget {
         margin,
         Tokens.s16,
         margin,
-        Tokens.s24,
+        Tokens.s24 + ShellClearance.of(context),
       ),
       itemCount: rows.length + 1,
       itemBuilder: (BuildContext context, int index) {

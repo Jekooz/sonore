@@ -155,6 +155,17 @@ bool onSettingsRoute(BuildContext context) {
   return location.endsWith('/settings') || location.endsWith('/equalizer');
 }
 
+/// Whether the page on screen is the Now Playing page itself — the only page
+/// the Now Playing bar steps aside for.
+///
+/// It checks the route, not the shell branch: the Queue and Equalizer live on
+/// the Now Playing branch but are not the player, and the mini player must
+/// persist there like it does on every other page.
+bool onNowPlayingPageRoute(BuildContext context) {
+  final String location = GoRouterState.of(context).matchedLocation;
+  return location == AppDestination.nowPlaying.path;
+}
+
 /// A collection path whose kind or id is not recognised.
 ///
 /// Reachable only by following a malformed link; it says so plainly instead of

@@ -67,7 +67,15 @@ void main() {
     await pumpQueue(tester);
 
     expect(find.byType(QueueScreen), findsOneWidget);
-    expect(find.text('Falling For You'), findsOneWidget);
+    // The mini player persists on the queue screen now, so the playing title
+    // also appears in the bar; scope this expectation to the screen itself.
+    expect(
+      find.descendant(
+        of: find.byType(QueueScreen),
+        matching: find.text('Falling For You'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Now playing'), findsOneWidget);
     expect(find.text('Next up · 2'), findsOneWidget);
     expect(find.text('Midnight Drive'), findsOneWidget);

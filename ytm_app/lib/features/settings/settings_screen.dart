@@ -21,6 +21,7 @@ import '../../ui/media_actions.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/screen_header.dart';
 import '../../ui/screen_states.dart';
+import '../shell/app_shell.dart';
 
 /// Keeps this in step with `pubspec.yaml`'s `version:`; the build does not
 /// embed the package metadata, so the About row states it directly.
@@ -41,12 +42,11 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppSettings settings = ref.watch(appSettingsProvider);
-    final AppSettingsNotifier controller =
-        ref.read(appSettingsProvider.notifier);
-
-    final double margin = Tokens.pageMargin(
-      MediaQuery.sizeOf(context).width,
+    final AppSettingsNotifier controller = ref.read(
+      appSettingsProvider.notifier,
     );
+
+    final double margin = Tokens.pageMargin(MediaQuery.sizeOf(context).width);
 
     return Scaffold(
       body: SafeArea(
@@ -60,140 +60,143 @@ class SettingsScreen extends ConsumerWidget {
                     maxWidth: Tokens.contentMaxWidth,
                   ),
                   child: ListView(
-                // One content column: the same margin on both sides, and the
-                // rows below give up ListTile's own inset, so section titles,
-                // notes and buttons all start and end on the same edges.
-                padding: EdgeInsets.symmetric(
-                  horizontal: margin,
-                  vertical: Tokens.s8,
-                ),
-                children: <Widget>[
-                  const _Section(title: 'Appearance'),
-                  _SwitchRow(
-                    title: 'Reduce transparency',
-                    subtitle: 'Uses solid tinted surfaces instead of glass. '
-                        'Also engages automatically when the system reduces '
-                        'transparency or uses high contrast.',
-                    value: settings.reduceTransparency,
-                    onChanged: controller.setReduceTransparency,
+                    // One content column: the same margin on both sides, and the
+                    // rows below give up ListTile's own inset, so section titles,
+                    // notes and buttons all start and end on the same edges.
+                    padding: EdgeInsets.symmetric(
+                      horizontal: margin,
+                      vertical: Tokens.s8,
+                    ).copyWith(bottom: Tokens.s8 + ShellClearance.of(context)),
+                    children: <Widget>[
+                      const _Section(title: 'Appearance'),
+                      _SwitchRow(
+                        title: 'Reduce transparency',
+                        subtitle:
+                            'Uses solid tinted surfaces instead of glass. '
+                            'Also engages automatically when the system reduces '
+                            'transparency or uses high contrast.',
+                        value: settings.reduceTransparency,
+                        onChanged: controller.setReduceTransparency,
+                      ),
+                      _SwitchRow(
+                        title: 'Reduce motion',
+                        subtitle: 'Stops shimmer and cross-fades.',
+                        value: settings.reduceMotion,
+                        onChanged: controller.setReduceMotion,
+                      ),
+                      _SliderRow(
+                        title: 'Text size',
+                        subtitle: 'Scales text up to the largest the layout supports.',
+                        value: settings.textScale,
+                        min: Tokens.textScaleMin,
+                        max: Tokens.textScaleCap,
+                        divisions: 6,
+                        label: '${(settings.textScale * 100).round()}%',
+                        onChanged: controller.setTextScale,
+                      ),
+                      const _Note(
+                        'Theme: dark. This version ships one theme, so there is '
+                        'nothing to switch.',
+                      ),
+                      const _Section(title: 'Playback'),
+                      Consumer(
+                        builder: (BuildContext context, WidgetRef inner, _) {
+                          final PlaybackState playback = inner.watch(
+                            playbackProvider,
+                          );
+                          final PlaybackController player = inner.read(
+                            playbackProvider.notifier,
+                          );
+                          return Column(
+                            children: <Widget>[
+                              _SwitchRow(
+                                title: 'Autoplay',
+                                subtitle:
+                                    'Adds recommendations when the queue '
+                                    'runs out instead of stopping.',
+                                value: playback.autoplay,
+                                onChanged: player.setAutoplay,
+                              ),
+                              _SwitchRow(
+                                title: 'Shuffle',
+                                subtitle:
+                                    'Shuffles the tracks that have not played '
+                                    'yet. Turning it off restores the original order.',
+                                value: playback.shuffle,
+                                onChanged: player.setShuffle,
+                              ),
+                              _Note(
+                                'Repeat (Off, All, One) cycles from the transport '
+                                'controls and persists with these.',
+                              ),
+                              const SizedBox(height: Tokens.s8),
+                              const _PlaybackEngineRow(),
+                            ],
+                          );
+                        },
+                      ),
+                      const _Section(title: 'Lyrics'),
+                      _SwitchRow(
+                        title: 'Follow playback',
+                        subtitle: 'Scrolls to the current line when lyrics have timings.',
+                        value: settings.lyricsAutoFollow,
+                        onChanged: controller.setLyricsAutoFollow,
+                      ),
+                      const _Section(title: 'Audio'),
+                      Consumer(
+                        builder: (BuildContext context, WidgetRef inner, _) {
+                          final EqualizerState eq = inner.watch(
+                            equalizerControllerProvider,
+                          );
+                          final String summary = !eq.config.enabled
+                              ? 'Off'
+                              : (eq.config.presetName ?? 'Custom');
+                          return _LinkRow(
+                            title: 'Equalizer',
+                            subtitle: summary,
+                            icon: AppIcons.faders,
+                            onTap: () => context.go('/now-playing/equalizer'),
+                          );
+                        },
+                      ),
+                      const _Section(title: 'Recommendations'),
+                      const _Recommendations(),
+                      const _Section(title: 'Diagnostics'),
+                      const _Diagnostics(),
+                      const _Section(title: 'Account'),
+                      const _Account(),
+                      const _Section(title: 'Privacy'),
+                      const _Note(
+                        'Your YouTube Music session is kept by the local service '
+                        'and stored encrypted on this device. The app never holds '
+                        'it, and no cookie, token or signed link is shown on this '
+                        'page or written to the logs.',
+                      ),
+                      const _Section(title: 'About'),
+                      _LinkRow(
+                        title: 'Version',
+                        subtitle: appVersion,
+                        icon: AppIcons.disc,
+                        onTap: () {},
+                      ),
+                      const _Note(appDisclaimer),
+                      const _Note(
+                        'Type is Inter. Icons are Phosphor. Both are MIT '
+                        'licensed; their licence files ship with the app in '
+                        'assets/fonts.',
+                      ),
+                      const SizedBox(height: Tokens.s24),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: PillButton(
+                          icon: AppIcons.arrowClockwise,
+                          label: 'Reset preferences',
+                          onPressed: () => _confirmReset(context, controller),
+                        ),
+                      ),
+                      const SizedBox(height: Tokens.s32),
+                    ],
                   ),
-                  _SwitchRow(
-                    title: 'Reduce motion',
-                    subtitle: 'Stops shimmer and cross-fades.',
-                    value: settings.reduceMotion,
-                    onChanged: controller.setReduceMotion,
-                  ),
-                  _SliderRow(
-                    title: 'Text size',
-                    subtitle:
-                        'Scales text up to the largest the layout supports.',
-                    value: settings.textScale,
-                    min: Tokens.textScaleMin,
-                    max: Tokens.textScaleCap,
-                    divisions: 6,
-                    label: '${(settings.textScale * 100).round()}%',
-                    onChanged: controller.setTextScale,
-                  ),
-                  const _Note(
-                    'Theme: dark. This version ships one theme, so there is '
-                    'nothing to switch.',
-                  ),
-                  const _Section(title: 'Playback'),
-                  Consumer(
-                    builder: (BuildContext context, WidgetRef inner, _) {
-                      final PlaybackState playback =
-                          inner.watch(playbackProvider);
-                      final PlaybackController player =
-                          inner.read(playbackProvider.notifier);
-                      return Column(
-                        children: <Widget>[
-                          _SwitchRow(
-                            title: 'Autoplay',
-                            subtitle: 'Adds recommendations when the queue '
-                                'runs out instead of stopping.',
-                            value: playback.autoplay,
-                            onChanged: player.setAutoplay,
-                          ),
-                          _SwitchRow(
-                            title: 'Shuffle',
-                            subtitle: 'Shuffles the tracks that have not played '
-                                'yet. Turning it off restores the original order.',
-                            value: playback.shuffle,
-                            onChanged: player.setShuffle,
-                          ),
-                          _Note(
-                            'Repeat (Off, All, One) cycles from the transport '
-                            'controls and persists with these.',
-                          ),
-                          const SizedBox(height: Tokens.s8),
-                          const _PlaybackEngineRow(),
-                        ],
-                      );
-                    },
-                  ),
-                  const _Section(title: 'Lyrics'),
-                  _SwitchRow(
-                    title: 'Follow playback',
-                    subtitle:
-                        'Scrolls to the current line when lyrics have timings.',
-                    value: settings.lyricsAutoFollow,
-                    onChanged: controller.setLyricsAutoFollow,
-                  ),
-                  const _Section(title: 'Audio'),
-                  Consumer(
-                    builder: (BuildContext context, WidgetRef inner, _) {
-                      final EqualizerState eq =
-                          inner.watch(equalizerControllerProvider);
-                      final String summary = !eq.config.enabled
-                          ? 'Off'
-                          : (eq.config.presetName ?? 'Custom');
-                      return _LinkRow(
-                        title: 'Equalizer',
-                        subtitle: summary,
-                        icon: AppIcons.faders,
-                        onTap: () =>
-                            context.go('/now-playing/equalizer'),
-                      );
-                    },
-                  ),
-                  const _Section(title: 'Recommendations'),
-                  const _Recommendations(),
-                  const _Section(title: 'Diagnostics'),
-                  const _Diagnostics(),
-                  const _Section(title: 'Account'),
-                  const _Account(),
-                  const _Section(title: 'Privacy'),
-                  const _Note(
-                    'Your YouTube Music session is kept by the local service '
-                    'and stored encrypted on this device. The app never holds '
-                    'it, and no cookie, token or signed link is shown on this '
-                    'page or written to the logs.',
-                  ),
-                  const _Section(title: 'About'),
-                  _LinkRow(
-                    title: 'Version',
-                    subtitle: appVersion,
-                    icon: AppIcons.disc,
-                    onTap: () {},
-                  ),
-                  const _Note(appDisclaimer),
-                  const _Note(
-                    'Type is Inter. Icons are Phosphor. Both are MIT '
-                    'licensed; their licence files ship with the app in '
-                    'assets/fonts.',
-                  ),
-                  const SizedBox(height: Tokens.s24),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: PillButton(
-                      icon: AppIcons.arrowClockwise,
-                      label: 'Reset preferences',
-                      onPressed: () => _confirmReset(context, controller),
-                    ),
-                  ),
-                  const SizedBox(height: Tokens.s32),
-                ],
-              ),
                 ),
               ),
             ),
@@ -211,7 +214,8 @@ class SettingsScreen extends ConsumerWidget {
     final bool? confirmed = await confirmDialog(
       context,
       title: 'Reset preferences?',
-      body: 'Appearance, motion, text, lyrics, equalizer and the player '
+      body:
+          'Appearance, motion, text, lyrics, equalizer and the player '
           'modes go back to their defaults. Your music, queue and sign-in '
           'are not affected.',
       confirmLabel: 'Reset',
@@ -240,9 +244,7 @@ class _StickyHeader extends StatelessWidget {
       ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: Tokens.contentMaxWidth,
-          ),
+          constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
           child: GlassSurface(
             tier: GlassTier.thin,
             shape: Tokens.shapePill,
@@ -279,14 +281,15 @@ class _SaveStatusBanner extends ConsumerWidget {
     final String message = status == SettingsSaveStatus.saving
         ? 'Saving…'
         : (ref.read(settingsSaveStatusProvider.notifier).message ??
-            'Preferences could not be saved.');
+              'Preferences could not be saved.');
 
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
     return Padding(
       padding: EdgeInsets.symmetric(
-        horizontal:
-            isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone,
+        horizontal: isDesktop
+            ? Tokens.pageMarginDesktop
+            : Tokens.pageMarginPhone,
       ),
       child: Row(
         children: <Widget>[
@@ -313,10 +316,7 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        top: Tokens.s24,
-        bottom: Tokens.s8,
-      ),
+      padding: const EdgeInsets.only(top: Tokens.s24, bottom: Tokens.s8),
       child: Text(title, style: Tokens.sectionHeader),
     );
   }
@@ -519,7 +519,8 @@ class _RecommendationsState extends ConsumerState<_Recommendations> {
     final bool? confirmed = await confirmDialog(
       context,
       title: 'Clear listening data?',
-      body: 'What this app has learned about your taste is forgotten: the '
+      body:
+          'What this app has learned about your taste is forgotten: the '
           'plays, skips and likes it recorded, and the listening history it '
           'shows. Your YouTube Music account is not affected.',
       confirmLabel: 'Clear',
@@ -562,7 +563,9 @@ class _RecommendationsState extends ConsumerState<_Recommendations> {
               'the recommendations.',
           value: _settings.localLearning,
           onChanged: (bool value) {
-            setState(() => _settings = _settings.copyWith(localLearning: value));
+            setState(
+              () => _settings = _settings.copyWith(localLearning: value),
+            );
             _save();
           },
         ),
@@ -606,7 +609,7 @@ class _RecommendationsState extends ConsumerState<_Recommendations> {
           _settings.localEventCount == 0
               ? 'Nothing has been learned yet.'
               : 'Learned from ${_settings.plays} plays, '
-                  '${_settings.skips} skips and ${_settings.likes} likes.',
+                    '${_settings.skips} skips and ${_settings.likes} likes.',
         ),
       ],
     );
@@ -717,10 +720,8 @@ class _Diagnostics extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<YtmConnection> connection =
-        ref.watch(connectionProvider);
-    final AsyncValue<SidecarStatus> sidecar =
-        ref.watch(sidecarStatusProvider);
+    final AsyncValue<YtmConnection> connection = ref.watch(connectionProvider);
+    final AsyncValue<SidecarStatus> sidecar = ref.watch(sidecarStatusProvider);
 
     final YtmConnection? value = connection.value;
     final String backend = switch (connection.hasError) {
@@ -817,8 +818,7 @@ class _AccountState extends ConsumerState<_Account> {
 
   @override
   Widget build(BuildContext context) {
-    final YtmConnection? connection =
-        ref.watch(connectionProvider).value;
+    final YtmConnection? connection = ref.watch(connectionProvider).value;
 
     if (connection?.status != YtmStatus.ready) {
       return Column(
@@ -826,7 +826,8 @@ class _AccountState extends ConsumerState<_Account> {
         children: <Widget>[
           _LinkRow(
             title: 'Sign in',
-            subtitle: 'Opens Google sign-in in your browser — it finishes on '
+            subtitle:
+                'Opens Google sign-in in your browser — it finishes on '
                 'its own.',
             icon: AppIcons.user,
             onTap: () => context.go(AppDestination.home.path),
@@ -835,7 +836,8 @@ class _AccountState extends ConsumerState<_Account> {
             title: _showPasteField
                 ? 'Hide pasted headers'
                 : 'Paste request headers',
-            subtitle: 'If the sign-in window cannot be used, paste the request '
+            subtitle:
+                'If the sign-in window cannot be used, paste the request '
                 'headers from a signed-in music.youtube.com tab instead.',
             icon: AppIcons.linkSimple,
             onTap: () => setState(() {
@@ -859,9 +861,8 @@ class _AccountState extends ConsumerState<_Account> {
         // neutral label when there is nothing real to name.
         _KeyValueRow(
           label: 'Signed in as',
-          value: connection?.accountName ??
-              connection?.handle ??
-              'Your account',
+          value:
+              connection?.accountName ?? connection?.handle ?? 'Your account',
         ),
         Align(
           alignment: Alignment.centerLeft,
@@ -885,7 +886,8 @@ class _AccountState extends ConsumerState<_Account> {
           maxLines: 6,
           style: Tokens.caption.copyWith(color: Tokens.text),
           decoration: InputDecoration(
-            hintText: 'cookie: SID=…; SAPISID=…\n'
+            hintText:
+                'cookie: SID=…; SAPISID=…\n'
                 'user-agent: Mozilla/5.0 …',
             hintStyle: Tokens.caption,
             filled: true,
@@ -898,7 +900,10 @@ class _AccountState extends ConsumerState<_Account> {
             padding: const EdgeInsets.only(top: Tokens.s4),
             child: Text(
               _pasteError!,
-              style: Tokens.caption.copyWith(color: Tokens.text, fontWeight: FontWeight.w700),
+              style: Tokens.caption.copyWith(
+                color: Tokens.text,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         Padding(
@@ -958,7 +963,8 @@ class _AccountState extends ConsumerState<_Account> {
     final bool? confirmed = await confirmDialog(
       context,
       title: 'Sign out?',
-      body: 'The local service forgets your session. Your music stays where '
+      body:
+          'The local service forgets your session. Your music stays where '
           'it is; you can sign in again at any time.',
       confirmLabel: 'Sign out',
     );
@@ -987,8 +993,9 @@ class _PlaybackEngineRowState extends ConsumerState<_PlaybackEngineRow> {
 
   @override
   Widget build(BuildContext context) {
-    final AsyncValue<PlaybackEngineInfo> engine =
-        ref.watch(playbackEngineInfoProvider);
+    final AsyncValue<PlaybackEngineInfo> engine = ref.watch(
+      playbackEngineInfoProvider,
+    );
     final PlaybackEngineInfo? value = engine.value;
 
     final String version = switch (engine) {
@@ -1039,8 +1046,9 @@ class _PlaybackEngineRowState extends ConsumerState<_PlaybackEngineRow> {
       // row reports the real outcome rather than "started".
       for (int attempt = 0; attempt < 24; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 500));
-        final PlaybackEngineInfo engine =
-            await ref.refresh(playbackEngineInfoProvider.future);
+        final PlaybackEngineInfo engine = await ref.refresh(
+          playbackEngineInfoProvider.future,
+        );
         if (engine.lastOk == null) continue;
         message = engine.lastOk!
             ? 'Updated to ${engine.version ?? 'the latest version'}.'

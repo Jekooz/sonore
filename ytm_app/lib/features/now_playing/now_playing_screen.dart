@@ -20,6 +20,7 @@ import 'artwork.dart';
 import 'lyrics_panel.dart';
 import 'queue_panel.dart';
 import 'transport_pill.dart';
+import '../shell/app_shell.dart';
 
 /// Which on-demand panel is open, if any. Opening one closes the other:
 /// two overlays at once would be exactly the clutter the design bans.
@@ -194,10 +195,14 @@ class _PlayerColumn extends ConsumerWidget {
     final ArtworkResolver artwork = ref.watch(artworkResolverProvider);
     final PlaybackController controller = ref.read(playbackProvider.notifier);
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
-        child: Column(
+    return Padding(
+      // The controls stop at the floating chrome; nothing below is scrollable
+      // here, so the clearance works as a reserved band, not as scroll room.
+      padding: EdgeInsets.only(bottom: ShellClearance.of(context)),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
+          child: Column(
           children: <Widget>[
             // Artwork: elastic, capped, centered. Size = the smaller of the
             // leftover width and the leftover height, so it can never push
@@ -278,7 +283,8 @@ class _PlayerColumn extends ConsumerWidget {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
@@ -485,11 +491,12 @@ class _BottomPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         Tokens.s16,
         0,
         Tokens.s16,
-        Tokens.s16,
+        // The sheet bottoms out above the floating navigation, not over it.
+        Tokens.s16 + ShellClearance.of(context),
       ),
       child: Align(
         alignment: AlignmentDirectional.bottomCenter,

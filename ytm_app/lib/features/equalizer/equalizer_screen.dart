@@ -11,6 +11,7 @@ import '../../ui/glass_surface.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/screen_header.dart';
 import '../../ui/screen_states.dart';
+import '../shell/app_shell.dart';
 
 /// Ten-band equalizer.
 ///
@@ -77,7 +78,9 @@ class _EqualizerControls extends ConsumerWidget {
         : (state.config.presetName ?? 'Custom');
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(vertical: Tokens.s16),
+      padding: EdgeInsets.only(
+        bottom: Tokens.s16 + ShellClearance.of(context),
+      ),
       // A form, not a dashboard: one centred column that never stretches
       // across a wide window.
       child: Center(

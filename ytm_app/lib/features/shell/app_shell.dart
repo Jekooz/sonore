@@ -59,10 +59,12 @@ class AppShell extends ConsumerWidget {
     final bool hasTrack = ref.watch(
       playbackProvider.select((PlaybackState state) => state.hasTrack),
     );
-    final bool onNowPlaying = currentIndex == AppDestination.nowPlaying.index;
+    // Only the Now Playing page itself displaces the mini player; its sub-
+    // pages (Queue, Equalizer) keep the bar like every other page.
+    final bool onNowPlayingPage = onNowPlayingPageRoute(context);
 
     // The page is the player on Now Playing, so the bar steps aside.
-    final bool showNowPlayingBar = hasTrack && !onNowPlaying;
+    final bool showNowPlayingBar = hasTrack && !onNowPlayingPage;
 
     void select(int index) =>
         navigationShell.goBranch(index, initialLocation: index == currentIndex);
@@ -82,33 +84,42 @@ class AppShell extends ConsumerWidget {
     // this is zero, so the pills simply float with their own margins.
     final double safeBottom = MediaQuery.paddingOf(context).bottom;
 
+    // How much chrome floats over the bottom of the content: the last strip
+    // of every page scrolls beneath it while it keeps running.
+    final double chromeZone;
+    final double msafeBottom = isPhone ? safeBottom : 0;
+    final double clearance;
+    if (isPhone) {
+      chromeZone =
+          Tokens.s12 +
+          Tokens.navBarHeight +
+          (showNowPlayingBar ? Tokens.s8 + Tokens.nowPlayingBarHeight : 0);
+      clearance = msafeBottom + chromeZone + Tokens.s16;
+    } else {
+      chromeZone = showNowPlayingBar
+          ? Tokens.nowPlayingBarHeight + Tokens.s16 * 2
+          : 0;
+      clearance = chromeZone;
+    }
+
     final Widget body = isPhone
         ? Stack(
             children: <Widget>[
-              // Pages own their scrolling; the shell owns the insets. The top
-              // inset is handled by SafeArea (status bar, notch); the bottom
-              // is computed from the floating chrome below.
+              // Pages own their scrolling; the shell owns the insets. Content
+              // runs under the floating chrome — the scrollable's own bottom
+              // padding (bottom clearance) lifts the last rows above it — and
+              // the fade mask below blends the page into the base before the
+              // glass band. SafeArea handles the status bar / notch.
               Positioned.fill(
                 child: SafeArea(
                   bottom: false,
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      // Nav pill's outer bottom margin + the pill, plus the
-                      // mini player above it when there is a track, plus
-                      // breathing room for the page content.
-                      bottom:
-                          safeBottom +
-                          Tokens.s12 +
-                          Tokens.navBarHeight +
-                          (showNowPlayingBar
-                              ? Tokens.s8 + Tokens.nowPlayingBarHeight
-                              : 0) +
-                          Tokens.s16,
-                    ),
+                  child: ShellClearance(
+                    bottom: clearance,
                     child: navigationShell,
                   ),
                 ),
               ),
+              _BottomFade(height: msafeBottom + chromeZone + Tokens.s48),
               // The mini player floats just above the nav pill.
               if (showNowPlayingBar)
                 Positioned(
@@ -133,23 +144,25 @@ class AppShell extends ConsumerWidget {
           )
         : Stack(
             children: <Widget>[
-              // The tab bar floats in the top strip and the Now Playing bar
-              // in the bottom gap; reserving both here keeps the floating
-              // chrome off the content without every page knowing they exist.
+              // The tab bar floats in the reserved top strip; the Now Playing
+              // bar floats over the content's bottom edge instead of taking a
+              // column, so pages scroll beneath it.
               Positioned.fill(
                 child: SafeArea(
                   bottom: false,
                   child: Padding(
-                    padding: EdgeInsets.only(
-                      top: Tokens.shellTopInset,
-                      bottom: showNowPlayingBar
-                          ? Tokens.nowPlayingBarHeight + Tokens.s16 * 2
-                          : 0,
+                    padding: const EdgeInsets.only(top: Tokens.shellTopInset),
+                    child: ShellClearance(
+                      bottom: clearance,
+                      child: navigationShell,
                     ),
-                    child: navigationShell,
                   ),
                 ),
               ),
+              if (showNowPlayingBar)
+                _BottomFade(
+                  height: Tokens.nowPlayingBarHeight + Tokens.s16 * 2 + Tokens.s48,
+                ),
               Positioned(
                 top: 0,
                 left: 0,
@@ -264,6 +277,66 @@ class _GlobalShortcuts extends ConsumerWidget {
       onKeyEvent: (FocusNode node, KeyEvent event) =>
           _onKey(context, ref, event),
       child: child,
+    );
+  }
+}
+
+/// The extra bottom padding a page's scrollable must carry so its last rows
+/// can scroll clear of the floating Now Playing bar and navigation.
+///
+/// The shell decides the number (it knows the chrome); the pages consume it
+/// and own everything else about their scrolling. Pages that never scroll —
+/// Now Playing — read it as the space their controls must stay clear of.
+@immutable
+class ShellClearance extends InheritedWidget {
+  const ShellClearance({
+    super.key,
+    required this.bottom,
+    required super.child,
+  });
+
+  /// Bottom padding in logical pixels the page content should keep free.
+  final double bottom;
+
+  /// The clearance provided by the nearest shell; zero outside the shell.
+  static double of(BuildContext context) {
+    final ShellClearance? shell = context
+        .dependOnInheritedWidgetOfExactType<ShellClearance>();
+    return shell?.bottom ?? 0;
+  }
+
+  @override
+  bool updateShouldNotify(ShellClearance oldWidget) =>
+      oldWidget.bottom != bottom;
+}
+
+/// A soft fade that blends scrolling content into the dark base before it
+/// passes under the floating glass chrome — the page melting away rather than
+/// hard-cutting at the band's top edge.
+class _BottomFade extends StatelessWidget {
+  const _BottomFade({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: height,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: const <Color>[Tokens.bg, Tokens.transparent],
+              stops: <double>[0.0, 1.0],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

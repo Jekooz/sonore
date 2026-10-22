@@ -9,6 +9,7 @@ import '../../ui/glass_surface.dart';
 import '../../ui/media_rows.dart';
 import '../../ui/pressable.dart';
 import '../../ui/screen_states.dart';
+import '../shell/app_shell.dart';
 import 'search_controller.dart';
 
 /// The Search destination.
@@ -273,7 +274,7 @@ class _SearchResultsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.only(bottom: Tokens.s24),
+      padding: EdgeInsets.only(bottom: Tokens.s24 + ShellClearance.of(context)),
       children: <Widget>[
         _Group(title: 'Songs', items: results.songs),
         _Group(title: 'Albums', items: results.albums),

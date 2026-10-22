@@ -17,6 +17,7 @@ import '../../ui/screen_header.dart';
 import '../../ui/screen_states.dart';
 import '../../ui/track_row.dart';
 import '../now_playing/artwork.dart';
+import '../shell/app_shell.dart';
 
 /// The dedicated Queue screen (design.md section F).
 ///
@@ -135,7 +136,9 @@ class _QueueBody extends ConsumerWidget {
                   footnote: 'Autoplay adds more when this track ends.',
                 )
               : ReorderableListView.builder(
-                  padding: const EdgeInsets.only(bottom: Tokens.s16),
+                  padding: EdgeInsets.only(
+                    bottom: Tokens.s16 + ShellClearance.of(context),
+                  ),
                   // The handles below are deliberate: the spec asks for visible
                   // drag handles, not for the whole row to be a drag target.
                   buildDefaultDragHandles: false,
@@ -177,7 +180,10 @@ class _QueueBody extends ConsumerWidget {
             ),
           ),
         ),
-        const SizedBox(height: Tokens.s16),
+        // The footer action must stay clear of the floating Now Playing bar,
+        // which now hangs over the page's bottom edge instead of taking a
+        // column from it.
+        SizedBox(height: Tokens.s16 + ShellClearance.of(context)),
       ],
     );
   }

@@ -7,6 +7,7 @@ import '../../data/ytm_repository.dart';
 import '../../theme/tokens.dart';
 import '../../ui/data_states.dart';
 import '../../ui/media_rows.dart';
+import '../shell/app_shell.dart';
 import 'hero_banner.dart';
 import 'popular_rail.dart';
 
@@ -117,7 +118,9 @@ class _HomeContent extends ConsumerWidget {
                     margin,
                     Tokens.s24,
                     margin,
-                    Tokens.s24,
+                    // The last rail must scroll clear of the floating bar
+                    // while it keeps running beneath it.
+                    Tokens.s24 + ShellClearance.of(context),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -160,17 +163,36 @@ class _HomeRail extends StatelessWidget {
         children: <Widget>[
           Text(row.title, style: Tokens.sectionHeader),
           const SizedBox(height: Tokens.s12),
-          SizedBox(
-            height: Tokens.railCardHeight,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: row.items.length,
-              separatorBuilder: (_, _) => const SizedBox(width: Tokens.s16),
-              itemBuilder: (BuildContext context, int index) => MediaCard(
-                item: row.items[index],
-                siblings: row.items,
-              ),
-            ),
+          // The trailing cards melt out under the page edge instead of
+          // hard-cutting against the gutter.
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final double width = constraints.maxWidth;
+              // A s32-wide fade window at the trailing edge.
+              final double fadeStart = (1 - Tokens.s32 / width).clamp(0.0, 1.0);
+              return ShaderMask(
+                shaderCallback: (Rect bounds) => LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: const <Color>[Tokens.text, Tokens.text, Tokens.transparent],
+                  stops: <double>[0.0, fadeStart, 1.0],
+                ).createShader(bounds),
+                blendMode: BlendMode.dstIn,
+                child: SizedBox(
+                  height: Tokens.railCardHeight,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: row.items.length,
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(width: Tokens.s16),
+                    itemBuilder: (BuildContext context, int index) => MediaCard(
+                      item: row.items[index],
+                      siblings: row.items,
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),

@@ -20,8 +20,8 @@ class Tokens {
 
   /// The dark base of the ambient backdrop, near-black with a cold cast. The
   /// art-derived blobs sit on top of it and every screen's chrome is drawn
-  /// above the layer; with no artwork (idle) it stays as the neutral gradient
-  /// defined by [backdropNeutralTop]/[backdropNeutralBottom].
+  /// above the layer; with no artwork (idle) the blobs run in the neutral
+  /// monochrome palette defined by [backdropNeutralBlobs].
   static const Color bg = Color(0xFF08080C);
 
   /// Opaque/placeholding fills: art placeholders, avatars.
@@ -82,15 +82,30 @@ class Tokens {
   static const Color specular = Color(0x29FFFFFF);
   static const Color transparent = Color(0x00000000);
 
+  /// The selected navigation pill: a lit glass pane, not a hole. A vertical
+  /// ramp of white 18% falling to white 12% with a hairline the same width —
+  /// lighter than the bar behind it, so the selection reads as a raised pane.
+  static const Color navSelectionTop = Color(0x2EFFFFFF);
+  static const Color navSelectionBottom = Color(0x1FFFFFFF);
+
+  /// A calm zone under the floating bottom chrome: the ambient blobs fade to
+  /// the dark base across this last strip of the window, so a bright blob
+  /// never bleeds a halo directly above the navigation pill or the Now
+  /// Playing bar.
+  static const double ambientBottomCalm = 128;
+
   /// Shadow under floating chrome (black 45%).
   static const Color shadow = Color(0x73000000);
 
   /// Black 45% overlay over the ambient backdrop, for legibility.
   static const Color ambientOverlay = Color(0x73000000);
 
-  /// Neutral idle backdrop: a narrow monochrome ramp with no hue.
-  static const Color backdropNeutralTop = Color(0xFF121218);
-  static const Color backdropNeutralBottom = Color(0xFF08080C);
+  /// Neutral idle backdrop blobs, in the order they are anchored below.
+  static const List<Color> backdropNeutralBlobs = <Color>[
+    Color(0xFF3E3E4E),
+    Color(0xFF343441),
+    Color(0xFF2C2C38),
+  ];
 
   // ----------------------------------------------------------- Typography ---
   //
@@ -410,12 +425,13 @@ class Tokens {
   static const double heroScrimLumaGate = 0.45;
   static const double heroScrimMaxAlpha = 0.55;
 
-  /// Blob geometry: three anchors, the first near the top-left, so the palette
-  /// reads immediately behind floating chrome and settles toward the base.
+  /// Blob geometry: three anchors — top-left, bottom-right and center — so
+  /// every part of the window sits over some light and glass never blurs a
+  /// dead-black corner.
   static const List<Alignment> ambientPlacements = <Alignment>[
-    Alignment(-0.55, -0.65),
-    Alignment(0.75, -0.05),
-    Alignment(-0.15, 0.85),
+    Alignment(-0.6, -0.6),
+    Alignment(0.7, 0.75),
+    Alignment(-0.05, 0.05),
   ];
 
   /// Drift: each blob nudges to a new anchor offset once per period and moves

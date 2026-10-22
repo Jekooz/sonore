@@ -123,9 +123,11 @@ class _AmbientBackdropState extends ConsumerState<AmbientBackdrop> {
     final ui.Image? grain = ref.watch(grainTextureProvider).value;
 
     final String layerKey = palette.key.isEmpty ? 'idle' : palette.key;
-    final Widget layer = palette.colors.isEmpty
-        ? const _NeutralBackdropLayer()
-        : _ArtBackdropLayer(colors: palette.colors, drift: _drift);
+    // With nothing playing the blob layer keeps running on a neutral mono-
+    // chrome palette, so the resting app is still atmosphere — the same drift,
+    // the same three anchors — and glass never blurs a dead-black field.
+    final List<Color> blobColors =
+        palette.colors.isEmpty ? Tokens.backdropNeutralBlobs : palette.colors;
 
     return IgnorePointer(
       child: RepaintBoundary(
@@ -139,10 +141,28 @@ class _AmbientBackdropState extends ConsumerState<AmbientBackdrop> {
                   : Tokens.dAmbientCrossfade,
               child: KeyedSubtree(
                 key: ValueKey<String>(layerKey),
-                child: layer,
+                child: _BackdropBlobs(colors: blobColors, drift: _drift),
               ),
             ),
             _LegibilityVeil(colors: palette.colors),
+            // The calm zone: blobs die into the base behind the bottom
+            // chrome, so its glass reads as a lit pane over dark rather than
+            // cut from a bright halo.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: Tokens.ambientBottomCalm,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: const <Color>[Tokens.bg, Tokens.transparent],
+                  ),
+                ),
+              ),
+            ),
             if (grain != null) _Grain(texture: grain),
           ],
         ),
@@ -151,33 +171,12 @@ class _AmbientBackdropState extends ConsumerState<AmbientBackdrop> {
   }
 }
 
-/// Idle with nothing playing: a monochrome ramp with no hue in it.
-class _NeutralBackdropLayer extends StatelessWidget {
-  const _NeutralBackdropLayer();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[
-            Tokens.backdropNeutralTop,
-            Tokens.backdropNeutralBottom,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The art layer. Each palette color is one radial blob anchored on
-/// [Tokens.ambientPlacements], plus a drift offset. Radial gradients only — a
-/// blur filter over the full screen would be exactly the cost the performance
-/// budget forbids.
-class _ArtBackdropLayer extends StatelessWidget {
-  const _ArtBackdropLayer({required this.colors, required this.drift});
+/// The blob layer: each color is one large soft radial blob anchored on
+/// [Tokens.ambientPlacements], plus a drift offset. Radial gradients only —
+/// a blur filter over the full screen would be exactly the cost the
+/// performance budget forbids.
+class _BackdropBlobs extends StatelessWidget {
+  const _BackdropBlobs({required this.colors, required this.drift});
 
   final List<Color> colors;
   final List<Offset> drift;

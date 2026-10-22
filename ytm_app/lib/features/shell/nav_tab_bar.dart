@@ -145,10 +145,9 @@ class _Tab extends StatelessWidget {
                 duration: reduceMotion ? Duration.zero : Tokens.dPress,
                 curve: Tokens.curvePress,
                 alignment: Alignment.center,
-                decoration: ShapeDecoration(
-                  color: selected ? Tokens.surfaceRaised : Tokens.transparent,
-                  shape: Tokens.shapePill,
-                ),
+                decoration: selected
+                    ? navSelectionDecoration(Tokens.shapePill)
+                    : null,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[

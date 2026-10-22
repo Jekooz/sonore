@@ -128,10 +128,9 @@ class _NavAction extends StatelessWidget {
               child: AnimatedContainer(
                 duration: reduceMotion ? Duration.zero : Tokens.dPress,
                 curve: Tokens.curvePress,
-                decoration: ShapeDecoration(
-                  color: selected ? Tokens.surfaceRaised : Tokens.transparent,
-                  shape: Tokens.shapePill,
-                ),
+                decoration: selected
+                    ? navSelectionDecoration(Tokens.shapePill)
+                    : null,
                 child: Icon(
                   icon,
                   size: Tokens.iconSize,
@@ -182,10 +181,9 @@ class _NavBarItem extends StatelessWidget {
               child: AnimatedContainer(
                 duration: reduceMotion ? Duration.zero : Tokens.dPress,
                 curve: Tokens.curvePress,
-                decoration: ShapeDecoration(
-                  color: selected ? Tokens.surfaceRaised : Tokens.transparent,
-                  shape: Tokens.shapePill,
-                ),
+                decoration: selected
+                    ? navSelectionDecoration(Tokens.shapePill)
+                    : null,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[

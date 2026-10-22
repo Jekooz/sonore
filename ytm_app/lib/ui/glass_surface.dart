@@ -25,6 +25,20 @@ enum GlassTier {
   thick,
 }
 
+/// The decoration for a selected navigation item: a raised pane of lighter
+/// glass — a lit white ramp with a hairline specular rim — rather than a dark
+/// fill that reads as a hole punched in the bar.
+ShapeDecoration navSelectionDecoration(OutlinedBorder shape) => ShapeDecoration(
+      gradient: const LinearGradient(
+        begin: Tokens.edgeBegin,
+        end: Tokens.edgeEnd,
+        colors: <Color>[Tokens.navSelectionTop, Tokens.navSelectionBottom],
+      ),
+      shape: shape.copyWith(
+        side: BorderSide(color: Tokens.border, width: Tokens.borderWidth),
+      ),
+    );
+
 /// The blur and fill each tier speaks, from [Tokens]. Kept here rather than
 /// on the enum so the enum stays a pure choice and the numbers stay in one
 /// [Tokens] module.

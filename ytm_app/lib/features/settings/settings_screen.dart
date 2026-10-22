@@ -50,157 +50,204 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            const _StickyHeader(),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: Tokens.contentMaxWidth,
+        child: Center(
+          // A form, not a dashboard: one narrow column that the header, the
+          // save status and every panel share, so the back arrow, the notes
+          // and the controls all start and end on the same edges.
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: Tokens.formMaxWidth),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(margin, Tokens.s8, margin, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  // A plain header on the column, not floating chrome on top
+                  // of it: this page scrolls its own content beneath it.
+                  ScreenHeader(
+                    title: 'Settings',
+                    onBack: () => context.go(AppDestination.home.path),
+                    backLabel: 'Back to Home',
+                    padding: EdgeInsets.zero,
                   ),
-                  child: ListView(
-                    // One content column: the same margin on both sides, and the
-                    // rows below give up ListTile's own inset, so section titles,
-                    // notes and buttons all start and end on the same edges.
-                    padding: EdgeInsets.symmetric(
-                      horizontal: margin,
-                      vertical: Tokens.s8,
-                    ).copyWith(bottom: Tokens.s8 + ShellClearance.of(context)),
-                    children: <Widget>[
-                      const _Section(title: 'Appearance'),
-                      _SwitchRow(
-                        title: 'Reduce transparency',
-                        subtitle:
-                            'Uses solid tinted surfaces instead of glass. '
-                            'Also engages automatically when the system reduces '
-                            'transparency or uses high contrast.',
-                        value: settings.reduceTransparency,
-                        onChanged: controller.setReduceTransparency,
+                  const _SaveStatusBanner(),
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.only(
+                        top: Tokens.s8,
+                        bottom: Tokens.s8 + ShellClearance.of(context),
                       ),
-                      _SwitchRow(
-                        title: 'Reduce motion',
-                        subtitle: 'Stops shimmer and cross-fades.',
-                        value: settings.reduceMotion,
-                        onChanged: controller.setReduceMotion,
-                      ),
-                      _SliderRow(
-                        title: 'Text size',
-                        subtitle: 'Scales text up to the largest the layout supports.',
-                        value: settings.textScale,
-                        min: Tokens.textScaleMin,
-                        max: Tokens.textScaleCap,
-                        divisions: 6,
-                        label: '${(settings.textScale * 100).round()}%',
-                        onChanged: controller.setTextScale,
-                      ),
-                      const _Note(
-                        'Theme: dark. This version ships one theme, so there is '
-                        'nothing to switch.',
-                      ),
-                      const _Section(title: 'Playback'),
-                      Consumer(
-                        builder: (BuildContext context, WidgetRef inner, _) {
-                          final PlaybackState playback = inner.watch(
-                            playbackProvider,
-                          );
-                          final PlaybackController player = inner.read(
-                            playbackProvider.notifier,
-                          );
-                          return Column(
-                            children: <Widget>[
-                              _SwitchRow(
-                                title: 'Autoplay',
-                                subtitle:
-                                    'Adds recommendations when the queue '
-                                    'runs out instead of stopping.',
-                                value: playback.autoplay,
-                                onChanged: player.setAutoplay,
-                              ),
-                              _SwitchRow(
-                                title: 'Shuffle',
-                                subtitle:
-                                    'Shuffles the tracks that have not played '
-                                    'yet. Turning it off restores the original order.',
-                                value: playback.shuffle,
-                                onChanged: player.setShuffle,
-                              ),
-                              _Note(
-                                'Repeat (Off, All, One) cycles from the transport '
-                                'controls and persists with these.',
-                              ),
-                              const SizedBox(height: Tokens.s8),
-                              const _PlaybackEngineRow(),
-                            ],
-                          );
-                        },
-                      ),
-                      const _Section(title: 'Lyrics'),
-                      _SwitchRow(
-                        title: 'Follow playback',
-                        subtitle: 'Scrolls to the current line when lyrics have timings.',
-                        value: settings.lyricsAutoFollow,
-                        onChanged: controller.setLyricsAutoFollow,
-                      ),
-                      const _Section(title: 'Audio'),
-                      Consumer(
-                        builder: (BuildContext context, WidgetRef inner, _) {
-                          final EqualizerState eq = inner.watch(
-                            equalizerControllerProvider,
-                          );
-                          final String summary = !eq.config.enabled
-                              ? 'Off'
-                              : (eq.config.presetName ?? 'Custom');
-                          return _LinkRow(
-                            title: 'Equalizer',
-                            subtitle: summary,
-                            icon: AppIcons.faders,
-                            onTap: () => context.go('/now-playing/equalizer'),
-                          );
-                        },
-                      ),
-                      const _Section(title: 'Recommendations'),
-                      const _Recommendations(),
-                      const _Section(title: 'Diagnostics'),
-                      const _Diagnostics(),
-                      const _Section(title: 'Account'),
-                      const _Account(),
-                      const _Section(title: 'Privacy'),
-                      const _Note(
-                        'Your YouTube Music session is kept by the local service '
-                        'and stored encrypted on this device. The app never holds '
-                        'it, and no cookie, token or signed link is shown on this '
-                        'page or written to the logs.',
-                      ),
-                      const _Section(title: 'About'),
-                      _LinkRow(
-                        title: 'Version',
-                        subtitle: appVersion,
-                        icon: AppIcons.disc,
-                        onTap: () {},
-                      ),
-                      const _Note(appDisclaimer),
-                      const _Note(
-                        'Type is Inter. Icons are Phosphor. Both are MIT '
-                        'licensed; their licence files ship with the app in '
-                        'assets/fonts.',
-                      ),
-                      const SizedBox(height: Tokens.s24),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: PillButton(
-                          icon: AppIcons.arrowClockwise,
-                          label: 'Reset preferences',
-                          onPressed: () => _confirmReset(context, controller),
+                      children: <Widget>[
+                        _Panel(
+                          title: 'Appearance',
+                          children: <Widget>[
+                            _SwitchRow(
+                              title: 'Reduce transparency',
+                              subtitle:
+                                  'Uses solid tinted surfaces instead of glass. '
+                                  'Also engages automatically when the system reduces '
+                                  'transparency or uses high contrast.',
+                              value: settings.reduceTransparency,
+                              onChanged: controller.setReduceTransparency,
+                            ),
+                            _SwitchRow(
+                              title: 'Reduce motion',
+                              subtitle: 'Stops shimmer and cross-fades.',
+                              value: settings.reduceMotion,
+                              onChanged: controller.setReduceMotion,
+                            ),
+                            _SliderRow(
+                              title: 'Text size',
+                              subtitle: 'Scales text up to the largest the layout supports.',
+                              value: settings.textScale,
+                              min: Tokens.textScaleMin,
+                              max: Tokens.textScaleCap,
+                              divisions: 6,
+                              label: '${(settings.textScale * 100).round()}%',
+                              onChanged: controller.setTextScale,
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: Tokens.s32),
-                    ],
+                        _Panel(
+                          title: 'Playback',
+                          children: <Widget>[
+                            Consumer(
+                              builder:
+                                  (BuildContext context, WidgetRef inner, _) {
+                                    final PlaybackState playback = inner.watch(
+                                      playbackProvider,
+                                    );
+                                    final PlaybackController player = inner
+                                        .read(playbackProvider.notifier);
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        _SwitchRow(
+                                          title: 'Autoplay',
+                                          subtitle:
+                                              'Adds recommendations when the queue '
+                                              'runs out instead of stopping.',
+                                          value: playback.autoplay,
+                                          onChanged: player.setAutoplay,
+                                        ),
+                                        _SwitchRow(
+                                          title: 'Shuffle',
+                                          subtitle:
+                                              'Shuffles the tracks that have not played '
+                                              'yet. Turning it off restores the original order.',
+                                          value: playback.shuffle,
+                                          onChanged: player.setShuffle,
+                                        ),
+                                        const _Note(
+                                          'Repeat (Off, All, One) cycles from the transport '
+                                          'controls and persists with these.',
+                                        ),
+                                        const SizedBox(height: Tokens.s8),
+                                        const _PlaybackEngineRow(),
+                                      ],
+                                    );
+                                  },
+                            ),
+                          ],
+                        ),
+                        _Panel(
+                          title: 'Lyrics',
+                          children: <Widget>[
+                            _SwitchRow(
+                              title: 'Follow playback',
+                              subtitle: 'Scrolls to the current line when lyrics have timings.',
+                              value: settings.lyricsAutoFollow,
+                              onChanged: controller.setLyricsAutoFollow,
+                            ),
+                          ],
+                        ),
+                        _Panel(
+                          title: 'Audio',
+                          children: <Widget>[
+                            Consumer(
+                              builder:
+                                  (BuildContext context, WidgetRef inner, _) {
+                                    final EqualizerState eq = inner.watch(
+                                      equalizerControllerProvider,
+                                    );
+                                    final String summary = !eq.config.enabled
+                                        ? 'Off'
+                                        : (eq.config.presetName ?? 'Custom');
+                                    return _LinkRow(
+                                      title: 'Equalizer',
+                                      subtitle: summary,
+                                      icon: AppIcons.faders,
+                                      onTap: () =>
+                                          context.go('/now-playing/equalizer'),
+                                    );
+                                  },
+                            ),
+                          ],
+                        ),
+                        const _Panel(
+                          title: 'Recommendations',
+                          children: <Widget>[_Recommendations()],
+                        ),
+                        const _Panel(
+                          title: 'Diagnostics',
+                          children: <Widget>[_Diagnostics()],
+                        ),
+                        const _Panel(
+                          title: 'Account',
+                          children: <Widget>[_Account()],
+                        ),
+                        _Panel(
+                          title: 'Privacy',
+                          children: <Widget>[
+                            const _Note(
+                              'Your YouTube Music session is kept by the local service '
+                              'and stored encrypted on this device. The app never holds '
+                              'it, and no cookie, token or signed link is shown on this '
+                              'page or written to the logs.',
+                            ),
+                          ],
+                        ),
+                        _Panel(
+                          title: 'About',
+                          children: <Widget>[
+                            _LinkRow(
+                              title: 'Version',
+                              subtitle: appVersion,
+                              icon: AppIcons.disc,
+                              onTap: () {},
+                            ),
+                            const _Note(appDisclaimer),
+                            const _Note(
+                              'Type is Inter. Icons are Phosphor. Both are MIT '
+                              'licensed; their licence files ship with the app in '
+                              'assets/fonts.',
+                            ),
+                          ],
+                        ),
+                        // The reset sits at the column's content edge — the
+                        // same edge the notes inside the panels start on.
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Tokens.s16,
+                          ),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: PillButton(
+                              icon: AppIcons.arrowClockwise,
+                              label: 'Reset preferences',
+                              onPressed: () =>
+                                  _confirmReset(context, controller),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: Tokens.s32),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -224,42 +271,37 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-/// The pinned header: a floating glass pill with the page title, the save
-/// status riding under it.
+/// One grouped form section on its own glass panel.
 ///
-/// It sits outside the scrolling list, so it stays put while the page scrolls,
-/// and it is the same floating chrome as every other shell surface — held
-/// clear of the page edges rather than docked edge to edge.
-class _StickyHeader extends StatelessWidget {
-  const _StickyHeader();
+/// The Equalizer page grouped its controls into panels; every Settings
+/// section now does the same, so both sub-pages read as one system — a
+/// column of panels with the section name printed inside each panel.
+class _Panel extends StatelessWidget {
+  const _Panel({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Tokens.pageMarginPhone,
-        Tokens.s8,
-        Tokens.pageMarginPhone,
-        Tokens.s8,
-      ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
-          child: GlassSurface(
-            tier: GlassTier.thin,
-            shape: Tokens.shapePill,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Tokens.s4),
-              child: Column(
-                children: <Widget>[
-                  ScreenHeader(
-                    title: 'Settings',
-                    onBack: () => context.go(AppDestination.home.path),
-                    backLabel: 'Back to Home',
-                  ),
-                  const _SaveStatusBanner(),
-                ],
-              ),
+      padding: const EdgeInsets.only(bottom: Tokens.s16),
+      child: GlassSurface(
+        radius: Tokens.rLarge,
+        child: Material(
+          // ListTiles and ink splashes paint on the nearest Material; the
+          // glass fill lives behind it, so give the panel content its own
+          // transparent one.
+          type: MaterialType.transparency,
+          child: Padding(
+            padding: const EdgeInsets.all(Tokens.s16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(title, style: Tokens.sectionHeader),
+                const SizedBox(height: Tokens.s8),
+                ...children,
+              ],
             ),
           ),
         ),
@@ -269,7 +311,7 @@ class _StickyHeader extends StatelessWidget {
 }
 
 /// Says what the last preference write did, so "it did not stick" is never a
-/// silent surprise.
+/// silent surprise. It rides under the header, on the same column.
 class _SaveStatusBanner extends ConsumerWidget {
   const _SaveStatusBanner();
 
@@ -283,14 +325,8 @@ class _SaveStatusBanner extends ConsumerWidget {
         : (ref.read(settingsSaveStatusProvider.notifier).message ??
               'Preferences could not be saved.');
 
-    final bool isDesktop =
-        MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
     return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop
-            ? Tokens.pageMarginDesktop
-            : Tokens.pageMarginPhone,
-      ),
+      padding: const EdgeInsets.only(top: Tokens.s8, bottom: Tokens.s8),
       child: Row(
         children: <Widget>[
           if (status == SettingsSaveStatus.saving)
@@ -301,23 +337,9 @@ class _SaveStatusBanner extends ConsumerWidget {
             ),
           if (status == SettingsSaveStatus.saving)
             const SizedBox(width: Tokens.s8),
-          Expanded(child: Text(message, style: Tokens.caption)),
+          Expanded(child: Text(message, style: Tokens.subtitle)),
         ],
       ),
-    );
-  }
-}
-
-class _Section extends StatelessWidget {
-  const _Section({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: Tokens.s24, bottom: Tokens.s8),
-      child: Text(title, style: Tokens.sectionHeader),
     );
   }
 }
@@ -331,7 +353,7 @@ class _Note extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: Tokens.s8),
-      child: Text(text, style: Tokens.caption, textAlign: TextAlign.left),
+      child: Text(text, style: Tokens.subtitle, textAlign: TextAlign.left),
     );
   }
 }
@@ -373,7 +395,7 @@ class _SwitchRow extends StatelessWidget {
         // the control sits on the same right edge the notes end on.
         contentPadding: EdgeInsets.zero,
         title: Text(title, style: Tokens.rowTitle),
-        subtitle: Text(subtitle, style: Tokens.caption),
+        subtitle: Text(subtitle, style: Tokens.subtitle),
         onChanged: onChanged,
       ),
     );
@@ -413,7 +435,7 @@ class _SliderRow extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(subtitle, style: Tokens.caption),
+            Text(subtitle, style: Tokens.subtitle),
             ConstrainedBox(
               constraints: const BoxConstraints(
                 // A thumb travelling the full content width on a 1920 window
@@ -648,7 +670,7 @@ class _TokenFieldState extends State<_TokenField> {
         children: <Widget>[
           Text(widget.title, style: Tokens.rowTitle),
           const SizedBox(height: Tokens.s4),
-          Text(widget.subtitle, style: Tokens.caption),
+          Text(widget.subtitle, style: Tokens.subtitle),
           const SizedBox(height: Tokens.s8),
           TextField(
             controller: widget.controller,
@@ -700,7 +722,7 @@ class _LinkRow extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         leading: Icon(icon, size: Tokens.iconSize, color: Tokens.textSecondary),
         title: Text(title, style: Tokens.rowTitle),
-        subtitle: Text(subtitle, style: Tokens.caption),
+        subtitle: Text(subtitle, style: Tokens.subtitle),
         trailing: const Icon(
           AppIcons.caretRight,
           size: Tokens.iconSize,
@@ -784,7 +806,7 @@ class _KeyValueRow extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(child: Text(label, style: Tokens.subtitle)),
-          Text(value, style: Tokens.caption),
+          Text(value, style: Tokens.subtitle),
         ],
       ),
     );
@@ -900,10 +922,7 @@ class _AccountState extends ConsumerState<_Account> {
             padding: const EdgeInsets.only(top: Tokens.s4),
             child: Text(
               _pasteError!,
-              style: Tokens.caption.copyWith(
-                color: Tokens.text,
-                fontWeight: FontWeight.w700,
-              ),
+              style: Tokens.subtitle.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
         Padding(
@@ -1024,7 +1043,7 @@ class _PlaybackEngineRowState extends ConsumerState<_PlaybackEngineRow> {
         if (_result != null)
           Padding(
             padding: const EdgeInsets.only(top: Tokens.s8),
-            child: Text(_result!, style: Tokens.caption),
+            child: Text(_result!, style: Tokens.subtitle),
           ),
         const _Note(
           'An update is checked once a day in the background. Use this button '

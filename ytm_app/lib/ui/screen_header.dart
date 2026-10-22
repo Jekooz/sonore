@@ -16,6 +16,10 @@ class ScreenHeader extends StatelessWidget {
     this.trailing,
     this.onBack,
     this.backLabel = 'Back to Now Playing',
+    this.padding = const EdgeInsets.symmetric(
+      horizontal: Tokens.pageMarginPhone,
+      vertical: Tokens.s12,
+    ),
   });
 
   final String title;
@@ -26,13 +30,14 @@ class ScreenHeader extends StatelessWidget {
 
   final String backLabel;
 
+  /// Set to zero when the header sits inside a page's content column, so the
+  /// back arrow aligns to that column's left edge.
+  final EdgeInsetsGeometry padding;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Tokens.pageMarginPhone,
-        vertical: Tokens.s12,
-      ),
+      padding: padding,
       child: Row(
         children: <Widget>[
           Semantics(

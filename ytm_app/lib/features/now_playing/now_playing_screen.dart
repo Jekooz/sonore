@@ -102,8 +102,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       top: false,
       child: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.escape):
-              () => _setPanel(_NowPlayingPanel.none),
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              _setPanel(_NowPlayingPanel.none),
         },
         child: Focus(
           focusNode: _escapeNode,
@@ -177,7 +177,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 /// takes whatever height the fixed controls leave, capped by
 /// [Tokens.artworkMaxDesktop], and the control block keeps its own compact,
 /// fixed heights — which is what keeps the screen scroll-free at every size.
-class _PlayerColumn extends ConsumerWidget {
+class _PlayerColumn extends ConsumerStatefulWidget {
   const _PlayerColumn({
     required this.state,
     required this.track,
@@ -191,9 +191,35 @@ class _PlayerColumn extends ConsumerWidget {
   final ValueChanged<_NowPlayingPanel> onPanel;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PlayerColumn> createState() => _PlayerColumnState();
+}
+
+/// The column's one shared measurement: how wide the artwork actually
+/// rendered. The seek row, transport and secondary actions follow it, so the
+/// controls sit inside the art's own silhouette instead of spilling past it.
+class _PlayerColumnState extends ConsumerState<_PlayerColumn> {
+  final ValueNotifier<double> _artSide = ValueNotifier<double>(
+    Tokens.transportMaxWidth,
+  );
+
+  @override
+  void dispose() {
+    _artSide.dispose();
+    super.dispose();
+  }
+
+  void _reportArtSide(double side) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _artSide.value != side) _artSide.value = side;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final ArtworkResolver artwork = ref.watch(artworkResolverProvider);
     final PlaybackController controller = ref.read(playbackProvider.notifier);
+    final PlaybackState state = widget.state;
+    final Track track = widget.track;
 
     return Padding(
       // The controls stop at the floating chrome; nothing below is scrollable
@@ -203,88 +229,99 @@ class _PlayerColumn extends ConsumerWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
           child: Column(
-          children: <Widget>[
-            // Artwork: elastic, capped, centered. Size = the smaller of the
-            // leftover width and the leftover height, so it can never push
-            // the control block out of the viewport.
-            Flexible(
-              child: Center(
-                child: LayoutBuilder(
-                  builder: (BuildContext context, BoxConstraints c) {
-                    final double side = math.min(
-                      math.min(
-                        c.maxWidth - Tokens.s48,
-                        c.maxHeight - Tokens.s24,
-                      ),
-                      Tokens.artworkMaxDesktop,
-                    ).clamp(Tokens.s16, Tokens.artworkMaxDesktop);
-                    return ArtTile(
-                      size: side.isFinite ? side : Tokens.s16,
-                      radius: Tokens.rLarge,
-                      image: artwork(track.artworkUrl),
-                    );
-                  },
+            children: <Widget>[
+              // Artwork: elastic, capped, centered. Size = the smaller of the
+              // leftover width and the leftover height, so it can never push
+              // the control block out of the viewport.
+              Flexible(
+                child: Center(
+                  child: LayoutBuilder(
+                    builder: (BuildContext context, BoxConstraints c) {
+                      final double side = math
+                          .min(
+                            math.min(
+                              c.maxWidth - Tokens.s48,
+                              c.maxHeight - Tokens.s32,
+                            ),
+                            Tokens.artworkMaxDesktop,
+                          )
+                          .clamp(Tokens.s16, Tokens.artworkMaxDesktop);
+                      final double rendered = side.isFinite ? side : Tokens.s16;
+                      _reportArtSide(rendered);
+                      return ArtTile(
+                        size: rendered,
+                        radius: Tokens.rLarge,
+                        image: artwork(track.artworkUrl),
+                      );
+                    },
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Tokens.s24,
-                Tokens.s16,
-                Tokens.s24,
-                0,
-              ),
-              child: Column(
-                children: <Widget>[
-                  Text(
-                    track.title,
-                    style: Tokens.nowPlayingTitle,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: Tokens.s4),
-                  Text(
-                    track.subtitle,
-                    style: Tokens.subtitle,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            // Transport, seek and secondary actions share one centered column
-            // that never widens beyond the transport cap on a wide window.
-            ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: Tokens.transportMaxWidth,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Tokens.s16),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Tokens.s24,
+                  Tokens.s16,
+                  Tokens.s24,
+                  0,
+                ),
                 child: Column(
                   children: <Widget>[
-                    const SizedBox(height: Tokens.s16),
-                    _SeekRow(state: state),
-                    const SizedBox(height: Tokens.s16),
-                    const TransportPill(),
-                    const SizedBox(height: Tokens.s12),
-                    _SecondaryActions(
-                      track: track,
-                      panel: panel,
-                      onPanel: onPanel,
-                      onToggleLike: controller.toggleLike,
+                    Text(
+                      track.title,
+                      style: Tokens.nowPlayingTitle,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: Tokens.s24),
+                    const SizedBox(height: Tokens.s4),
+                    Text(
+                      track.subtitle,
+                      style: Tokens.subtitle,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
+              // Seek, transport and secondary actions share one centered column
+              // as wide as the artwork honestly is — never the loose transport
+              // cap when the art rendered smaller.
+              ValueListenableBuilder<double>(
+                valueListenable: _artSide,
+                builder:
+                    (BuildContext context, double side, Widget? controls) =>
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: math.min(Tokens.transportMaxWidth, side),
+                          ),
+                          child: controls,
+                        ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Tokens.s16),
+                  child: Column(
+                    children: <Widget>[
+                      const SizedBox(height: Tokens.s16),
+                      _SeekRow(state: state),
+                      const SizedBox(height: Tokens.s16),
+                      const TransportPill(),
+                      const SizedBox(height: Tokens.s12),
+                      _SecondaryActions(
+                        track: track,
+                        panel: widget.panel,
+                        onPanel: widget.onPanel,
+                        onToggleLike: controller.toggleLike,
+                      ),
+                      const SizedBox(height: Tokens.s24),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 }
 
@@ -323,7 +360,7 @@ class _SecondaryActions extends StatelessWidget {
           onPressed: onToggleLike,
         ),
         _IconAction(
-          icon: AppIcons.textAa,
+          icon: AppIcons.quotes,
           active: panel == _NowPlayingPanel.lyrics,
           label: 'Lyrics',
           onPressed: () => _switchPanel(_NowPlayingPanel.lyrics),
@@ -454,10 +491,7 @@ class _SidePanel extends StatelessWidget {
         builder: (BuildContext context, double t, Widget? inner) {
           return Transform.translate(
             offset: Offset(t * travel, 0),
-            child: Opacity(
-              opacity: (1 - t).clamp(0.0, 1.0),
-              child: inner,
-            ),
+            child: Opacity(opacity: (1 - t).clamp(0.0, 1.0), child: inner),
           );
         },
         child: Padding(
@@ -467,10 +501,7 @@ class _SidePanel extends StatelessWidget {
             child: GlassSurface(
               tier: GlassTier.regular,
               radius: Tokens.rLarge,
-              child: Material(
-                type: MaterialType.transparency,
-                child: child,
-              ),
+              child: Material(type: MaterialType.transparency, child: child),
             ),
           ),
         ),
@@ -510,10 +541,7 @@ class _BottomPanel extends StatelessWidget {
             final double travel = MediaQuery.sizeOf(context).height / 2;
             return Transform.translate(
               offset: Offset(0, t * travel),
-              child: Opacity(
-                opacity: (1 - t).clamp(0.0, 1.0),
-                child: inner,
-              ),
+              child: Opacity(opacity: (1 - t).clamp(0.0, 1.0), child: inner),
             );
           },
           child: LayoutBuilder(
@@ -543,9 +571,7 @@ class _BottomPanel extends StatelessWidget {
                           // below keeps its own scroll unaffected — the
                           // gesture arenas never fight.
                           _SheetGrip(onDismiss: onDismiss),
-                          Expanded(
-                            child: child,
-                          ),
+                          Expanded(child: child),
                         ],
                       ),
                     ),
@@ -621,4 +647,3 @@ class _NowPlayingSkeleton extends StatelessWidget {
     );
   }
 }
-

@@ -158,7 +158,7 @@ class _EqualizerControls extends ConsumerWidget {
                       // they are read against.
                       Text(
                         '±${equalizerMaxGainDb.round()} dB per band',
-                        style: Tokens.caption,
+                        style: Tokens.subtitle,
                       ),
                       const SizedBox(height: Tokens.s8),
                       SizedBox(
@@ -295,25 +295,30 @@ class _BandControl extends StatelessWidget {
         children: <Widget>[
           Text(
             _gainLabel,
-            style: Tokens.caption,
+            style: Tokens.subtitle,
             textAlign: TextAlign.center,
           ),
           Expanded(
             child: RotatedBox(
               quarterTurns: -1,
-              child: Slider(
-                value: gainDb,
-                min: -equalizerMaxGainDb,
-                max: equalizerMaxGainDb,
-                divisions: 24,
-                label: '${gainDb.round()} dB',
-                activeColor: Tokens.text,
-                inactiveColor: Tokens.surfaceRaised,
-                onChanged: enabled ? onChanged : null,
+              child: SliderTheme(
+                data: Tokens.sliderGlass,
+                child: Slider(
+                  value: gainDb,
+                  min: -equalizerMaxGainDb,
+                  max: equalizerMaxGainDb,
+                  divisions: 24,
+                  label: '${gainDb.round()} dB',
+                  onChanged: enabled ? onChanged : null,
+                ),
               ),
             ),
           ),
-          Text(_frequencyLabel, style: Tokens.caption, textAlign: TextAlign.center),
+          Text(
+            _frequencyLabel,
+            style: Tokens.subtitle,
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );

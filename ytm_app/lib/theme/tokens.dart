@@ -183,10 +183,8 @@ class Tokens {
 
   /// The playing-track variant. There is no accent anymore, so the playing
   /// row reads through weight and brightness rather than hue.
-  static TextStyle get rowTitleActive => rowTitle.copyWith(
-        fontWeight: FontWeight.w700,
-        color: text,
-      );
+  static TextStyle get rowTitleActive =>
+      rowTitle.copyWith(fontWeight: FontWeight.w700, color: text);
 
   static const TextStyle subtitle = TextStyle(
     fontFamily: fontFamily,
@@ -233,8 +231,8 @@ class Tokens {
   /// squircles, everything else a plain rounded rectangle.
   static OutlinedBorder shapeFor(double radius) =>
       (radius == rCard || radius == rGlassSmall || radius == rLarge)
-          ? squircle(radius)
-          : rounded(radius);
+      ? squircle(radius)
+      : rounded(radius);
 
   /// Full-radius pill used by buttons, nav pill, transport controls.
   static const OutlinedBorder shapePill = StadiumBorder();
@@ -462,6 +460,37 @@ class Tokens {
   /// whisper-thin track by default that thickens under the pointer.
   static const double seekBarThicknessCompact = 2;
   static const double seekBarThicknessCompactActive = 3;
+
+  // --------------------------------------------------------------- Controls ---
+
+  /// The resting fill of round controls (switches, sliders): a light track
+  /// over glass, visible on any panel tier but quieter than the engaged fill.
+  static const Color controlTrackRest = Color(0x1FFFFFFF);
+
+  /// Slider thumbs stay rounded at 8px: grabbable without ballooning over
+  /// the thin tracks.
+  static const double sliderThumbRadius = 8;
+
+  /// The round controls' one slider look: light translucent track at rest,
+  /// white fill while engaged, a grabbable thumb and the seek bar's line
+  /// weight, so sliders and scrubbers read as one family.
+  static const SliderThemeData sliderGlass = SliderThemeData(
+    trackHeight: seekBarThickness,
+    activeTrackColor: text,
+    inactiveTrackColor: controlTrackRest,
+    thumbColor: text,
+    thumbShape: RoundSliderThumbShape(
+      elevation: 2,
+      enabledThumbRadius: sliderThumbRadius,
+    ),
+    overlayColor: glassThin,
+  );
+
+  /// The switches' one hairline: the rest-state rim the panel shows behind
+  /// the track. Per-control colors stay on the widgets themselves.
+  static const SwitchThemeData switchRim = SwitchThemeData(
+    trackOutlineWidth: WidgetStatePropertyAll<double?>(borderWidth),
+  );
 
   /// The compact scrubber's hit area — smaller than a full touch target,
   /// because the bar's transport buttons carry the touch interactions, and a

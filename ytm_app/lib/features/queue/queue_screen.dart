@@ -55,7 +55,9 @@ class QueueScreen extends ConsumerWidget {
                 ),
               )
             else
-              Expanded(child: _QueueBody(state: state, controller: controller)),
+              Expanded(
+                child: _QueueBody(state: state, controller: controller),
+              ),
           ],
         ),
       ),
@@ -83,22 +85,25 @@ class _QueueBody extends ConsumerWidget {
         // mode the transport's autoplay behaviour reads.
         Padding(
           padding: EdgeInsets.symmetric(horizontal: margin),
-          child: SwitchListTile(
-            value: state.autoplay,
-            activeTrackColor: Tokens.text,
-            activeThumbColor: Tokens.bg,
-            inactiveThumbColor: Tokens.textMuted,
-            inactiveTrackColor: Tokens.surfaceRaised,
-            trackOutlineColor: const WidgetStatePropertyAll<Color>(
-              Tokens.transparent,
+          child: SwitchTheme(
+            data: Tokens.switchRim,
+            child: SwitchListTile(
+              value: state.autoplay,
+              activeTrackColor: Tokens.text,
+              activeThumbColor: Tokens.bg,
+              inactiveThumbColor: Tokens.textMuted,
+              inactiveTrackColor: Tokens.controlTrackRest,
+              trackOutlineColor: const WidgetStatePropertyAll<Color>(
+                Tokens.border,
+              ),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Autoplay', style: Tokens.rowTitle),
+              subtitle: const Text(
+                'Keeps playing real recommendations when the queue runs out.',
+                style: Tokens.caption,
+              ),
+              onChanged: controller.setAutoplay,
             ),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Autoplay', style: Tokens.rowTitle),
-            subtitle: const Text(
-              'Keeps playing real recommendations when the queue runs out.',
-              style: Tokens.caption,
-            ),
-            onChanged: controller.setAutoplay,
           ),
         ),
         if (state.shuffle)
@@ -125,9 +130,7 @@ class _QueueBody extends ConsumerWidget {
           ),
         ),
         _SectionLabel(
-          upNext.isEmpty
-              ? 'Nothing is up next'
-              : 'Next up · ${upNext.length}',
+          upNext.isEmpty ? 'Nothing is up next' : 'Next up · ${upNext.length}',
         ),
         Expanded(
           child: upNext.isEmpty
@@ -194,7 +197,8 @@ class _QueueBody extends ConsumerWidget {
     final bool? confirmed = await confirmDialog(
       context,
       title: 'Clear the queue?',
-      body: 'Playback stops and the queue is emptied. Your music, likes and '
+      body:
+          'Playback stops and the queue is emptied. Your music, likes and '
           'sign-in are not affected.',
       confirmLabel: 'Clear',
     );

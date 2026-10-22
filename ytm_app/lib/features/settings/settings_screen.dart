@@ -374,29 +374,31 @@ class _SwitchRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Monochrome glass styling: a filled white track with the inverted dark
-    // thumb when on, and no outline — the usual system-colored default would
-    // read as a second accent the glass system does not have.
+    // thumb when on. At rest the track is a light translucent fill with a
+    // hairline rim and a muted thumb — visible against the panel, but clearly
+    // quieter than the engaged state, and never a system accent color.
     return Semantics(
       toggled: value,
       label: title,
-      child: SwitchListTile(
-        value: value,
-        activeTrackColor: Tokens.text,
-        activeThumbColor: Tokens.bg,
-        inactiveThumbColor: Tokens.textMuted,
-        inactiveTrackColor: Tokens.surfaceRaised,
-        trackOutlineColor: const WidgetStatePropertyAll<Color>(
-          Tokens.transparent,
+      child: SwitchTheme(
+        data: Tokens.switchRim,
+        child: SwitchListTile(
+          value: value,
+          activeTrackColor: Tokens.text,
+          activeThumbColor: Tokens.bg,
+          inactiveThumbColor: Tokens.textMuted,
+          inactiveTrackColor: Tokens.controlTrackRest,
+          trackOutlineColor: const WidgetStatePropertyAll<Color>(Tokens.border),
+          tileColor: Tokens.transparent,
+          // Hover, pressed and focus states share one glass fill overlay.
+          overlayColor: const WidgetStatePropertyAll<Color>(Tokens.glassThin),
+          // No inset of its own: the row shares the list's content column, so
+          // the control sits on the same right edge the notes end on.
+          contentPadding: EdgeInsets.zero,
+          title: Text(title, style: Tokens.rowTitle),
+          subtitle: Text(subtitle, style: Tokens.subtitle),
+          onChanged: onChanged,
         ),
-        tileColor: Tokens.transparent,
-        // Hover, pressed and focus states share one glass fill overlay.
-        overlayColor: const WidgetStatePropertyAll<Color>(Tokens.glassThin),
-        // No inset of its own: the row shares the list's content column, so
-        // the control sits on the same right edge the notes end on.
-        contentPadding: EdgeInsets.zero,
-        title: Text(title, style: Tokens.rowTitle),
-        subtitle: Text(subtitle, style: Tokens.subtitle),
-        onChanged: onChanged,
       ),
     );
   }
@@ -436,21 +438,41 @@ class _SliderRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(subtitle, style: Tokens.subtitle),
-            ConstrainedBox(
-              constraints: const BoxConstraints(
-                // A thumb travelling the full content width on a 1920 window
-                // is unusable mouse tuning; the control gets a sane maximum.
-                maxWidth: Tokens.formControlMaxWidth,
-              ),
-              child: Slider(
-                value: value.clamp(min, max),
-                min: min,
-                max: max,
-                divisions: divisions,
-                label: label,
-                activeColor: Tokens.text,
-                inactiveColor: Tokens.surfaceRaised,
-                onChanged: onChanged,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  // A thumb travelling the full content width on a 1920 window
+                  // is unusable mouse tuning; the control gets a sane maximum.
+                  maxWidth: Tokens.formControlMaxWidth,
+                ),
+                child: Row(
+                  children: <Widget>[
+                    // Size hints at both ends: the glyph is the smallest the
+                    // slider picks, then the standard, then the chosen value.
+                    ExcludeSemantics(child: Text('A', style: Tokens.caption)),
+                    const SizedBox(width: Tokens.s12),
+                    Expanded(
+                      child: SliderTheme(
+                        data: Tokens.sliderGlass,
+                        child: Slider(
+                          value: value.clamp(min, max),
+                          min: min,
+                          max: max,
+                          divisions: divisions,
+                          label: label,
+                          onChanged: onChanged,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: Tokens.s12),
+                    ExcludeSemantics(child: Text('A', style: Tokens.rowTitle)),
+                    const SizedBox(width: Tokens.s12),
+                    ExcludeSemantics(
+                      child: Text(label, style: Tokens.subtitle),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

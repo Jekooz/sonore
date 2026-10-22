@@ -94,6 +94,10 @@ class Tokens {
   /// Playing bar.
   static const double ambientBottomCalm = 128;
 
+  /// Shelves with fewer items than this are hidden rather than shown looking
+  /// accidentally truncated.
+  static const int minRailItems = 3;
+
   /// Shadow under floating chrome (black 45%).
   static const Color shadow = Color(0x73000000);
 

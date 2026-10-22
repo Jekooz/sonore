@@ -156,6 +156,12 @@ class _HomeRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A rail the service short-changed looks broken, not curated: one or two
+    // cards in an otherwise full grid reads as an error state. Sections show
+    // only with enough content to fill the layout.
+    if (row.items.length < Tokens.minRailItems) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: Tokens.s24),
       child: Column(

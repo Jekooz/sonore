@@ -404,6 +404,25 @@ String homeWithLongTitles() => jsonEncode(<Map<String, dynamic>>[
               },
             ],
           },
+          // Filler so the shelf clears the minimum-rail threshold and still
+          // renders: this test is about card typography, not about shelves
+          // that are too thin to show.
+          for (final String id in <String>['song0000004', 'song0000005'])
+            <String, dynamic>{
+              'videoId': id,
+              'title': 'Filler $id',
+              'artists': <Map<String, String>>[
+                <String, String>{'name': 'Filler Artist'},
+              ],
+              'duration': '3:00',
+              'duration_seconds': 180,
+              'thumbnails': <Map<String, Object>>[
+                <String, Object>{
+                  'url': 'https://example.invalid/$id.jpg',
+                  'width': 500,
+                },
+              ],
+            },
         ],
       },
     ]);

@@ -2,10 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/api_client.dart';
 import '../../data/models.dart';
 import '../../data/ytm_repository.dart';
+
+/// The key recent queries persist under (cross-launch, platform store).
+const String _kRecentSearches = 'search.recentQueries';
+const int _recentLimit = 8;
 
 /// Search's own state: the query, whether a request is in flight, the grouped
 /// results and recent queries.
@@ -68,7 +73,22 @@ class MediaSearchController extends Notifier<SearchState> {
   @override
   SearchState build() {
     ref.onDispose(() => _debounce?.cancel());
+    _loadPersistedRecent();
     return const SearchState();
+  }
+
+  /// Restores the persisted recent queries. A store that fails to open (a
+  /// test harness, a locked-down platform) keeps search session-scoped
+  /// rather than failing the screen.
+  Future<void> _loadPersistedRecent() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final List<String>? stored = prefs.getStringList(_kRecentSearches);
+      if (stored == null || stored.isEmpty) return;
+      state = SearchState(query: state.query, recent: stored);
+    } catch (_) {
+      // Session-scoped recents.
+    }
   }
 
   /// Called as the user types: debounces, then searches.
@@ -84,11 +104,7 @@ class MediaSearchController extends Notifier<SearchState> {
       return;
     }
 
-    state = state.copyWith(
-      query: query,
-      isSearching: true,
-      clearError: true,
-    );
+    state = state.copyWith(query: query, isSearching: true, clearError: true);
     _debounce = Timer(const Duration(milliseconds: 300), () => _run(trimmed));
   }
 
@@ -97,19 +113,16 @@ class MediaSearchController extends Notifier<SearchState> {
     _debounce?.cancel();
     final String trimmed = query.trim();
     if (trimmed.isEmpty) return;
-    state = state.copyWith(
-      query: query,
-      isSearching: true,
-      clearError: true,
-    );
+    state = state.copyWith(query: query, isSearching: true, clearError: true);
     await _run(trimmed);
   }
 
   Future<void> _run(String query) async {
     final int issued = ++_issued;
     try {
-      final SearchResults results =
-          await ref.read(ytmRepositoryProvider).search(query);
+      final SearchResults results = await ref
+          .read(ytmRepositoryProvider)
+          .search(query);
       if (issued != _issued) return; // a newer query already answered
       state = state.copyWith(
         results: results,
@@ -137,16 +150,27 @@ class MediaSearchController extends Notifier<SearchState> {
       query,
       ...state.recent.where((String entry) => entry != query),
     ];
-    // Session-scoped: there is no local store in this phase, so a restart
-    // starts empty rather than pretending to remember.
-    return next.take(8).toList(growable: false);
+    final List<String> capped = next.take(_recentLimit).toList(growable: false);
+    _persist(capped);
+    return capped;
+  }
+
+  /// Writes the list straight through on every change, so a restarted app
+  /// reopens with the last few queries.
+  Future<void> _persist(List<String> recent) async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_kRecentSearches, recent);
+    } catch (_) {
+      // Session-scoped recents.
+    }
   }
 }
 
 final NotifierProvider<MediaSearchController, SearchState> searchProvider =
     NotifierProvider<MediaSearchController, SearchState>(
-  MediaSearchController.new,
-);
+      MediaSearchController.new,
+    );
 
 /// The search field's focus node, so Ctrl+K can move focus into it from
 /// anywhere (spec: keyboard shortcuts).

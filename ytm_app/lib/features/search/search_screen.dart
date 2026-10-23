@@ -9,6 +9,7 @@ import '../../ui/glass_surface.dart';
 import '../../ui/media_rows.dart';
 import '../../ui/pressable.dart';
 import '../../ui/screen_states.dart';
+import '../../ui/vertical_focus_walk.dart';
 import '../shell/app_shell.dart';
 import 'search_controller.dart';
 
@@ -37,12 +38,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final SearchState state = ref.watch(searchProvider);
-    final MediaSearchController controller =
-        ref.read(searchProvider.notifier);
+    final MediaSearchController controller = ref.read(searchProvider.notifier);
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin =
-        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+    final double margin = isDesktop
+        ? Tokens.pageMarginDesktop
+        : Tokens.pageMarginPhone;
 
     // Ctrl+K focuses the field; the node lives in the notifier so the shell's
     // shortcut can reach it without a global key. The request is handled after
@@ -60,39 +61,46 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       loading: const ListSkeleton(),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: Tokens.contentMaxWidth,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  margin,
-                  Tokens.s16,
-                  margin,
-                  Tokens.s8,
+          constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
+          // One traversal group for the field and its results: the arrows the
+          // rows delegate to need a common scope, and the field being first in
+          // reading order is what lets Tab land on it first.
+          child: FocusTraversalGroup(
+            policy: ReadingOrderTraversalPolicy(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    margin,
+                    Tokens.s16,
+                    margin,
+                    Tokens.s8,
+                  ),
+                  // ArrowDown from the field walks into the results.
+                  child: VerticalFocusWalk(
+                    child: _SearchField(
+                      controller: _field,
+                      focusNode: focusNode,
+                      hint: 'Search songs, albums, artists, playlists',
+                      onChanged: controller.onQueryChanged,
+                      onSubmitted: controller.submit,
+                      onClear: () {
+                        _field.clear();
+                        controller.clearQuery();
+                        focusNode.requestFocus();
+                      },
+                    ),
+                  ),
                 ),
-                child: _SearchField(
-                  controller: _field,
-                  focusNode: focusNode,
-                  hint: 'Search songs, albums, artists, playlists',
-                  onChanged: controller.onQueryChanged,
-                  onSubmitted: controller.submit,
-                  onClear: () {
-                    _field.clear();
-                    controller.clearQuery();
-                    focusNode.requestFocus();
-                  },
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: margin),
+                    child: _SearchBody(state: state, controller: controller),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: margin),
-                  child: _SearchBody(state: state, controller: controller),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -146,8 +154,9 @@ class _SearchField extends StatelessWidget {
                   hintStyle: Tokens.subtitle,
                   border: InputBorder.none,
                   isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: Tokens.s16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: Tokens.s16,
+                  ),
                 ),
               ),
             ),
@@ -237,27 +246,29 @@ class _RecentSearches extends StatelessWidget {
           child: Text('Recent searches', style: Tokens.sectionHeader),
         ),
         for (final String query in recent)
-          Pressable(
-            onTap: () => onSelected(query),
-            child: SizedBox(
-              height: Tokens.minTouchTarget,
-              child: Row(
-                children: <Widget>[
-                  const Icon(
-                    AppIcons.clockCounterClockwise,
-                    size: Tokens.iconSize,
-                    color: Tokens.textMuted,
-                  ),
-                  const SizedBox(width: Tokens.s12),
-                  Expanded(
-                    child: Text(
-                      query,
-                      style: Tokens.rowTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          VerticalFocusWalk(
+            child: Pressable(
+              onTap: () => onSelected(query),
+              child: SizedBox(
+                height: Tokens.minTouchTarget,
+                child: Row(
+                  children: <Widget>[
+                    const Icon(
+                      AppIcons.clockCounterClockwise,
+                      size: Tokens.iconSize,
+                      color: Tokens.textMuted,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: Tokens.s12),
+                    Expanded(
+                      child: Text(
+                        query,
+                        style: Tokens.rowTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -303,7 +314,9 @@ class _Group extends StatelessWidget {
           child: Text(title, style: Tokens.sectionHeader),
         ),
         for (final MediaItem item in items)
-          MediaRow(item: item, siblings: items),
+          VerticalFocusWalk(
+            child: MediaRow(item: item, siblings: items),
+          ),
       ],
     );
   }

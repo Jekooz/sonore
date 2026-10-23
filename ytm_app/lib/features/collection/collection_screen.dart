@@ -33,27 +33,35 @@ class CollectionScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        // Back returns to the list this page was opened from.
-        const Padding(
-          padding: EdgeInsets.only(left: Tokens.s8, top: Tokens.s8),
-          child: Align(alignment: Alignment.centerLeft, child: _BackButton()),
-        ),
-        Expanded(
-          child: ConnectionGate(
-            loading: const _CollectionLoading(),
-            child: DataStateView<Collection>(
-              value: ref.watch(collectionProvider(target)),
-              onRetry: () => ref.invalidate(collectionProvider),
+    return ContentColumn(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          // Back returns to the list this page was opened from. It rides on
+          // the same shared column as the header art and the rows below it,
+          // inset by the same page margin — not a one-off offset hugging the
+          // window edge while the content centers.
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: Tokens.pageMargin(MediaQuery.sizeOf(context).width),
+              vertical: Tokens.s8,
+            ),
+            child: Align(alignment: Alignment.centerLeft, child: _BackButton()),
+          ),
+          Expanded(
+            child: ConnectionGate(
               loading: const _CollectionLoading(),
-              data: (Collection collection) =>
-                  _CollectionView(collection: collection),
+              child: DataStateView<Collection>(
+                value: ref.watch(collectionProvider(target)),
+                onRetry: () => ref.invalidate(collectionProvider),
+                loading: const _CollectionLoading(),
+                data: (Collection collection) =>
+                    _CollectionView(collection: collection),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

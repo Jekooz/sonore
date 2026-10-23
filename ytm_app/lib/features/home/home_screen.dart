@@ -31,7 +31,8 @@ class HomeScreen extends ConsumerWidget {
         onRetry: () => ref.invalidate(homeProvider),
         isEmpty: (List<HomeRow> rows) => rows.isEmpty,
         emptyMessage: 'Nothing to show on Home yet.',
-        emptyFootnote: 'Listen to a few tracks and your mixes will appear here.',
+        emptyFootnote:
+            'Listen to a few tracks and your mixes will appear here.',
         loading: const ListSkeleton(),
         data: (List<HomeRow> rows) => _HomeContent(rows: rows),
       ),
@@ -83,9 +84,7 @@ class _HomeContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin = Tokens.pageMargin(
-      MediaQuery.sizeOf(context).width,
-    );
+    final double margin = Tokens.pageMargin(MediaQuery.sizeOf(context).width);
     final MediaItem? featured = featuredRelease(rows);
     final List<MediaItem> popular = popularTracks(rows);
     // Desktop only; and only when there is a real track to list.
@@ -135,7 +134,9 @@ class _HomeContent extends ConsumerWidget {
                         ),
                       ),
                       if (featured != null) HomeHeroBanner(item: featured),
-                      for (final HomeRow row in rows) _HomeRail(row: row),
+                      for (final (HomeRow row, List<String?> tags)
+                          in _heroCardTags(rows))
+                        _HomeRail(row: row, heroTags: tags),
                     ],
                   ),
                 ),
@@ -149,10 +150,36 @@ class _HomeContent extends ConsumerWidget {
   }
 }
 
+/// First card in reading order gets the artwork hero tag; every later card
+/// showing the same artwork gets none, so the mounted tree never holds two
+/// heroes with one tag.
+List<(HomeRow, List<String?>)> _heroCardTags(List<HomeRow> rows) {
+  final Set<String> seen = <String>{};
+  final List<(HomeRow, List<String?>)> result = <(HomeRow, List<String?>)>[];
+  for (final HomeRow row in rows) {
+    final List<String?> tags = <String?>[];
+    for (final MediaItem item in row.items) {
+      final String url = item.artworkUrl ?? '';
+      if (url.isNotEmpty && seen.add(url)) {
+        tags.add('artwork:$url');
+      } else {
+        tags.add(null);
+      }
+    }
+    result.add((row, tags));
+  }
+  return result;
+}
+
 class _HomeRail extends StatelessWidget {
-  const _HomeRail({required this.row});
+  const _HomeRail({required this.row, required this.heroTags});
 
   final HomeRow row;
+
+  /// Per-card hero tags (`artwork:<url>`), or null where the artwork was
+  /// already tagged by an earlier card on the page — heroes must not share a
+  /// tag within a route.
+  final List<String?> heroTags;
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +207,11 @@ class _HomeRail extends StatelessWidget {
                 shaderCallback: (Rect bounds) => LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
-                  colors: const <Color>[Tokens.text, Tokens.text, Tokens.transparent],
+                  colors: const <Color>[
+                    Tokens.text,
+                    Tokens.text,
+                    Tokens.transparent,
+                  ],
                   stops: <double>[0.0, fadeStart, 1.0],
                 ).createShader(bounds),
                 blendMode: BlendMode.dstIn,
@@ -194,6 +225,7 @@ class _HomeRail extends StatelessWidget {
                     itemBuilder: (BuildContext context, int index) => MediaCard(
                       item: row.items[index],
                       siblings: row.items,
+                      heroTag: heroTags[index],
                     ),
                   ),
                 ),

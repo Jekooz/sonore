@@ -53,9 +53,69 @@ class AppTheme {
         bodyMedium: Tokens.subtitle,
         bodySmall: Tokens.caption,
       ),
-      iconTheme: const IconThemeData(
-        color: Tokens.text,
-        size: Tokens.iconSize,
+      iconTheme: const IconThemeData(color: Tokens.text, size: Tokens.iconSize),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        // The same fade-and-rise on every platform the app ships on — there is
+        // no docker, cupertino or zoom zooming here: one motion language.
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          TargetPlatform.windows: AppPageTransitions(),
+          TargetPlatform.android: AppPageTransitions(),
+          TargetPlatform.macOS: AppPageTransitions(),
+          TargetPlatform.linux: AppPageTransitions(),
+          TargetPlatform.iOS: AppPageTransitions(),
+          TargetPlatform.fuchsia: AppPageTransitions(),
+        },
+      ),
+    );
+  }
+}
+
+/// The app's route transition: a fade in [Tokens.curvePageChange] over
+/// [Tokens.dPageChange], with a low rise so a page settles rather than
+/// slides across the window.
+///
+/// Reduce Motion folds it into a plain cross-fade that completes within
+/// [Tokens.dReduceMotionFade] of the route's own duration window, so no
+/// animation carries a page above the user's preference (spec: "all gated by
+/// Reduce motion").
+class AppPageTransitions extends PageTransitionsBuilder {
+  const AppPageTransitions();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final bool reduced = MediaQuery.disableAnimationsOf(context);
+    final Curve fadeCurve = reduced
+        ? Interval(
+            0,
+            Tokens.dReduceMotionFade.inMilliseconds /
+                route.transitionDuration.inMilliseconds,
+            curve: Curves.linear,
+          )
+        : Tokens.curvePageChange;
+    final Animation<double> fade = animation.drive(
+      CurveTween(curve: fadeCurve),
+    );
+    if (reduced) {
+      return FadeTransition(opacity: fade, child: child);
+    }
+    // The rise is expressed as a fraction of the page height, so the motion
+    // reads identically at every window size.
+    return FadeTransition(
+      opacity: fade,
+      child: SlideTransition(
+        position: animation.drive(
+          Tween<Offset>(
+            begin: const Offset(0, 0.02),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Tokens.curvePageChange)),
+        ),
+        child: child,
       ),
     );
   }

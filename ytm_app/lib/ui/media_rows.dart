@@ -92,7 +92,8 @@ class MediaRow extends ConsumerWidget {
           artImage: ref.watch(artworkResolverProvider)(item.artworkUrl),
           isPlaying: isPlaying,
           onTap: () => openMediaItem(rowContext, ref, item, siblings),
-          trailing: trailing ??
+          trailing:
+              trailing ??
               ContextMenuButton(
                 entries: entries,
                 semanticLabel: 'Actions for ${item.title}',
@@ -103,6 +104,22 @@ class MediaRow extends ConsumerWidget {
   }
 }
 
+/// The card's artwork, optionally wrapped in a [Hero] so it can fly into the
+/// destination collection page. Hero only exists when the screen built this
+/// card with a unique [heroTag].
+class _CardArt extends StatelessWidget {
+  const _CardArt({required this.heroTag, required this.child});
+
+  final String? heroTag;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (heroTag == null) return child;
+    return Hero(tag: heroTag!, child: child);
+  }
+}
+
 /// An artwork card for the Home rails.
 class MediaCard extends ConsumerWidget {
   const MediaCard({
@@ -110,11 +127,17 @@ class MediaCard extends ConsumerWidget {
     required this.item,
     required this.siblings,
     this.isCurrent = false,
+    this.heroTag,
   });
 
   final MediaItem item;
   final List<MediaItem> siblings;
   final bool isCurrent;
+
+  /// Non-null for the first card in a screen's build that shows a given
+  /// artwork, so an artwork can fly into a collection page without ever
+  /// creating duplicate hero tags (Home assigns them first-come).
+  final String? heroTag;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -144,10 +167,13 @@ class MediaCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              ArtTile(
-                size: Tokens.artTileSize,
-                radius: Tokens.rCard,
-                image: ref.watch(artworkResolverProvider)(item.artworkUrl),
+              _CardArt(
+                heroTag: heroTag,
+                child: ArtTile(
+                  size: Tokens.artTileSize,
+                  radius: Tokens.rCard,
+                  image: ref.watch(artworkResolverProvider)(item.artworkUrl),
+                ),
               ),
               const SizedBox(height: Tokens.s8),
               // The text block takes whatever height is left and is allowed to

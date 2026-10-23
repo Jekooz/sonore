@@ -142,12 +142,19 @@ class _CollectionHeader extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          ArtTile(
-            size: Tokens.collectionArtSize,
-            // Artists are pictured in a circle, albums and playlists in a card.
-            radius: isArtist ? Tokens.rLarge : Tokens.rCard,
-            // Through the artwork seam, as everywhere else.
-            image: ref.watch(artworkResolverProvider)(collection.artworkUrl),
+          // The artwork flies in from the card it was opened from: the tags
+          // match ('artwork:<url>') only when a rail card really opened this
+          // page, and no two mounted cards ever share one tag (Home tags only
+          // the first card per artwork).
+          Hero(
+            tag: 'artwork:${collection.artworkUrl}',
+            child: ArtTile(
+              size: Tokens.collectionArtSize,
+              // Artists are pictured in a circle, albums and playlists in a card.
+              radius: isArtist ? Tokens.rLarge : Tokens.rCard,
+              // Through the artwork seam, as everywhere else.
+              image: ref.watch(artworkResolverProvider)(collection.artworkUrl),
+            ),
           ),
           const SizedBox(width: Tokens.s16),
           Expanded(

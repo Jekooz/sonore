@@ -18,3 +18,40 @@ Verdicts written before implementation (per round-3 instructions). Paths relativ
 ## Round-2 leftovers (Part A)
 - A1: playlist header actions are a `Wrap` with `WrapCrossAlignment.center` (`lib/features/collection/collection_screen.dart:176`); at 390 px the lone "…" wraps onto a centered second line. Fix: compact icon-only actions at narrow width so title + actions stay on one row at 800 and 390.
 - A2: Library, playlist/album (collection) and queue pages do not use the shared centered content column (`library_screen.dart:153-159`, `collection_screen.dart:105-111`, `queue_screen.dart:79,317`); no shared `ContentColumn` widget exists — create one and apply.
+
+## Round 3 implementation outcome
+
+Written after implementation, against the verdicts above.
+
+| # | Item | After |
+|---|------|-------|
+| 1 | Window material | DONE. `lib/features/shell/window_material.dart`: Reduce transparency (or OS high contrast) swaps Mica for a solid `Tokens.bg` fill, at boot and live via the Settings toggle (`app.dart` listens + rebuild path). |
+| 2 | Title bar | DONE (app's own snap menu). The OS Snap-layouts flyout is architecturally unavailable over `TitleBarStyle.hidden`; the maximize button's right-click/long-press menu offers Snap left / Snap right / Maximize–Restore (`window_title_bar.dart`), docking via `window_manager` to the work area of the window's own monitor, found with user32 `MonitorFromWindow`+`GetMonitorInfoW` through dart:ffi (`lib/features/shell/window_snap.dart`). |
+| 3 | Android label | Was DONE, unchanged. |
+| 4 | Tokens | DONE. `Tokens.menuWidth`, `liveBadgeBarWidth/Gap`, `skeletonLineBase/Step` added; all audited strays now read from tokens. |
+| 5 | States | DONE. Equalizer error has **Try again** (re-runs the engine write via `applyToEngine`, `equalizer_screen.dart`); the Settings save banner and the startup gate use the designed `Skeleton` loader instead of raw spinners. |
+| 6 | Keyboard | DONE except two documented gaps below. `Pressable` is now a real keyboard control (tab-reachable, Enter/Space activation, keyboard-only focus ring, new `focusRing` tokens); hardware media keys (play/pause, stop, next, previous) answer globally even while typing; search results walk with ↑/↓ (`VerticalFocusWalk` + shared traversal group); recent queries persist across launches (`search.recentQueries`). Gaps: **↑/↓ volume** and **Add to playlist** — see below. |
+| 7 | Search | DONE. Recents persist (shared_preferences, degrades to session-only if the store fails); arrow-key walk from the field into and across the results. |
+| 8 | Motion | DONE. `AppPageTransitions` in `app_theme.dart`: fade+rise, 200 ms, Reduce Motion folds it into a 150 ms cross-fade. Artwork Hero flight Home card → collection page (`_CardArt` + collection header), tags deduped first-come per artwork so the mounted tree never holds duplicates. |
+| 9 | Accessibility | DONE. `TooltipThemeData` tokenized (solid, concentric, border rim); remaining caption-contrast on *user content* swept to subtitle (card subtitle lines); what stays caption is durations, numerals, source attribution — microcopy by design. |
+| 10 | Reduce transparency | DONE. Tooltips solid/tokenized; low-end engage arrives through the Visual quality tier (item C2); window material follows the preference (item 1). |
+
+### Part A leftovers
+- A1: DONE — `collection_screen.dart` header actions fall back in two steps (labels → icons under 360 px → all icons under 240 px, icon-only pills are square 48 px); title and actions share one row at 390 and 800, verified in the re-captured shots.
+- A2: DONE — `lib/ui/content_column.dart` (`ContentColumn`); Library, collection pages and Queue now center/cap at `Tokens.contentMaxWidth` like Home and Search.
+
+### Part C
+- C1: DONE — release APK built (`build/app/outputs/flutter-apk/app-release.apk`, 73.7 MB); `docs/PERF_CHECKLIST.md` documents the five scenarios, what to read and the ≤16 ms / <1% pass bars. Frame-stats overlay: Settings switch, offered in debug/profile only — the engine has no frame timeline in a release build, so real-device frame stats come from `flutter run --profile` (documented).
+- C2: DONE — `VisualQuality` Auto/High/Low in Settings; `core/visual_quality.dart` holds the sustained-jank monitor (rolling ~10 s window, >1 % of frames over 16.7 ms flips Auto to Low, no recovery by design) and the tier resolver. Low thins blur (`Tokens.reducedBlurFactor`), freezes backdrop drift, and solidifies GlassSurface. Auto engages on measured jank; a preset Low is the explicit full fallback.
+- C3: DONE — exactly one `BackdropFilter` site remains (glass_surface.dart); each ambient blob is its own `RepaintBoundary`, so gradient raster work is cached per blob between drift eases.
+
+### Deliberately not implemented (with reasons)
+- **↑/↓ volume keys.** The app has no own volume model — playback follows the OS mixer, and no volume surface exists anywhere in the spec. A keyboard control that adjusts nothing real would be a phantom control, which design.md section H forbids.
+- **"Add to playlist".** The sidecar exposes read-only playlist endpoints (`GET /library/playlists`, `GET /playlist/{id}`) — no add/modify API exists, and `lib/ui/context_menu.dart`'s policy is to never show a menu entry the app cannot perform.
+- **Artwork hero "into Now Playing".** Now Playing is a `StatefulShellRoute` branch, not a pushed route; branch switches create no hero flight. The equivalent flight that *is* real — Home card → collection page — is implemented; Now Playing's art intentionally carries no hero tag so it can never collide with a card's tag on the shared shell route.
+- **OS Snap-layouts flyout.** Windows only shows it over a native caption button; with `TitleBarStyle.hidden` it cannot appear. The app offers the same docking through its own menu (see item 2 above).
+
+### Needs a real device
+- Jank-tier behavior on a physical Android device (monitor thresholds are tuned on the desktop harness).
+- Snap left/right docking (user32 metrics + dpr conversion) on multi-monitor, mixed-DPI Windows setups.
+- Mica fallback appearance on Windows 10 (the in-app side is covered by tokens; the native material itself cannot be verified here).

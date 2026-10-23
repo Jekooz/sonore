@@ -212,17 +212,24 @@ class _BackdropBlobs extends StatelessWidget {
             child: FractionallySizedBox(
               widthFactor: Tokens.ambientBlobExtent,
               heightFactor: Tokens.ambientBlobExtent,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: <Color>[
-                      colors[i].withValues(alpha: Tokens.ambientBlobOpacity),
-                      colors[i].withValues(alpha: 0),
-                    ],
+              child: RepaintBoundary(
+                // Cached as a layer: a blob is a radial gradient that never
+                // changes between drift nudges, so its raster work happens
+                // once per alignment change instead of once per composited
+                // frame while a nudge eases — and the veil and grain above
+                // never re-record them.
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: <Color>[
+                        colors[i].withValues(alpha: Tokens.ambientBlobOpacity),
+                        colors[i].withValues(alpha: 0),
+                      ],
+                    ),
                   ),
+                  child: const SizedBox.expand(),
                 ),
-                child: const SizedBox.expand(),
               ),
             ),
           ),

@@ -247,6 +247,27 @@ class _GlobalShortcuts extends ConsumerWidget {
       return KeyEventResult.handled;
     }
 
+    // Hardware media keys. They are dedicated keys, so they answer even while
+    // a text field has focus, and only when there is a track to act on.
+    final PlaybackState preState = ref.read(playbackProvider);
+    if (preState.hasTrack) {
+      if (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
+          event.logicalKey == LogicalKeyboardKey.mediaPlay ||
+          event.logicalKey == LogicalKeyboardKey.mediaPause ||
+          event.logicalKey == LogicalKeyboardKey.mediaStop) {
+        ref.read(playbackProvider.notifier).togglePlayPause();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.mediaTrackNext) {
+        ref.read(playbackProvider.notifier).next();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.mediaTrackPrevious) {
+        ref.read(playbackProvider.notifier).previous();
+        return KeyEventResult.handled;
+      }
+    }
+
     // Everything below would be wrong to trigger while typing.
     if (_isTyping()) return KeyEventResult.ignored;
 

@@ -815,7 +815,15 @@ void main() {
       expect(switchValue(tester, 'Shuffle'), isFalse);
       expect(switchValue(tester, 'Autoplay'), isTrue);
 
+      // Visual quality and (debug-only) frame-stats rows sit above, so the
+      // Playback rows can sit below the fold of an 800px window.
+      await tester.ensureVisible(find.widgetWithText(SwitchListTile, 'Shuffle'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(SwitchListTile, 'Shuffle'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.widgetWithText(SwitchListTile, 'Autoplay'),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(SwitchListTile, 'Autoplay'));
       await tester.pumpAndSettle();

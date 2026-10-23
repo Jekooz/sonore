@@ -11,6 +11,7 @@ import 'audio/playback_engine.dart';
 import 'audio/playback_service.dart';
 import 'audio/track.dart';
 import 'features/shell/window_material.dart';
+import 'features/shell/window_snap.dart';
 import 'core/app_identity.dart';
 import 'core/app_settings.dart';
 import 'core/settings_persistence.dart';
@@ -186,6 +187,8 @@ class _WindowsTitleBarState extends State<WindowsTitleBar> {
       onMinimize: windowManager.minimize,
       onMaximizeToggle: _toggleMaximize,
       onClose: windowManager.close,
+      onSnapLeft: WindowSnap.snapLeft,
+      onSnapRight: WindowSnap.snapRight,
     );
   }
 }

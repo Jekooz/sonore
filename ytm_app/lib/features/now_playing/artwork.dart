@@ -31,8 +31,14 @@ Future<List<Color>> _loadAmbientPalette(String url) async {
     CachedNetworkImageProvider(url),
     maximumColorCount: Tokens.ambientColorCount,
   );
-  return generator.paletteColors
-      .take(Tokens.ambientColorCount)
-      .map((PaletteColor entry) => entry.color)
-      .toList(growable: false);
+  // The lift alone can be one hue — quantization orders by population, so a
+  // mono-party album cover hands back three close colors and a flat wash. The
+  // diversifier appends analogous tones (see Tokens) for exactly that case;
+  // genuinely multi-hue lifts pass through untouched.
+  return Tokens.diversifyAmbientHues(
+    generator.paletteColors
+        .take(Tokens.ambientColorCount)
+        .map((PaletteColor entry) => entry.color)
+        .toList(growable: false),
+  );
 }

@@ -5,9 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 // Riverpod 3 exposes `Override` only through `misc.dart`.
 import 'package:riverpod/misc.dart' show Override;
 import 'package:ytm_app/core/app_settings.dart';
+import 'package:ytm_app/audio/track.dart';
 
 import '../support/harness.dart';
 import '../support/recorded_sidecar.dart';
+import '../support/sample_artwork.dart' show kMulticolorFixtureUrl;
 
 /// The visual audit capture: every audited screen at every audited width.
 ///
@@ -38,15 +40,24 @@ void main() {
   ];
 
   for (final (String name, Size size) in widths) {
-    testWidgets('home ${size.width}x${size.height}', (WidgetTester tester) async {
-      await pumpAtSize(tester, appScope(initialLocation: '/home', queue: testQueue()), size: size);
+    testWidgets('home ${size.width}x${size.height}', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/home', queue: testQueue()),
+        size: size,
+      );
       await _capture(tester, 'home_$name');
     });
 
     testWidgets('search ${size.width}x${size.height}', (
       WidgetTester tester,
     ) async {
-      final Widget app = appScope(initialLocation: '/search', queue: testQueue());
+      final Widget app = appScope(
+        initialLocation: '/search',
+        queue: testQueue(),
+      );
       await pumpAtSize(tester, app, size: size);
       await tester.enterText(find.byType(TextField), 'thriller');
       // Waits out the search debounce, then the request.
@@ -143,12 +154,56 @@ void main() {
       await _capture(tester, 'reduce_transparency_$name');
     });
   }
+
+  // The ambient palette is artwork-derived: these two captures pin a
+  // multicolor fixture (the lagoon variant: blue, cyan and navy) as the
+  // playing track so Home and Now Playing visibly carry more than one hue,
+  // instead of a wash from a single dominant color.
+  const List<Track> multicolorQueue = <Track>[
+    Track(
+      id: 'multicolor-fixture',
+      title: 'Prism Riding Hood',
+      artist: 'Aurora Lane',
+      album: 'Spectra',
+      duration: Duration(minutes: 3, seconds: 12),
+      artworkUrl: kMulticolorFixtureUrl,
+    ),
+  ];
+
+  testWidgets('home with the multicolor artwork fixture', (
+    WidgetTester tester,
+  ) async {
+    await pumpAtSize(
+      tester,
+      appScope(initialLocation: '/home', queue: multicolorQueue),
+      size: const Size(1280, 800),
+    );
+    await _capture(tester, 'home_multicolor_desktop');
+  });
+
+  for (final (String name, Size size) in <(String, Size)>[
+    ('desktop', const Size(1280, 800)),
+    ('narrow', const Size(800, 600)),
+  ]) {
+    testWidgets('now playing with the multicolor artwork fixture ($name)', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/now-playing', queue: multicolorQueue),
+        size: size,
+      );
+      await _capture(tester, 'now_playing_multicolor_$name');
+    });
+  }
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
   final Size size = tester.view.physicalSize / tester.view.devicePixelRatio;
   await expectLater(
     find.byType(MaterialApp),
-    matchesGoldenFile('goldens/${name}_${size.width.toInt()}x${size.height.toInt()}.png'),
+    matchesGoldenFile(
+      'goldens/${name}_${size.width.toInt()}x${size.height.toInt()}.png',
+    ),
   );
 }

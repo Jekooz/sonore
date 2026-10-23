@@ -63,9 +63,16 @@ List<Color> sampleArtworkColors(String? url) {
   return <Color>[variant.dominant, variant.lift, variant.deep];
 }
 
+/// The fixture URL the visual audit captures use to demonstrate a
+/// *multicolor* artwork: pinned to the lagoon variant (blue, cyan, navy —
+/// separable hue bands) instead of hash luck, so the ambient shots always
+/// show a palette with more than one hue.
+const String kMulticolorFixtureUrl = 'https://example.invalid/art/multicolor.jpg';
+
 /// Resolve the variant a URL encodes. Stable per URL, varied across the set.
 _Variant _variantFor(String? url) {
   if (url == null || url.isEmpty) return _variants.first;
+  if (url == kMulticolorFixtureUrl) return _variants[2]; // lagoon
   final int hash = url.hashCode.abs();
   return _variants[hash % _variants.length];
 }

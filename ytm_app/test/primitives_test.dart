@@ -33,6 +33,62 @@ Widget _host(Widget child, {bool highContrast = false}) {
 }
 
 void main() {
+  group('Ambient hue synthesis', () {
+    int countHueBands(List<Color> colors) {
+      final List<double> bands = <double>[];
+      for (final Color color in colors) {
+        final double hue = HSLColor.fromColor(color).hue;
+        final bool fresh = bands.every((double band) {
+          final double gap = (hue - band).abs() % 360;
+          return gap >= 30 && gap <= 330;
+        });
+        if (fresh) bands.add(hue);
+      }
+      return bands.length;
+    }
+
+    test('a one-hue lift gains analogous tones and keeps its own colors', () {
+      // The plum variant: three lifted colors, all inside one ~30° band.
+      const List<Color> mono = <Color>[
+        Color(0xFF6D3AE8),
+        Color(0xFFB96DFF),
+        Color(0xFF2A1245),
+      ];
+      final List<Color> out = Tokens.diversifyAmbientHues(mono);
+
+      expect(out.length, Tokens.ambientMaxBlobs);
+      expect(out.take(mono.length), mono);
+      // The ensemble now spans several hue bands: the extra blobs do not sit
+      // inside the artwork's single one.
+      expect(countHueBands(out), greaterThanOrEqualTo(3));
+      // One synthesized tone is deliberately darker than its source.
+      final double minSynthLightness = out
+          .skip(mono.length)
+          .fold(
+            1.0,
+            (double l, Color c) => l < HSLColor.fromColor(c).lightness
+                ? l
+                : HSLColor.fromColor(c).lightness,
+          );
+      expect(minSynthLightness, lessThan(0.5));
+    });
+
+    test('a genuinely multi-hue lift passes through untouched', () {
+      // One color per ~30° band (purple, teal, orange).
+      const List<Color> multi = <Color>[
+        Color(0xFF7C6BC4),
+        Color(0xFF3E8E7E),
+        Color(0xFFE8935A),
+      ];
+      final List<Color> out = Tokens.diversifyAmbientHues(multi);
+      expect(out, multi);
+      expect(countHueBands(out), 3);
+    });
+
+    test('an empty palette stays empty', () {
+      expect(Tokens.diversifyAmbientHues(const <Color>[]), <Color>[]);
+    });
+  });
   group('GlassSurface', () {
     testWidgets('blurs behind the surface by default', (
       WidgetTester tester,

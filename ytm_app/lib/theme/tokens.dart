@@ -440,7 +440,64 @@ class Tokens {
     Alignment(-0.6, -0.6),
     Alignment(0.7, 0.75),
     Alignment(-0.05, 0.05),
+    // Two more lanes for a hue-poor artwork: a mono-hue palette leaves the
+    // top-right and bottom-left corners dead even while its own three blobs
+    // cover their lanes, so the synthesized analogous hues get these.
+    Alignment(0.65, -0.7),
+    Alignment(-0.7, 0.65),
   ];
+
+  /// How many colors the ambient layer paints at most: up to three lifted
+  /// from the artwork and up to two synthesized when the artwork is one
+  /// hue — see [diversifyAmbientHues].
+  static const int ambientMaxBlobs = 5;
+
+  /// Analogous hue shifts the blob synthesis applies to a single-hue palette:
+  /// two rotations in opposite directions plus a dip in lightness, so the
+  /// extra blobs read as the artwork's neighborhood, not as a filter dump.
+  static const double ambientSynthHuePositive = 32;
+  static const double ambientSynthHueNegative = -48;
+  static const double ambientSynthLightnessDip = 0.68;
+
+  /// A lifted palette that is effectively one hue (a mono album cover) paints
+  /// one flat wash; the blobs cover lanes but the window still reads as air
+  /// above a single color. When the lifted colors sit within the same ~30°
+  /// hue band, this appends two analogous neighbors — hue-rotated, one
+  /// darker — so the remaining blob lanes get their own tones and no
+  /// screen edge is flat black while playing. Genuinely multi-hue palettes
+  /// pass through untouched.
+  static List<Color> diversifyAmbientHues(List<Color> colors) {
+    // Assign each lifted color a hue band (~30° resolution): the number of
+    // bands, not the number of colors, decides "the artwork is one hue".
+    final List<double> bands = <double>[];
+    for (final Color color in colors) {
+      final double hue = HSLColor.fromColor(color).hue;
+      final bool fresh = bands.every((double band) {
+        final double gap = (hue - band).abs() % 360;
+        return gap >= 30 && gap <= 330;
+      });
+      if (fresh) bands.add(hue);
+    }
+    // The count of bands, not of colors, decides "the artwork is one hue";
+    // with nothing lifted there is nothing to diversify.
+    if (bands.length >= 2 || colors.length >= ambientMaxBlobs) {
+      return List<Color>.of(colors);
+    }
+    if (colors.isEmpty) {
+      return List<Color>.empty();
+    }
+    final HSLColor base = HSLColor.fromColor(colors.first);
+    final HSLColor positive = base.withHue(
+      (base.hue + ambientSynthHuePositive) % 360,
+    );
+    final HSLColor negative = base
+        .withHue((base.hue + ambientSynthHueNegative) % 360)
+        .withLightness(
+          (base.lightness * ambientSynthLightnessDip).clamp(0.0, 1.0),
+        );
+    return List<Color>.of(colors)
+      ..addAll(<Color>[positive.toColor(), negative.toColor()]);
+  }
 
   /// Drift: each blob nudges to a new anchor offset once per period and moves
   /// there slowly over the move window. Slow on purpose — it should read as

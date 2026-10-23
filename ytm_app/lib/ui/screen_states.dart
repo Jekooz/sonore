@@ -118,40 +118,46 @@ class StateMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Tokens.s24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              message,
-              style: Tokens.rowTitle,
-              textAlign: TextAlign.center,
-            ),
-            if (footnote != null) ...<Widget>[
-              const SizedBox(height: Tokens.s8),
+      // Keep a readable measure: the message and its footnote wrap inside the
+      // same narrow column every other form on the app uses, instead of
+      // running corner to corner on a wide window.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Tokens.formMaxWidth),
+        child: Padding(
+          padding: const EdgeInsets.all(Tokens.s24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
               Text(
-                footnote!,
-                style: Tokens.caption,
+                message,
+                style: Tokens.rowTitle,
                 textAlign: TextAlign.center,
               ),
+              if (footnote != null) ...<Widget>[
+                const SizedBox(height: Tokens.s8),
+                Text(
+                  footnote!,
+                  style: Tokens.subtitle,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              if (actionLabel != null && onAction != null) ...<Widget>[
+                const SizedBox(height: Tokens.s24),
+                PillButton(
+                  icon: actionIcon,
+                  label: actionLabel,
+                  onPressed: onAction,
+                ),
+              ],
+              if (secondaryLabel != null && onSecondary != null) ...<Widget>[
+                const SizedBox(height: Tokens.s4),
+                TextButton(
+                  onPressed: onSecondary,
+                  child: Text(secondaryLabel!, style: Tokens.subtitle),
+                ),
+              ],
             ],
-            if (actionLabel != null && onAction != null) ...<Widget>[
-              const SizedBox(height: Tokens.s24),
-              PillButton(
-                icon: actionIcon,
-                label: actionLabel,
-                onPressed: onAction,
-              ),
-            ],
-            if (secondaryLabel != null && onSecondary != null) ...<Widget>[
-              const SizedBox(height: Tokens.s4),
-              TextButton(
-                onPressed: onSecondary,
-                child: Text(secondaryLabel!, style: Tokens.subtitle),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

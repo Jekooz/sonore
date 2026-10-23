@@ -48,21 +48,21 @@ class _TrackRowState extends State<TrackRow> {
 
   @override
   Widget build(BuildContext context) {
-    final TextStyle titleStyle =
-        widget.isPlaying ? Tokens.rowTitleActive : Tokens.rowTitle;
+    final TextStyle titleStyle = widget.isPlaying
+        ? Tokens.rowTitleActive
+        : Tokens.rowTitle;
 
     final Color fill = _pressed
         ? Tokens.glassThick
         : _hovered || _focused
-            ? Tokens.glassThin
-            : Tokens.transparent;
+        ? Tokens.glassThin
+        : Tokens.transparent;
 
     return Semantics(
       button: widget.onTap != null,
       selected: widget.isPlaying,
       child: FocusableActionDetector(
-        onShowFocusHighlight: (bool value) =>
-            setState(() => _focused = value),
+        onShowFocusHighlight: (bool value) => setState(() => _focused = value),
         onShowHoverHighlight: (bool value) => setState(() => _hovered = value),
         mouseCursor: widget.onTap == null
             ? MouseCursor.defer
@@ -111,19 +111,22 @@ class _TrackRowState extends State<TrackRow> {
                               if (widget.isPlaying) ...<Widget>[
                                 const SizedBox(width: Tokens.s8),
                                 ExcludeSemantics(
-                                  child: LiveBadge(
-                                    isPlaying: widget.isPlaying,
-                                  ),
+                                  child: LiveBadge(isPlaying: widget.isPlaying),
                                 ),
                               ],
                             ],
                           ),
-                          Text(
-                            widget.subtitle,
-                            style: Tokens.subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          // An empty subtitle must not claim a line: rows
+                          // without one (some artists, some playlists) stay
+                          // truly centered against the artwork, not pushed
+                          // up by an invisible second line.
+                          if (widget.subtitle.isNotEmpty)
+                            Text(
+                              widget.subtitle,
+                              style: Tokens.subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                         ],
                       ),
                     ),

@@ -161,7 +161,9 @@ class _LibraryList extends ConsumerWidget {
     return ListView.builder(
       padding: EdgeInsets.fromLTRB(
         margin,
-        0,
+        // A clear gap between the filter chips above and the first row: the
+        // expanded content starts at its children's own edges otherwise.
+        Tokens.s12,
         margin,
         Tokens.s24 + ShellClearance.of(context),
       ),

@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/visual_quality.dart';
 import '../../theme/tokens.dart';
 import 'ambient_palette.dart';
 
@@ -22,26 +23,26 @@ bool ambientMotionEnabled = true;
 /// The seed is fixed, so the texture — and every golden — is reproducible.
 final FutureProvider<ui.Image?> grainTextureProvider =
     FutureProvider<ui.Image?>((ref) async {
-  final int size = Tokens.grainSize;
-  final math.Random random = math.Random(7);
-  final Uint8List raw = Uint8List(size * size * 4);
-  for (int i = 0; i < size * size; i++) {
-    raw[i * 4] = 255;
-    raw[i * 4 + 1] = 255;
-    raw[i * 4 + 2] = 255;
-    raw[i * 4 + 3] = random.nextInt(Tokens.grainMaxAlpha);
-  }
+      final int size = Tokens.grainSize;
+      final math.Random random = math.Random(7);
+      final Uint8List raw = Uint8List(size * size * 4);
+      for (int i = 0; i < size * size; i++) {
+        raw[i * 4] = 255;
+        raw[i * 4 + 1] = 255;
+        raw[i * 4 + 2] = 255;
+        raw[i * 4 + 3] = random.nextInt(Tokens.grainMaxAlpha);
+      }
 
-  final Completer<ui.Image> done = Completer<ui.Image>();
-  ui.decodeImageFromPixels(
-    raw,
-    size,
-    size,
-    ui.PixelFormat.rgba8888,
-    done.complete,
-  );
-  return done.future;
-});
+      final Completer<ui.Image> done = Completer<ui.Image>();
+      ui.decodeImageFromPixels(
+        raw,
+        size,
+        size,
+        ui.PixelFormat.rgba8888,
+        done.complete,
+      );
+      return done.future;
+    });
 
 /// The one ambient layer behind the whole app.
 ///
@@ -65,11 +66,7 @@ class AmbientBackdrop extends ConsumerStatefulWidget {
 }
 
 class _AmbientBackdropState extends ConsumerState<AmbientBackdrop> {
-  final List<Offset> _drift = <Offset>[
-    Offset.zero,
-    Offset.zero,
-    Offset.zero,
-  ];
+  final List<Offset> _drift = <Offset>[Offset.zero, Offset.zero, Offset.zero];
   Timer? _timer;
   final math.Random _random = math.Random(11);
 
@@ -92,7 +89,12 @@ class _AmbientBackdropState extends ConsumerState<AmbientBackdrop> {
 
   void _scheduleDrift() {
     _timer?.cancel();
-    if (ambientMotionEnabled && !MediaQuery.of(context).disableAnimations) {
+    // Visual quality Low freezes the drift along with thinning the blur: the
+    // blob layer then repaints only on a track change, never per interval.
+    final VisualQualityTier quality = ref.read(visualQualityProvider);
+    if (ambientMotionEnabled &&
+        quality != VisualQualityTier.low &&
+        !MediaQuery.of(context).disableAnimations) {
       _timer = Timer.periodic(Tokens.ambientDriftPeriod, (_) => _nudge());
     }
   }
@@ -121,13 +123,22 @@ class _AmbientBackdropState extends ConsumerState<AmbientBackdrop> {
   Widget build(BuildContext context) {
     final AmbientPaletteState palette = ref.watch(ambientPaletteProvider);
     final ui.Image? grain = ref.watch(grainTextureProvider).value;
+    // Reaction to a tier change: Low freezes, any other tier restarts the
+    // drift with the current timer schedule.
+    ref.listen<VisualQualityTier>(visualQualityProvider, (
+      VisualQualityTier? previous,
+      VisualQualityTier next,
+    ) {
+      _scheduleDrift();
+    });
 
     final String layerKey = palette.key.isEmpty ? 'idle' : palette.key;
     // With nothing playing the blob layer keeps running on a neutral mono-
     // chrome palette, so the resting app is still atmosphere — the same drift,
     // the same three anchors — and glass never blurs a dead-black field.
-    final List<Color> blobColors =
-        palette.colors.isEmpty ? Tokens.backdropNeutralBlobs : palette.colors;
+    final List<Color> blobColors = palette.colors.isEmpty
+        ? Tokens.backdropNeutralBlobs
+        : palette.colors;
 
     return IgnorePointer(
       child: RepaintBoundary(
@@ -252,9 +263,11 @@ class _LegibilityVeil extends StatelessWidget {
     for (final Color color in colors.take(Tokens.ambientColorCount)) {
       total += Tokens.lumaOf(color);
     }
-    final double mean = total / math.min(Tokens.ambientColorCount, colors.length);
+    final double mean =
+        total / math.min(Tokens.ambientColorCount, colors.length);
     final double alpha =
-        Tokens.ambientVeilMinAlpha + (Tokens.ambientVeilMaxAlpha - Tokens.ambientVeilMinAlpha) * mean;
+        Tokens.ambientVeilMinAlpha +
+        (Tokens.ambientVeilMaxAlpha - Tokens.ambientVeilMinAlpha) * mean;
 
     return ColoredBox(
       color: Tokens.transparent.withValues(alpha: alpha.clamp(0.0, 1.0)),
@@ -294,5 +307,6 @@ class _GrainPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GrainPainter oldDelegate) => oldDelegate.texture != texture;
+  bool shouldRepaint(_GrainPainter oldDelegate) =>
+      oldDelegate.texture != texture;
 }

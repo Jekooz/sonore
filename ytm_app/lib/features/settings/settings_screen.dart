@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +20,7 @@ import '../../ui/confirm_dialog.dart';
 import '../../ui/glass_surface.dart';
 import '../../ui/media_actions.dart';
 import '../../ui/pill_button.dart';
+import '../../ui/pressable.dart';
 import '../../ui/screen_header.dart';
 import '../../ui/screen_states.dart';
 import '../shell/app_shell.dart';
@@ -105,6 +107,39 @@ class SettingsScreen extends ConsumerWidget {
                               label: '${(settings.textScale * 100).round()}%',
                               onChanged: controller.setTextScale,
                             ),
+                            _ChoiceRow(
+                              title: 'Visual quality',
+                              subtitle:
+                                  'Auto thins the glass recipe when frames consistently '
+                                  'stutter and freezes the backdrop drift. Low trades '
+                                  'glass for solid surfaces on purpose.',
+                              value: settings.visualQuality.name,
+                              options: const <String>['auto', 'high', 'low'],
+                              labels: const <String, String>{
+                                'auto': 'Auto',
+                                'high': 'High',
+                                'low': 'Low',
+                              },
+                              onChanged: (String name) =>
+                                  controller.setVisualQuality(
+                                    VisualQuality.values.firstWhere(
+                                      (VisualQuality quality) =>
+                                          quality.name == name,
+                                    ),
+                                  ),
+                            ),
+                            // The frame-stats overlay exists only where the
+                            // engine supplies a frame timeline; offering it in
+                            // a release build would show an empty graph.
+                            if (!kReleaseMode)
+                              _SwitchRow(
+                                title: 'Show frame stats',
+                                subtitle:
+                                    'Development aid for the performance checklist '
+                                    '(docs/PERF_CHECKLIST.md). Not offered in release builds.',
+                                value: settings.showPerformanceOverlay,
+                                onChanged: controller.setShowPerformanceOverlay,
+                              ),
                           ],
                         ),
                         _Panel(
@@ -396,6 +431,99 @@ class _SwitchRow extends StatelessWidget {
           title: Text(title, style: Tokens.rowTitle),
           subtitle: Text(subtitle, style: Tokens.subtitle),
           onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+/// A named choice on the panel: a title, an explanation, and the options as
+/// pills — the same monochrome selected-state the Library segment chips and
+/// equalizer preset chips use, so every choice control reads as one family.
+class _ChoiceRow extends StatelessWidget {
+  const _ChoiceRow({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.options,
+    required this.labels,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String subtitle;
+  final String value;
+  final List<String> options;
+  final Map<String, String> labels;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Tokens.s4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(bottom: Tokens.s4),
+            child: Text(title, style: Tokens.rowTitle),
+          ),
+          Row(
+            spacing: Tokens.s8,
+            children: <Widget>[
+              for (final String option in options)
+                _ChoiceChip(
+                  label: labels[option] ?? option,
+                  selected: option == value,
+                  onTap: () => onChanged(option),
+                ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: Tokens.s4),
+            child: Text(subtitle, style: Tokens.subtitle),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChoiceChip extends StatelessWidget {
+  const _ChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      semanticLabel: label,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: Tokens.dPress,
+        curve: Tokens.curvePress,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: Tokens.s16),
+        decoration: ShapeDecoration(
+          color: selected ? Tokens.borderStrong : Tokens.transparent,
+          shape: Tokens.shapePill.copyWith(
+            side: BorderSide(
+              color: selected ? Tokens.borderStrong : Tokens.border,
+              width: Tokens.borderWidth,
+            ),
+          ),
+        ),
+        child: Text(
+          label,
+          style: Tokens.subtitle.copyWith(
+            color: selected ? Tokens.text : Tokens.textSecondary,
+          ),
         ),
       ),
     );

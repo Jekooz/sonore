@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/app_settings.dart';
+import '../core/visual_quality.dart';
 import '../theme/tokens.dart';
 import 'ambient/ambient_palette.dart';
 
@@ -29,15 +30,15 @@ enum GlassTier {
 /// glass — a lit white ramp with a hairline specular rim — rather than a dark
 /// fill that reads as a hole punched in the bar.
 ShapeDecoration navSelectionDecoration(OutlinedBorder shape) => ShapeDecoration(
-      gradient: const LinearGradient(
-        begin: Tokens.edgeBegin,
-        end: Tokens.edgeEnd,
-        colors: <Color>[Tokens.navSelectionTop, Tokens.navSelectionBottom],
-      ),
-      shape: shape.copyWith(
-        side: BorderSide(color: Tokens.border, width: Tokens.borderWidth),
-      ),
-    );
+  gradient: const LinearGradient(
+    begin: Tokens.edgeBegin,
+    end: Tokens.edgeEnd,
+    colors: <Color>[Tokens.navSelectionTop, Tokens.navSelectionBottom],
+  ),
+  shape: shape.copyWith(
+    side: BorderSide(color: Tokens.border, width: Tokens.borderWidth),
+  ),
+);
 
 /// The blur and fill each tier speaks, from [Tokens]. Kept here rather than
 /// on the enum so the enum stays a pure choice and the numbers stay in one
@@ -45,17 +46,17 @@ ShapeDecoration navSelectionDecoration(OutlinedBorder shape) => ShapeDecoration(
 extension GlassTierRecipe on GlassTier {
   /// Backdrop blur sigma for this tier.
   double get blur => switch (this) {
-        GlassTier.thin => Tokens.glassBlurThin,
-        GlassTier.regular => Tokens.glassBlurRegular,
-        GlassTier.thick => Tokens.glassBlurThick,
-      };
+    GlassTier.thin => Tokens.glassBlurThin,
+    GlassTier.regular => Tokens.glassBlurRegular,
+    GlassTier.thick => Tokens.glassBlurThick,
+  };
 
   /// White fill over the blurred backdrop for this tier.
   Color get fill => switch (this) {
-        GlassTier.thin => Tokens.glassThin,
-        GlassTier.regular => Tokens.glassRegular,
-        GlassTier.thick => Tokens.glassThick,
-      };
+    GlassTier.thin => Tokens.glassThin,
+    GlassTier.regular => Tokens.glassRegular,
+    GlassTier.thick => Tokens.glassThick,
+  };
 }
 
 /// The one and only place the app may call [BackdropFilter].
@@ -114,9 +115,17 @@ class GlassSurface extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppSettings settings = ref.watch(appSettingsProvider);
     final MediaQueryData media = MediaQuery.of(context);
+    final VisualQualityTier quality = ref.watch(visualQualityProvider);
 
     final bool reduceTransparency =
-        settings.reduceTransparency || media.highContrast;
+        settings.reduceTransparency ||
+        media.highContrast ||
+        // Visual quality Low is the full fallback: solid surfaces rather
+        // than blur on a device that said no.
+        quality == VisualQualityTier.low;
+    final double blurFactor = quality == VisualQualityTier.low
+        ? Tokens.reducedBlurFactor
+        : 1;
 
     final OutlinedBorder resolved = shape ?? Tokens.shapeFor(radius);
     final TextDirection? textDirection = Directionality.maybeOf(context);
@@ -155,13 +164,19 @@ class GlassSurface extends ConsumerWidget {
     }
 
     final Widget surface = ClipPath(
-      clipper: ShapeBorderClipper(shape: resolved, textDirection: textDirection),
+      clipper: ShapeBorderClipper(
+        shape: resolved,
+        textDirection: textDirection,
+      ),
       child: BackdropFilter(
         filter: ImageFilter.compose(
           outer: ColorFilter.matrix(
             Tokens.saturationMatrix(Tokens.glassSaturation),
           ),
-          inner: ImageFilter.blur(sigmaX: tier.blur, sigmaY: tier.blur),
+          inner: ImageFilter.blur(
+            sigmaX: tier.blur * blurFactor,
+            sigmaY: tier.blur * blurFactor,
+          ),
         ),
         child: DecoratedBox(
           decoration: ShapeDecoration(color: tier.fill, shape: resolved),
@@ -206,12 +221,17 @@ class GlassSurface extends ConsumerWidget {
   /// what keeps the fallback stable for tests that pin no palette.
   static List<Color> _fallbackTints(WidgetRef ref, GlassTier tier) {
     final List<Color> palette = ref.watch(
-      ambientPaletteProvider.select((AmbientPaletteState state) => state.colors),
+      ambientPaletteProvider.select(
+        (AmbientPaletteState state) => state.colors,
+      ),
     );
 
     if (palette.isEmpty) {
       return switch (tier) {
-        GlassTier.thin => <Color>[Tokens.glassFallbackThin, Tokens.glassFallbackThin],
+        GlassTier.thin => <Color>[
+          Tokens.glassFallbackThin,
+          Tokens.glassFallbackThin,
+        ],
         GlassTier.regular ||
         GlassTier.thick => <Color>[Tokens.glassFallback, Tokens.glassFallback],
       };

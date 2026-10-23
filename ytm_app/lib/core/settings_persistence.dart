@@ -22,6 +22,9 @@ class SharedPreferencesSettingsStore implements SettingsStore {
   static const String _kRepeatMode = 'settings.repeatMode';
   static const String _kShuffle = 'settings.shuffle';
   static const String _kAutoplay = 'settings.autoplay';
+  static const String _kVisualQuality = 'settings.visualQuality';
+  static const String _kShowPerformanceOverlay =
+      'settings.showPerformanceOverlay';
 
   /// Opens the platform store. Throws only if the platform has no store at all,
   /// which the composition root turns into in-memory settings.
@@ -45,6 +48,8 @@ class SharedPreferencesSettingsStore implements SettingsStore {
       'repeatMode': _prefs.get(_kRepeatMode),
       'shuffle': _prefs.get(_kShuffle),
       'autoplay': _prefs.get(_kAutoplay),
+      'visualQuality': _prefs.get(_kVisualQuality),
+      'showPerformanceOverlay': _prefs.get(_kShowPerformanceOverlay),
     };
     return AppSettings.fromJson(json);
   }
@@ -67,8 +72,8 @@ class SharedPreferencesSettingsStore implements SettingsStore {
         _kEqualizerEnabled,
         json['equalizerEnabled']! as bool,
       );
-      final List<double> gains =
-          (json['equalizerGains']! as List<Object?>).cast<double>();
+      final List<double> gains = (json['equalizerGains']! as List<Object?>)
+          .cast<double>();
       await _prefs.setStringList(
         _kEqualizerGains,
         gains.map((double g) => g.toString()).toList(),
@@ -82,6 +87,11 @@ class SharedPreferencesSettingsStore implements SettingsStore {
       await _prefs.setString(_kRepeatMode, json['repeatMode']! as String);
       await _prefs.setBool(_kShuffle, json['shuffle']! as bool);
       await _prefs.setBool(_kAutoplay, json['autoplay']! as bool);
+      await _prefs.setString(_kVisualQuality, json['visualQuality']! as String);
+      await _prefs.setBool(
+        _kShowPerformanceOverlay,
+        json['showPerformanceOverlay']! as bool,
+      );
       return null;
     } catch (_) {
       return 'Preferences could not be saved. They apply for this session.';

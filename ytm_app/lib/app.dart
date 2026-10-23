@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,6 +50,10 @@ class YtmApp extends ConsumerWidget {
       theme: AppTheme.dark,
       themeMode: ThemeMode.dark,
       routerConfig: router,
+      // The frame-stats overlay for performance runs (Settings only offers
+      // the switch outside release builds, where the engine has no timeline
+      // to draw from).
+      showPerformanceOverlay: !kReleaseMode && settings.showPerformanceOverlay,
       builder: (BuildContext context, Widget? child) {
         // The Reduce motion preference overrides the platform flag, so one
         // switch turns every animated transition in the app into a plain

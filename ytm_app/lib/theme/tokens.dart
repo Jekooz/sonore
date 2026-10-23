@@ -457,6 +457,11 @@ class Tokens {
   static const double grainOpacity = 0.05;
   static const int grainSize = 128;
 
+  /// The blur multiplier the Visual quality tier Low speaks: a third of the
+  /// token sigma, which on a slow rasterizer is the difference between
+  /// staying on glass and dropping to solid surfaces.
+  static const double reducedBlurFactor = 0.35;
+
   // --------------------------------------------------------------- Seek bar ---
 
   static const double seekBarThickness = 4;

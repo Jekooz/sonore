@@ -31,8 +31,8 @@ class _LiveBadgeState extends State<LiveBadge>
 
   static const int _count = 3;
 
-  static const double _gap = 3;
-  static const double _barWidth = 5;
+  static const double _gap = Tokens.liveBadgeGap;
+  static const double _barWidth = Tokens.liveBadgeBarWidth;
 
   /// total footprint, including every trailing gap.
   static const double _width = _count * (_barWidth + _gap);

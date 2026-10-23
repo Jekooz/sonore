@@ -119,7 +119,7 @@ class _LyricsSkeleton extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: Tokens.s16),
         child: Skeleton(
           // Varying widths read as lines of different length, not as a grid.
-          width: 120.0 + (index % 4) * 60,
+          width: Tokens.skeletonLineBase + (index % 4) * Tokens.skeletonLineStep,
           height: Tokens.s16,
         ),
       ),

@@ -235,11 +235,20 @@ class _EqualizerControls extends ConsumerWidget {
           ),
           if (state.isApplying) ...<Widget>[
             const SizedBox(height: Tokens.s16),
-            const LinearProgressIndicator(minHeight: 2),
+            const LinearProgressIndicator(minHeight: Tokens.seekBarThicknessCompact),
           ],
           if (state.error != null) ...<Widget>[
             const SizedBox(height: Tokens.s16),
-            StateMessage(message: state.error!),
+            // The configuration is saved either way; the retry re-runs the
+            // engine write so a transient engine hiccup needs no resend
+            // from scratch.
+            StateMessage(
+              message: state.error!,
+              footnote: 'Your settings are kept; the engine just did not '
+                  'take them.',
+              actionLabel: 'Try again',
+              onAction: () => controller.applyToEngine(),
+            ),
           ],
           // The engine's own answer, so the reader (and the tests) can see
           // the configuration really landed rather than assuming it did.

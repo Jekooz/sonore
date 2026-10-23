@@ -461,6 +461,25 @@ class Tokens {
   static const double seekBarThicknessCompact = 2;
   static const double seekBarThicknessCompactActive = 3;
 
+  // ------------------------------------------------------------------ Menu ---
+
+  /// The shared context menu's width. Not a 4/8 multiple on purpose: the
+  /// spec fixes the menu's row height and radius, not the width.
+  static const double menuWidth = 232;
+
+  // ---------------------------------------------------------- Live badge ---
+
+  /// The "Now Playing" mark's micro geometry: three hairline bars. These sit
+  /// between the 4px grid steps deliberately — a 4px gap at 5px bar width
+  /// would read as one blob rather than three bars.
+  static const double liveBadgeBarWidth = 5;
+  static const double liveBadgeGap = 3;
+
+  /// Lyric skeleton lines: a base length and a per-line step, so the loading
+  /// state reads as lines of different length rather than a uniform grid.
+  static const double skeletonLineBase = 120;
+  static const double skeletonLineStep = 60;
+
   // --------------------------------------------------------------- Controls ---
 
   /// The resting fill of round controls (switches, sliders): a light track

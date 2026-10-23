@@ -330,11 +330,9 @@ class _SaveStatusBanner extends ConsumerWidget {
       child: Row(
         children: <Widget>[
           if (status == SettingsSaveStatus.saving)
-            const SizedBox(
-              width: Tokens.s16,
-              height: Tokens.s16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            // The designed loader, not a bare spinner: it respects Reduce
+            // Motion and matches every other loading surface.
+            const Skeleton(width: Tokens.s16, height: Tokens.s16),
           if (status == SettingsSaveStatus.saving)
             const SizedBox(width: Tokens.s8),
           Expanded(child: Text(message, style: Tokens.subtitle)),

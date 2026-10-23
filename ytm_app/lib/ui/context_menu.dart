@@ -30,9 +30,9 @@ class ContextMenuEntry {
   final bool isDestructive;
 }
 
-/// Menu width. Geometry rather than a spec token: the spec fixes the row height
-/// and radius, not the width.
-const double _menuWidth = 232;
+/// Menu width: [Tokens.menuWidth], not a spacing multiple — geometry the spec
+/// leaves free so menu labels stay on one line at every text scale.
+const double _menuWidth = Tokens.menuWidth;
 
 /// Opens the shared context menu at [position] (a global offset).
 ///

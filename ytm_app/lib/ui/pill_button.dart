@@ -51,8 +51,10 @@ class PillButton extends StatelessWidget {
       child: AnimatedContainer(
         duration: Tokens.dPress,
         curve: Tokens.curvePress,
-        padding: const EdgeInsets.symmetric(
-          horizontal: Tokens.s16,
+        // Icon-only pills are square and minimal: 48 px, the touch minimum.
+        // Labeled pills keep the generous 16 px gutter.
+        padding: EdgeInsets.symmetric(
+          horizontal: label == null ? Tokens.s12 : Tokens.s16,
           vertical: Tokens.s8,
         ),
         decoration: ShapeDecoration(

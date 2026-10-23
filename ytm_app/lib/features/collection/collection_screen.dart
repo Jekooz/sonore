@@ -184,12 +184,13 @@ class _CollectionHeader extends ConsumerWidget {
                 const SizedBox(height: Tokens.s16),
                 LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints constraints) {
-                    // Narrow column (phone): "Play" keeps its label as the
-                    // primary action, the queue and overflow actions fall back
-                    // to icon-only so title and actions stay on one row
-                    // instead of letting the lone "…" wrap onto a centered
-                    // second line (the round-2 leftover).
-                    final bool compact = constraints.maxWidth < 320;
+                    // Narrow columns (phone): actions fall back to icon-only
+                    // in two steps so title and actions always stay on one
+                    // row instead of letting the lone "…" wrap onto a
+                    // centered second line (the round-2 leftover). Beyond
+                    // ~360 px the labels come back.
+                    final bool compact = constraints.maxWidth < 360;
+                    final bool iconOnly = constraints.maxWidth < 240;
                     return Wrap(
                       spacing: Tokens.s8,
                       runSpacing: Tokens.s8,
@@ -197,7 +198,8 @@ class _CollectionHeader extends ConsumerWidget {
                       children: <Widget>[
                         PillButton(
                           icon: AppIcons.playFill,
-                          label: 'Play',
+                          label: iconOnly ? null : 'Play',
+                          tooltip: 'Play',
                           isActive: true,
                           // An empty collection offers no Play rather than a
                           // button that does nothing.

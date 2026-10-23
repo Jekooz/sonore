@@ -54,6 +54,12 @@ class Tokens {
   /// Focus and hover on glass (white 16%).
   static const Color borderStrong = Color(0x29FFFFFF);
 
+  /// The keyboard focus ring. White enough to read at 4.5:1 against glass and
+  /// page art alike, and never used for anything decorative, so the ring is
+  /// an unambiguous "the keyboard is here".
+  static const Color focusRing = Color(0xB3FFFFFF);
+  static const double focusRingWidth = 2;
+
   /// Titles, active labels.
   static const Color text = Color(0xFFFFFFFF);
 

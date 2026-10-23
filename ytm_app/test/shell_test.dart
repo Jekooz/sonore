@@ -75,6 +75,61 @@ void main() {
     expect(find.byType(BackdropFilter), findsWidgets);
   });
 
+  testWidgets('the narrow phone bar: short labels, pill off the rim, '
+      'and a 48dp settings target', (WidgetTester tester) async {
+    await pumpAtSize(tester, appScope(), size: const Size(320, 690));
+
+    // "Now Playing" does not fit four destinations plus the settings slot
+    // at this width: the bar shows the short form, on one line.
+    expect(find.text('Playing'), findsOneWidget);
+    expect(find.text('Now Playing'), findsNothing);
+
+    final Rect bar = tester.getRect(
+      find.descendant(
+        of: find.byType(NavBottomBar),
+        matching: find.byType(GlassSurface),
+      ),
+    );
+    // The bar's row keeps an inset from the glass rim, so the selected
+    // (leftmost) pill starts and the rightmost pill ends clear of the edge.
+    Rect itemAncestor(String label) {
+      return tester.getRect(
+        find
+            .ancestor(
+              of: find.descendant(
+                of: find.byType(NavBottomBar),
+                matching: find.text(label),
+              ),
+              matching: find.byType(InkWell),
+            )
+            .last,
+      );
+    }
+
+    // Home is selected on load: its pill is the one nearest the left rim.
+    expect(
+      itemAncestor('Home').left,
+      greaterThanOrEqualTo(bar.left + Tokens.s8 - 1),
+    );
+    // "Playing" is the rightmost destination, next to the overflow slot.
+    expect(itemAncestor('Playing').right, lessThanOrEqualTo(bar.right));
+
+    // The overflow slot ("...") is a real target: 48dp in both axes.
+    final Rect dots = tester.getRect(
+      find
+          .ancestor(
+            of: find.descendant(
+              of: find.byType(NavBottomBar),
+              matching: find.byIcon(AppIcons.dotsThree),
+            ),
+            matching: find.byType(InkWell),
+          )
+          .last,
+    );
+    expect(dots.width, greaterThanOrEqualTo(Tokens.minTouchTarget - 1));
+    expect(dots.height, greaterThanOrEqualTo(Tokens.minTouchTarget - 1));
+  });
+
   testWidgets('selecting a destination changes the screen', (
     WidgetTester tester,
   ) async {
@@ -306,8 +361,7 @@ void main() {
 
     // The mini player carries its own thin scrubber now.
     expect(find.byType(SeekBar), findsOneWidget);
-  },
-  );
+  });
 
   testWidgets('the phone mini player floats above the nav pill', (
     WidgetTester tester,
@@ -326,8 +380,7 @@ void main() {
     // entirely above navigation, with a visible gap between them.
     expect(bar.bottom, lessThanOrEqualTo(pill.top));
     expect(pill.top - bar.bottom, greaterThanOrEqualTo(Tokens.s8 - 1));
-  },
-  );
+  });
 
   testWidgets('phone docks the bar above the floating navigation menu', (
     WidgetTester tester,

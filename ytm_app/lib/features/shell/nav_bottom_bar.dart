@@ -43,6 +43,11 @@ class NavBottomBar extends StatelessWidget {
     // left lit.
     final int? highlighted = settingsActive ? null : currentIndex;
 
+    // Narrow phone windows swap "Now Playing" for "Playing" — the ink of the
+    // long label cannot fit four destinations plus the settings slot without
+    // clipping, and its ellipsis would make the selected tab unreadable.
+    final bool narrow = MediaQuery.sizeOf(context).width <= 400;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Tokens.pageMarginPhone,
@@ -54,35 +59,42 @@ class NavBottomBar extends StatelessWidget {
         shape: Tokens.shapePill,
         child: SizedBox(
           height: Tokens.navBarHeight,
-          child: Row(
-            children: <Widget>[
-              for (final AppDestination destination in AppDestination.values)
-                Expanded(
-                  child: _NavBarItem(
-                    destination: destination,
-                    selected:
-                        AppDestination.values.indexOf(destination) ==
-                        highlighted,
-                    onTap: () =>
-                        onSelect(AppDestination.values.indexOf(destination)),
+          // The inset keeps the selected pill off the bar's own edge at the
+          // narrowest phone widths — a pill kissing the glass rim reads as a
+          // rendering error, and the row here has nothing else breathing in.
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Tokens.s8),
+            child: Row(
+              children: <Widget>[
+                for (final AppDestination destination in AppDestination.values)
+                  Expanded(
+                    child: _NavBarItem(
+                      destination: destination,
+                      selected:
+                          AppDestination.values.indexOf(destination) ==
+                          highlighted,
+                      narrow: narrow,
+                      onTap: () =>
+                          onSelect(AppDestination.values.indexOf(destination)),
+                    ),
                   ),
-                ),
-              if (onOpenSettings != null) ...<Widget>[
-                const SizedBox(
-                  height: Tokens.s24,
-                  child: VerticalDivider(
-                    width: Tokens.s8,
-                    color: Tokens.border,
+                if (onOpenSettings != null) ...<Widget>[
+                  const SizedBox(
+                    height: Tokens.s24,
+                    child: VerticalDivider(
+                      width: Tokens.s8,
+                      color: Tokens.border,
+                    ),
                   ),
-                ),
-                _NavAction(
-                  icon: AppIcons.dotsThree,
-                  label: 'Settings',
-                  selected: settingsActive,
-                  onTap: onOpenSettings!,
-                ),
+                  _NavAction(
+                    icon: AppIcons.dotsThree,
+                    label: 'Settings',
+                    selected: settingsActive,
+                    onTap: onOpenSettings!,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -124,7 +136,14 @@ class _NavAction extends StatelessWidget {
             focusColor: Tokens.glassThick,
             splashColor: Tokens.transparent,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Tokens.s8),
+              // The dots need a real target: horizontal padding makes the
+              // ~24dp icon 48dp wide, vertical padding makes it 48dp tall —
+              // an overflow action with no breathing room is exactly the hit
+              // that gets missed.
+              padding: const EdgeInsets.symmetric(
+                vertical: Tokens.s12,
+                horizontal: Tokens.s12,
+              ),
               child: AnimatedContainer(
                 duration: reduceMotion ? Duration.zero : Tokens.dPress,
                 curve: Tokens.curvePress,
@@ -150,11 +169,16 @@ class _NavBarItem extends StatelessWidget {
     required this.destination,
     required this.selected,
     required this.onTap,
+    required this.narrow,
   });
 
   final AppDestination destination;
   final bool selected;
   final VoidCallback onTap;
+
+  /// The narrowest phone layout: labels use the destination's short form so
+  /// four destinations plus the settings slot always fit on one line.
+  final bool narrow;
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +218,9 @@ class _NavBarItem extends StatelessWidget {
                     ),
                     const SizedBox(height: Tokens.s4),
                     Text(
-                      destination.label,
+                      // Visible label shortens on the narrowest phones; the
+                      // tooltip and the semantics keep the full name.
+                      narrow ? destination.shortLabel : destination.label,
                       style: Tokens.caption.copyWith(color: foreground),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

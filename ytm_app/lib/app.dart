@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'core/app_identity.dart';
 import 'core/app_settings.dart';
 import 'core/sidecar/sidecar_startup_gate.dart';
+import 'features/shell/window_material.dart';
 import 'theme/app_theme.dart';
 import 'theme/tokens.dart';
 
@@ -30,6 +31,18 @@ class YtmApp extends ConsumerWidget {
     final AppSettings settings = ref.watch(appSettingsProvider);
     final double maxScale = settings.textScale;
 
+    // The window material follows Reduce transparency and OS high contrast
+    // at all times, not just at boot: the toggle in Settings must reach the
+    // desktop's own surface, not only the in-app glass.
+    ref.listen<bool>(
+      appSettingsProvider.select(
+        (AppSettings settings) => settings.reduceTransparency,
+      ),
+      (bool? previous, bool next) => WindowMaterial.apply(
+        solid: next || MediaQuery.of(context).highContrast,
+      ),
+    );
+
     return MaterialApp.router(
       title: appName,
       debugShowCheckedModeBanner: false,
@@ -42,6 +55,11 @@ class YtmApp extends ConsumerWidget {
         // cross-fade. It is folded into MediaQuery rather than read screen by
         // screen because every animated widget already asks MediaQuery.
         final MediaQueryData media = MediaQuery.of(context);
+        // The window's own surface goes solid on Reduce transparency or OS
+        // high contrast even without a settings change.
+        WindowMaterial.apply(
+          solid: settings.reduceTransparency || media.highContrast,
+        );
         return SidecarStartupGate(
           titleBar: titleBar,
           child: MediaQuery(

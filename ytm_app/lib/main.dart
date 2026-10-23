@@ -10,6 +10,7 @@ import 'audio/listening_event.dart';
 import 'audio/playback_engine.dart';
 import 'audio/playback_service.dart';
 import 'audio/track.dart';
+import 'features/shell/window_material.dart';
 import 'core/app_identity.dart';
 import 'core/app_settings.dart';
 import 'core/settings_persistence.dart';
@@ -46,12 +47,9 @@ Future<void> main() async {
     // builds that lack the effect; the backdrop is the design either way.
     try {
       await acrylic.Window.initialize();
-      await acrylic.Window.setEffect(
-        effect: acrylic.WindowEffect.mica,
-        dark: true,
-      );
     } catch (_) {
-      // No Mica available: keep the plain window surface.
+      // No native material available: keep the plain window surface, which
+      // restore paths already render correctly on.
     }
     titleBar = const WindowsTitleBar();
   }
@@ -62,6 +60,11 @@ Future<void> main() async {
   // rather than refusing to start.
   final SettingsStore settingsStore = await _openSettingsStore();
   final AppSettings initialSettings = await _loadSettings(settingsStore);
+  // The window material follows Reduce transparency from the first frame.
+  await WindowMaterial.apply(
+    solid: initialSettings.reduceTransparency,
+    force: true,
+  );
 
   runApp(
     ProviderScope(
@@ -71,24 +74,26 @@ Future<void> main() async {
       // without storing, logging or exposing it.
       overrides: [
         streamUrlResolverProvider.overrideWith(
-          (Ref ref) => (Track track) =>
-              ref.read(ytmRepositoryProvider).streamUrl(track),
+          (Ref ref) =>
+              (Track track) => ref.read(ytmRepositoryProvider).streamUrl(track),
         ),
         // Autoplay, the next-track prefetch and listening events all read real
         // endpoints, so the audio layer reaches them through these seams rather
         // than importing the API client.
         autoplayResolverProvider.overrideWith(
-          (Ref ref) => (Track seed, List<String> exclude) => ref
-              .read(ytmRepositoryProvider)
-              .recommendations(seed, exclude: exclude),
+          (Ref ref) =>
+              (Track seed, List<String> exclude) => ref
+                  .read(ytmRepositoryProvider)
+                  .recommendations(seed, exclude: exclude),
         ),
         trackPrefetcherProvider.overrideWith(
           (Ref ref) =>
               (Track track) => ref.read(ytmRepositoryProvider).prefetch(track),
         ),
         listeningReporterProvider.overrideWith(
-          (Ref ref) => (ListeningEvent event) =>
-              ref.read(ytmRepositoryProvider).reportListeningEvent(event),
+          (Ref ref) =>
+              (ListeningEvent event) =>
+                  ref.read(ytmRepositoryProvider).reportListeningEvent(event),
         ),
         // The local taste layer: one play, skip or like, reported as it
         // happens. Fire and forget — a failure there must never interrupt
@@ -102,15 +107,16 @@ Future<void> main() async {
                 double durationSeconds = 0,
                 bool completed = false,
                 double playedFraction = 0,
-              }) =>
-                  ref.read(ytmRepositoryProvider).reportTasteEvent(
-                        kind,
-                        track,
-                        listenedSeconds: listenedSeconds,
-                        durationSeconds: durationSeconds,
-                        completed: completed,
-                        playedFraction: playedFraction,
-                      ),
+              }) => ref
+                  .read(ytmRepositoryProvider)
+                  .reportTasteEvent(
+                    kind,
+                    track,
+                    listenedSeconds: listenedSeconds,
+                    durationSeconds: durationSeconds,
+                    completed: completed,
+                    playedFraction: playedFraction,
+                  ),
         ),
         // The sidecar owns its own lifecycle only on Windows, where the app
         // ships next to the repo. Elsewhere the default no-op launcher is kept,

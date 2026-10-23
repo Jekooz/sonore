@@ -9,6 +9,7 @@ import '../../audio/playback_state.dart';
 import '../../routing/app_router.dart';
 import '../../routing/destinations.dart';
 import '../../theme/tokens.dart';
+import '../../ui/ambient/ambient_backdrop.dart';
 import '../search/search_controller.dart';
 import 'nav_bottom_bar.dart';
 import 'nav_tab_bar.dart';
@@ -18,13 +19,13 @@ import 'now_playing_bar.dart';
 /// persistent Now Playing bar all live here, so no page owns the player.
 ///
 /// Layout rules:
-/// - the navigation menu is the only floating chrome. Under
-///   [Tokens.breakpointPhone] it is the compact glass bottom pill; at
-///   [Tokens.breakpointPhone] and wider it is the floating glass top tab bar;
-/// - the Now Playing bar is docked, not floating. It is a normal child of the
-///   layout column at the bottom of the content area — above the phone
-///   navigation menu, flush with the window bottom on wide layouts — so it can
-///   never hover over content or overlap the navigation.
+/// - the navigation menu is floating chrome. Under [Tokens.breakpointPhone]
+///   it is the compact glass bottom pill; at [Tokens.breakpointPhone] and
+///   wider it is the floating glass top tab bar;
+/// - the Now Playing bar hovers too. It is the same thick-glass pill as the
+///   navigation, positioned in the same Stack layer order (content, then
+///   chrome), so it never displaces layout — pages simply receive a computed
+///   bottom inset to clear it.
 ///
 /// The top tab bar floats over a reserved strip ([Tokens.shellTopInset]) rather
 /// than taking a layout column, so it reads as chrome rather than a panel.
@@ -58,10 +59,12 @@ class AppShell extends ConsumerWidget {
     final bool hasTrack = ref.watch(
       playbackProvider.select((PlaybackState state) => state.hasTrack),
     );
-    final bool onNowPlaying = currentIndex == AppDestination.nowPlaying.index;
+    // Only the Now Playing page itself displaces the mini player; its sub-
+    // pages (Queue, Equalizer) keep the bar like every other page.
+    final bool onNowPlayingPage = onNowPlayingPageRoute(context);
 
     // The page is the player on Now Playing, so the bar steps aside.
-    final bool showNowPlayingBar = hasTrack && !onNowPlaying;
+    final bool showNowPlayingBar = hasTrack && !onNowPlayingPage;
 
     void select(int index) =>
         navigationShell.goBranch(index, initialLocation: index == currentIndex);
@@ -77,70 +80,138 @@ class AppShell extends ConsumerWidget {
       onOpenSettings: openSettings,
     );
 
+    // The Android gesture inset the floating chrome must clear; on Windows
+    // this is zero, so the pills simply float with their own margins.
+    final double safeBottom = MediaQuery.paddingOf(context).bottom;
+
+    // How much chrome floats over the bottom of the content: the last strip
+    // of every page scrolls beneath it while it keeps running.
+    final double chromeZone;
+    final double msafeBottom = isPhone ? safeBottom : 0;
+    final double clearance;
+    if (isPhone) {
+      chromeZone =
+          Tokens.s12 +
+          Tokens.navBarHeight +
+          (showNowPlayingBar ? Tokens.s8 + Tokens.nowPlayingBarHeight : 0);
+      clearance = msafeBottom + chromeZone + Tokens.s16;
+    } else {
+      chromeZone = showNowPlayingBar
+          ? Tokens.nowPlayingBarHeight + Tokens.s16 * 2
+          : 0;
+      clearance = chromeZone;
+    }
+
     final Widget body = isPhone
-        ? Column(
+        ? Stack(
             children: <Widget>[
-              // Pages own their scrolling; the shell owns the system insets.
-              // The top inset keeps content out of the Android status bar and
-              // any notch, while the bottom is handled by the navigation pill.
-              Expanded(child: SafeArea(bottom: false, child: navigationShell)),
-              // Docked: it sits in the layout above the floating navigation
-              // pill, not over the page.
-              if (showNowPlayingBar) const NowPlayingBar(),
-              SafeArea(top: false, child: navigation),
-            ],
-          )
-        : Column(
-            children: <Widget>[
-              Expanded(
-                child: Stack(
-                  children: <Widget>[
-                    // The tab bar floats in this strip; reserving it here keeps
-                    // the floating chrome off the content without every page
-                    // having to know it exists. The Now Playing bar no longer
-                    // needs a scroll inset because it takes layout space below.
-                    Positioned.fill(
-                      child: SafeArea(
-                        bottom: false,
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            top: Tokens.shellTopInset,
-                          ),
-                          child: navigationShell,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: SafeArea(
-                        bottom: false,
-                        child: NavTabBar(
-                          currentIndex: highlighted,
-                          settingsActive: settingsActive,
-                          onSelect: select,
-                          onOpenSettings: openSettings,
-                        ),
-                      ),
-                    ),
-                  ],
+              // Pages own their scrolling; the shell owns the insets. Content
+              // runs under the floating chrome — the scrollable's own bottom
+              // padding (bottom clearance) lifts the last rows above it — and
+              // the fade mask below blends the page into the base before the
+              // glass band. SafeArea handles the status bar / notch.
+              Positioned.fill(
+                child: SafeArea(
+                  bottom: false,
+                  child: ShellClearance(
+                    bottom: clearance,
+                    child: navigationShell,
+                  ),
                 ),
               ),
-              // Anchored to the bottom of the content area. SafeArea only
-              // reserves the Android gesture inset; on Windows this is zero,
-              // so the bar is flush with the window edge.
+              _BottomFade(height: msafeBottom + chromeZone + Tokens.s48),
+              // The mini player floats just above the nav pill.
               if (showNowPlayingBar)
-                const SafeArea(top: false, child: NowPlayingBar()),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom:
+                      safeBottom +
+                      Tokens.s12 +
+                      Tokens.navBarHeight +
+                      Tokens.s8,
+                  child: const NowPlayingBar(),
+                ),
+              // The nav pill anchors to the very bottom; SafeArea inside the
+              // slot lifts it off Android's gesture zone.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(top: false, child: navigation),
+              ),
+            ],
+          )
+        : Stack(
+            children: <Widget>[
+              // The tab bar floats in the reserved top strip; the Now Playing
+              // bar floats over the content's bottom edge instead of taking a
+              // column, so pages scroll beneath it.
+              Positioned.fill(
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: Tokens.shellTopInset),
+                    child: ShellClearance(
+                      bottom: clearance,
+                      child: navigationShell,
+                    ),
+                  ),
+                ),
+              ),
+              if (showNowPlayingBar)
+                _BottomFade(
+                  height: Tokens.nowPlayingBarHeight + Tokens.s16 * 2 + Tokens.s48,
+                ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: NavTabBar(
+                    currentIndex: highlighted,
+                    settingsActive: settingsActive,
+                    onSelect: select,
+                    onOpenSettings: openSettings,
+                  ),
+                ),
+              ),
+              // The floating pill: centred on the page gutters, held a margin
+              // off the window bottom, capped at the content width so it
+              // never sprawls across an ultrawide window.
+              if (showNowPlayingBar)
+                Positioned(
+                  left: Tokens.pageMarginDesktop,
+                  right: Tokens.pageMarginDesktop,
+                  bottom: Tokens.s16,
+                  child: Align(
+                    alignment: AlignmentDirectional.bottomCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: Tokens.contentMaxWidth,
+                      ),
+                      child: const NowPlayingBar(),
+                    ),
+                  ),
+                ),
             ],
           );
 
     return Scaffold(
-      backgroundColor: Tokens.bg,
-      body: Column(
+      backgroundColor: Tokens.transparent,
+      // The ambient layer sits behind everything the shell draws: the app's
+      // single artwork-derived surface. The veil on top of it is what keeps
+      // the chrome readable, so no page paints a background of its own.
+      body: Stack(
         children: <Widget>[
-          ?titleBar,
-          Expanded(child: _GlobalShortcuts(child: body)),
+          const Positioned.fill(child: AmbientBackdrop()),
+          Column(
+            children: <Widget>[
+              ?titleBar,
+              Expanded(child: _GlobalShortcuts(child: body)),
+            ],
+          ),
         ],
       ),
     );
@@ -176,6 +247,27 @@ class _GlobalShortcuts extends ConsumerWidget {
       return KeyEventResult.handled;
     }
 
+    // Hardware media keys. They are dedicated keys, so they answer even while
+    // a text field has focus, and only when there is a track to act on.
+    final PlaybackState preState = ref.read(playbackProvider);
+    if (preState.hasTrack) {
+      if (event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
+          event.logicalKey == LogicalKeyboardKey.mediaPlay ||
+          event.logicalKey == LogicalKeyboardKey.mediaPause ||
+          event.logicalKey == LogicalKeyboardKey.mediaStop) {
+        ref.read(playbackProvider.notifier).togglePlayPause();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.mediaTrackNext) {
+        ref.read(playbackProvider.notifier).next();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.mediaTrackPrevious) {
+        ref.read(playbackProvider.notifier).previous();
+        return KeyEventResult.handled;
+      }
+    }
+
     // Everything below would be wrong to trigger while typing.
     if (_isTyping()) return KeyEventResult.ignored;
 
@@ -206,6 +298,66 @@ class _GlobalShortcuts extends ConsumerWidget {
       onKeyEvent: (FocusNode node, KeyEvent event) =>
           _onKey(context, ref, event),
       child: child,
+    );
+  }
+}
+
+/// The extra bottom padding a page's scrollable must carry so its last rows
+/// can scroll clear of the floating Now Playing bar and navigation.
+///
+/// The shell decides the number (it knows the chrome); the pages consume it
+/// and own everything else about their scrolling. Pages that never scroll —
+/// Now Playing — read it as the space their controls must stay clear of.
+@immutable
+class ShellClearance extends InheritedWidget {
+  const ShellClearance({
+    super.key,
+    required this.bottom,
+    required super.child,
+  });
+
+  /// Bottom padding in logical pixels the page content should keep free.
+  final double bottom;
+
+  /// The clearance provided by the nearest shell; zero outside the shell.
+  static double of(BuildContext context) {
+    final ShellClearance? shell = context
+        .dependOnInheritedWidgetOfExactType<ShellClearance>();
+    return shell?.bottom ?? 0;
+  }
+
+  @override
+  bool updateShouldNotify(ShellClearance oldWidget) =>
+      oldWidget.bottom != bottom;
+}
+
+/// A soft fade that blends scrolling content into the dark base before it
+/// passes under the floating glass chrome — the page melting away rather than
+/// hard-cutting at the band's top edge.
+class _BottomFade extends StatelessWidget {
+  const _BottomFade({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: height,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: const <Color>[Tokens.bg, Tokens.transparent],
+              stops: <double>[0.0, 1.0],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../data/ytm_repository.dart';
 import '../../theme/tokens.dart';
 import '../../ui/data_states.dart';
 import '../../ui/media_rows.dart';
+import '../shell/app_shell.dart';
 import 'hero_banner.dart';
 import 'popular_rail.dart';
 
@@ -30,7 +31,8 @@ class HomeScreen extends ConsumerWidget {
         onRetry: () => ref.invalidate(homeProvider),
         isEmpty: (List<HomeRow> rows) => rows.isEmpty,
         emptyMessage: 'Nothing to show on Home yet.',
-        emptyFootnote: 'Listen to a few tracks and your mixes will appear here.',
+        emptyFootnote:
+            'Listen to a few tracks and your mixes will appear here.',
         loading: const ListSkeleton(),
         data: (List<HomeRow> rows) => _HomeContent(rows: rows),
       ),
@@ -82,68 +84,111 @@ class _HomeContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin =
-        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+    final double margin = Tokens.pageMargin(MediaQuery.sizeOf(context).width);
     final MediaItem? featured = featuredRelease(rows);
     final List<MediaItem> popular = popularTracks(rows);
     // Desktop only; and only when there is a real track to list.
     final bool showPopular = isDesktop && popular.isNotEmpty;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: RefreshIndicator(
-            color: Tokens.accent,
-            backgroundColor: Tokens.surfaceRaised,
-            onRefresh: () async {
-              ref.invalidate(connectionProvider);
-              ref.invalidate(homeProvider);
-              await ref.read(homeProvider.future);
-            },
-            // A Column, not a lazy list: a handful of rails is cheap, and it
-            // keeps every shelf the service returned mounted — the hero must
-            // not be able to push a later rail out of the tree.
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                margin,
-                Tokens.s24,
-                margin,
-                Tokens.s24,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: Tokens.s16),
-                    child: Text(
-                      'Good evening',
-                      style: isDesktop
-                          ? Tokens.pageTitleDesktop
-                          : Tokens.pageTitle,
-                    ),
+    // Ultrawide guard: the whole content row — rails and the Popular third
+    // column — stops growing at [Tokens.contentMaxWidth] and centers, so line
+    // lengths stay readable on a 1920 window.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Expanded(
+              child: RefreshIndicator(
+                color: Tokens.text,
+                backgroundColor: Tokens.surfaceRaised,
+                onRefresh: () async {
+                  ref.invalidate(connectionProvider);
+                  ref.invalidate(homeProvider);
+                  await ref.read(homeProvider.future);
+                },
+                // A Column, not a lazy list: a handful of rails is cheap, and
+                // it keeps every shelf the service returned mounted — the
+                // hero must not be able to push a later rail out of the tree.
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    margin,
+                    Tokens.s24,
+                    margin,
+                    // The last rail must scroll clear of the floating bar
+                    // while it keeps running beneath it.
+                    Tokens.s24 + ShellClearance.of(context),
                   ),
-                  if (featured != null) HomeHeroBanner(item: featured),
-                  for (final HomeRow row in rows) _HomeRail(row: row),
-                ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: Tokens.s16),
+                        child: Text(
+                          'Good evening',
+                          style: isDesktop
+                              ? Tokens.pageTitleDesktop
+                              : Tokens.pageTitle,
+                        ),
+                      ),
+                      if (featured != null) HomeHeroBanner(item: featured),
+                      for (final (HomeRow row, List<String?> tags)
+                          in _heroCardTags(rows))
+                        _HomeRail(row: row, heroTags: tags),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
+            if (showPopular) PopularRail(tracks: popular),
+          ],
         ),
-        if (showPopular) PopularRail(tracks: popular),
-      ],
+      ),
     );
   }
 }
 
+/// First card in reading order gets the artwork hero tag; every later card
+/// showing the same artwork gets none, so the mounted tree never holds two
+/// heroes with one tag.
+List<(HomeRow, List<String?>)> _heroCardTags(List<HomeRow> rows) {
+  final Set<String> seen = <String>{};
+  final List<(HomeRow, List<String?>)> result = <(HomeRow, List<String?>)>[];
+  for (final HomeRow row in rows) {
+    final List<String?> tags = <String?>[];
+    for (final MediaItem item in row.items) {
+      final String url = item.artworkUrl ?? '';
+      if (url.isNotEmpty && seen.add(url)) {
+        tags.add('artwork:$url');
+      } else {
+        tags.add(null);
+      }
+    }
+    result.add((row, tags));
+  }
+  return result;
+}
+
 class _HomeRail extends StatelessWidget {
-  const _HomeRail({required this.row});
+  const _HomeRail({required this.row, required this.heroTags});
 
   final HomeRow row;
 
+  /// Per-card hero tags (`artwork:<url>`), or null where the artwork was
+  /// already tagged by an earlier card on the page — heroes must not share a
+  /// tag within a route.
+  final List<String?> heroTags;
+
   @override
   Widget build(BuildContext context) {
+    // A rail the service short-changed looks broken, not curated: one or two
+    // cards in an otherwise full grid reads as an error state. Sections show
+    // only with enough content to fill the layout.
+    if (row.items.length < Tokens.minRailItems) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: Tokens.s24),
       child: Column(
@@ -151,17 +196,41 @@ class _HomeRail extends StatelessWidget {
         children: <Widget>[
           Text(row.title, style: Tokens.sectionHeader),
           const SizedBox(height: Tokens.s12),
-          SizedBox(
-            height: Tokens.railCardHeight,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: row.items.length,
-              separatorBuilder: (_, _) => const SizedBox(width: Tokens.s16),
-              itemBuilder: (BuildContext context, int index) => MediaCard(
-                item: row.items[index],
-                siblings: row.items,
-              ),
-            ),
+          // The trailing cards melt out under the page edge instead of
+          // hard-cutting against the gutter.
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final double width = constraints.maxWidth;
+              // A s32-wide fade window at the trailing edge.
+              final double fadeStart = (1 - Tokens.s32 / width).clamp(0.0, 1.0);
+              return ShaderMask(
+                shaderCallback: (Rect bounds) => LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: const <Color>[
+                    Tokens.text,
+                    Tokens.text,
+                    Tokens.transparent,
+                  ],
+                  stops: <double>[0.0, fadeStart, 1.0],
+                ).createShader(bounds),
+                blendMode: BlendMode.dstIn,
+                child: SizedBox(
+                  height: Tokens.railCardHeight,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: row.items.length,
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(width: Tokens.s16),
+                    itemBuilder: (BuildContext context, int index) => MediaCard(
+                      item: row.items[index],
+                      siblings: row.items,
+                      heroTag: heroTags[index],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),

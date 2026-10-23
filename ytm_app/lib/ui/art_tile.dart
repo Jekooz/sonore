@@ -73,8 +73,16 @@ class _ArtPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: Tokens.surface,
+    return const DecoratedBox(
+      // A glass tint rather than an opaque square: under the ambient backdrop
+      // the placeholder reads as glass waiting for its artwork, not as a box.
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[Tokens.glassRegular, Tokens.glassThin],
+        ),
+      ),
       child: Center(
         child: Icon(
           AppIcons.image,

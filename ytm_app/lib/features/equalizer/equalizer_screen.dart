@@ -7,9 +7,11 @@ import '../../audio/equalizer_controller.dart';
 import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
+import '../../ui/glass_surface.dart';
 import '../../ui/pill_button.dart';
 import '../../ui/screen_header.dart';
 import '../../ui/screen_states.dart';
+import '../shell/app_shell.dart';
 
 /// Ten-band equalizer.
 ///
@@ -23,22 +25,34 @@ class EqualizerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bool supported = ref.watch(equalizerSupportedProvider);
+    final double margin = Tokens.pageMargin(MediaQuery.sizeOf(context).width);
 
     return Scaffold(
-      backgroundColor: Tokens.bg,
+      backgroundColor: Tokens.transparent,
       body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            ScreenHeader(
-              title: 'Equalizer',
-              onBack: () => context.go(AppDestination.nowPlaying.path),
+        child: Center(
+          // One narrow column the header and the panels share, the same form
+          // column Settings uses — the back arrow lands on its left edge.
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: Tokens.formMaxWidth),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(margin, Tokens.s8, margin, 0),
+              child: Column(
+                children: <Widget>[
+                  ScreenHeader(
+                    title: 'Equalizer',
+                    onBack: () => context.go(AppDestination.nowPlaying.path),
+                    padding: EdgeInsets.zero,
+                  ),
+                  Expanded(
+                    child: supported
+                        ? const _EqualizerControls()
+                        : const _NoEngineSupport(),
+                  ),
+                ],
+              ),
             ),
-            Expanded(
-              child: supported
-                  ? const _EqualizerControls()
-                  : const _NoEngineSupport(),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -53,7 +67,8 @@ class _NoEngineSupport extends StatelessWidget {
   Widget build(BuildContext context) {
     return const StateMessage(
       message: 'This player cannot apply an equalizer yet.',
-      footnote: 'Ten-band EQ needs the audio engine to expose a filter chain. '
+      footnote:
+          'Ten-band EQ needs the audio engine to expose a filter chain. '
           'Nothing here is shown as adjustable, because nothing here would '
           'change what you hear.',
     );
@@ -66,111 +81,177 @@ class _EqualizerControls extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final EqualizerState state = ref.watch(equalizerControllerProvider);
-    final EqualizerController controller =
-        ref.read(equalizerControllerProvider.notifier);
+    final EqualizerController controller = ref.read(
+      equalizerControllerProvider.notifier,
+    );
+
+    // The selected preset is stated where the reader set it: right next to
+    // the switch the page is named by, and again on the preset chip itself.
+    // A flat shape that was never built from a preset chips in as "Flat"
+    // rather than the baffling "Custom".
+    final String summary = !state.config.enabled
+        ? 'Off'
+        : (state.config.presetName ??
+              (state.config.isFlat ? 'Flat' : 'Custom'));
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Tokens.pageMarginPhone,
-        vertical: Tokens.s16,
-      ),
+      padding: EdgeInsets.only(bottom: Tokens.s16 + ShellClearance.of(context)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  state.config.enabled ? 'On' : 'Off',
-                  style: Tokens.rowTitle,
-                ),
-              ),
-              Semantics(
-                toggled: state.config.enabled,
-                label: 'Equalizer',
-                child:                Switch(
-                  value: state.config.enabled,
-                  activeThumbColor: Tokens.accent,
-                  onChanged: state.isApplying
-                      ? null
-                      : (bool value) => controller.setEnabled(value),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Tokens.s16),
-          Text('Preset', style: Tokens.sectionHeader),
-          const SizedBox(height: Tokens.s8),
-          // A wrapped chip row: chips keep their own width, a second run starts
-          // at the same left edge as the first, and the selected one is stated
-          // both visually and to assistive technology.
-          Wrap(
-            alignment: WrapAlignment.start,
-            crossAxisAlignment: WrapCrossAlignment.start,
-            spacing: Tokens.s8,
-            runSpacing: Tokens.s8,
-            children: <Widget>[
-              for (final EqualizerPreset preset in equalizerPresets)
-                _PresetChip(
-                  label: preset.name,
-                  selected: state.config.presetName == preset.name,
-                  onPressed: state.isApplying
-                      ? null
-                      : () => controller.setPreset(preset),
-                ),
-            ],
-          ),
-          const SizedBox(height: Tokens.s24),
-          Text('Bands', style: Tokens.sectionHeader),
-          const SizedBox(height: Tokens.s4),
-          // The range every band moves over, stated once: the readouts below are
-          // dB values, and this is the scale they are read against.
-          Text(
-            '±${equalizerMaxGainDb.round()} dB per band',
-            style: Tokens.caption,
-          ),
-          const SizedBox(height: Tokens.s8),
-          SizedBox(
-            height: 220,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                for (int i = 0; i < equalizerBandFrequenciesHz.length; i++)
+          GlassSurface(
+            radius: Tokens.rLarge,
+            child: Padding(
+              padding: const EdgeInsets.all(Tokens.s16),
+              child: Row(
+                children: <Widget>[
                   Expanded(
-                    child: _BandControl(
-                      frequencyHz: equalizerBandFrequenciesHz[i],
-                      gainDb: state.config.gains[i],
-                      enabled: state.config.enabled && !state.isApplying,
-                      onChanged: (double value) =>
-                          controller.setGain(i, value),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const Text('Equalizer', style: Tokens.rowTitle),
+                        const SizedBox(height: Tokens.s4),
+                        Text(summary, style: Tokens.subtitle),
+                      ],
                     ),
                   ),
-              ],
+                  Semantics(
+                    toggled: state.config.enabled,
+                    label: 'Equalizer',
+                    child: Switch(
+                      value: state.config.enabled,
+                      activeThumbColor: Tokens.text,
+                      onChanged: state.isApplying
+                          ? null
+                          : (bool value) => controller.setEnabled(value),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: Tokens.s16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              PillButton(
-                icon: AppIcons.arrowClockwise,
-                label: 'Reset to flat',
-                onPressed: state.isApplying
-                    ? null
-                    : () => controller.reset(),
+          GlassSurface(
+            radius: Tokens.rLarge,
+            child: Padding(
+              padding: const EdgeInsets.all(Tokens.s16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  const Text('Preset', style: Tokens.sectionHeader),
+                  const SizedBox(height: Tokens.s8),
+                  // With the EQ off the shape withholds interaction: the
+                  // chips and bands fade back and stop responding, instead
+                  // of letting the reader drag a slider that does nothing.
+                  AnimatedOpacity(
+                    opacity: state.config.enabled ? 1 : 0.45,
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : Tokens.dFadeIn,
+                    child: IgnorePointer(
+                      ignoring: !state.config.enabled,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          // A wrapped chip row: chips keep their own width, a
+                          // second run starts at the same left edge as the first,
+                          // and the selected one is stated both visually and to
+                          // assistive technology.
+                          Wrap(
+                            alignment: WrapAlignment.start,
+                            crossAxisAlignment: WrapCrossAlignment.start,
+                            spacing: Tokens.s8,
+                            runSpacing: Tokens.s8,
+                            children: <Widget>[
+                              for (final EqualizerPreset preset
+                                  in equalizerPresets)
+                                _PresetChip(
+                                  label: preset.name,
+                                  selected:
+                                      state.config.presetName == preset.name,
+                                  onPressed:
+                                      state.isApplying || !state.config.enabled
+                                      ? null
+                                      : () => controller.setPreset(preset),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: Tokens.s24),
+                          const Text('Bands', style: Tokens.sectionHeader),
+                          const SizedBox(height: Tokens.s4),
+                          // The range every band moves over, stated once: the
+                          // readouts below are dB values, and this is the scale
+                          // they are read against.
+                          Text(
+                            '±${equalizerMaxGainDb.round()} dB per band',
+                            style: Tokens.subtitle,
+                          ),
+                          const SizedBox(height: Tokens.s8),
+                          SizedBox(
+                            height: Tokens.eqBandsHeight,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                for (
+                                  int i = 0;
+                                  i < equalizerBandFrequenciesHz.length;
+                                  i++
+                                )
+                                  Expanded(
+                                    child: _BandControl(
+                                      frequencyHz:
+                                          equalizerBandFrequenciesHz[i],
+                                      gainDb: state.config.gains[i],
+                                      enabled:
+                                          state.config.enabled &&
+                                          !state.isApplying,
+                                      onChanged: (double value) =>
+                                          controller.setGain(i, value),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: Tokens.s24),
+                          // "Reset to flat" belongs where the shape is
+                          // edited — with the presets and bands — not
+                          // floating outside the panel.
+                          Center(
+                            child: PillButton(
+                              icon: AppIcons.arrowClockwise,
+                              label: 'Reset to flat',
+                              onPressed: state.isApplying
+                                  ? null
+                                  : () => controller.reset(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
           if (state.isApplying) ...<Widget>[
             const SizedBox(height: Tokens.s16),
-            const LinearProgressIndicator(minHeight: 2),
+            const LinearProgressIndicator(minHeight: Tokens.seekBarThicknessCompact),
           ],
           if (state.error != null) ...<Widget>[
             const SizedBox(height: Tokens.s16),
-            StateMessage(message: state.error!),
+            // The configuration is saved either way; the retry re-runs the
+            // engine write so a transient engine hiccup needs no resend
+            // from scratch.
+            StateMessage(
+              message: state.error!,
+              footnote: 'Your settings are kept; the engine just did not '
+                  'take them.',
+              actionLabel: 'Try again',
+              onAction: () => controller.applyToEngine(),
+            ),
           ],
-          // The engine's own answer, so the reader (and the tests) can see the
-          // configuration really landed rather than assuming it did.
+          // The engine's own answer, so the reader (and the tests) can see
+          // the configuration really landed rather than assuming it did.
           if (state.appliedFilter != null &&
               state.appliedFilter!.isNotEmpty) ...<Widget>[
             const SizedBox(height: Tokens.s16),
@@ -209,11 +290,7 @@ class _PresetChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       selected: selected,
-      child: PillButton(
-        label: label,
-        isActive: selected,
-        onPressed: onPressed,
-      ),
+      child: PillButton(label: label, isActive: selected, onPressed: onPressed),
     );
   }
 }
@@ -233,9 +310,8 @@ class _BandControl extends StatelessWidget {
   final bool enabled;
   final ValueChanged<double> onChanged;
 
-  String get _frequencyLabel => frequencyHz >= 1000
-      ? '${frequencyHz ~/ 1000}k'
-      : '$frequencyHz';
+  String get _frequencyLabel =>
+      frequencyHz >= 1000 ? '${frequencyHz ~/ 1000}k' : '$frequencyHz';
 
   /// This band's gain with its sign and its unit. A bare number leaves the
   /// reader to guess the unit and whether it is a boost or a cut.
@@ -253,27 +329,28 @@ class _BandControl extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          Text(
-            _gainLabel,
-            style: Tokens.caption,
-            textAlign: TextAlign.center,
-          ),
+          Text(_gainLabel, style: Tokens.subtitle, textAlign: TextAlign.center),
           Expanded(
             child: RotatedBox(
               quarterTurns: -1,
-              child: Slider(
-                value: gainDb,
-                min: -equalizerMaxGainDb,
-                max: equalizerMaxGainDb,
-                divisions: 24,
-                label: '${gainDb.round()} dB',
-                activeColor: Tokens.accent,
-                inactiveColor: Tokens.border,
-                onChanged: enabled ? onChanged : null,
+              child: SliderTheme(
+                data: Tokens.sliderGlass,
+                child: Slider(
+                  value: gainDb,
+                  min: -equalizerMaxGainDb,
+                  max: equalizerMaxGainDb,
+                  divisions: 24,
+                  label: '${gainDb.round()} dB',
+                  onChanged: enabled ? onChanged : null,
+                ),
               ),
             ),
           ),
-          Text(_frequencyLabel, style: Tokens.caption, textAlign: TextAlign.center),
+          Text(
+            _frequencyLabel,
+            style: Tokens.subtitle,
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );

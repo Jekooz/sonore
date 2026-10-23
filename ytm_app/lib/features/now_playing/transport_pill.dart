@@ -12,10 +12,14 @@ import '../../ui/pressable.dart';
 ///
 /// Spec: glass with the specular streak, shuffle / previous / play-pause / next
 /// / repeat. Every control reflects real playback state; the play button is
-/// white with a black glyph, and accent marks only the active toggles (spec:
-/// principle 2).
+/// white with a dark glyph, and active toggles gain full-white foregrounds.
 class TransportPill extends ConsumerWidget {
   const TransportPill({super.key});
+
+  /// What the pill needs at minimum: five 48px controls plus its own
+  /// horizontal padding. Parents shrinking around it — like the player
+  /// column that follows the artwork's width — must not go below this.
+  static const double minWidth = Tokens.minTouchTarget * 5 + Tokens.s16 * 2;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -23,7 +27,7 @@ class TransportPill extends ConsumerWidget {
     final PlaybackController controller = ref.read(playbackProvider.notifier);
 
     return GlassSurface(
-      isStrong: true,
+      tier: GlassTier.thick,
       shape: Tokens.shapePill,
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -39,7 +43,7 @@ class TransportPill extends ConsumerWidget {
               child: Icon(
                 AppIcons.shuffle,
                 size: Tokens.iconSize,
-                color: state.shuffle ? Tokens.accent : Tokens.textSecondary,
+                color: state.shuffle ? Tokens.text : Tokens.textSecondary,
               ),
             ),
             Pressable(
@@ -85,7 +89,9 @@ class TransportPill extends ConsumerWidget {
               child: Icon(
                 AppIcons.repeat,
                 size: Tokens.iconSize,
-                color: state.repeat.isActive ? Tokens.accent : Tokens.textSecondary,
+                color: state.repeat.isActive
+                    ? Tokens.text
+                    : Tokens.textSecondary,
               ),
             ),
           ],

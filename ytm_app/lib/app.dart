@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'core/app_identity.dart';
 import 'core/app_settings.dart';
 import 'core/sidecar/sidecar_startup_gate.dart';
+import 'features/shell/window_material.dart';
 import 'theme/app_theme.dart';
 import 'theme/tokens.dart';
 
@@ -30,18 +32,39 @@ class YtmApp extends ConsumerWidget {
     final AppSettings settings = ref.watch(appSettingsProvider);
     final double maxScale = settings.textScale;
 
+    // The window material follows Reduce transparency and OS high contrast
+    // at all times, not just at boot: the toggle in Settings must reach the
+    // desktop's own surface, not only the in-app glass.
+    ref.listen<bool>(
+      appSettingsProvider.select(
+        (AppSettings settings) => settings.reduceTransparency,
+      ),
+      (bool? previous, bool next) => WindowMaterial.apply(
+        solid: next || MediaQuery.of(context).highContrast,
+      ),
+    );
+
     return MaterialApp.router(
       title: appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       themeMode: ThemeMode.dark,
       routerConfig: router,
+      // The frame-stats overlay for performance runs (Settings only offers
+      // the switch outside release builds, where the engine has no timeline
+      // to draw from).
+      showPerformanceOverlay: !kReleaseMode && settings.showPerformanceOverlay,
       builder: (BuildContext context, Widget? child) {
         // The Reduce motion preference overrides the platform flag, so one
         // switch turns every animated transition in the app into a plain
         // cross-fade. It is folded into MediaQuery rather than read screen by
         // screen because every animated widget already asks MediaQuery.
         final MediaQueryData media = MediaQuery.of(context);
+        // The window's own surface goes solid on Reduce transparency or OS
+        // high contrast even without a settings change.
+        WindowMaterial.apply(
+          solid: settings.reduceTransparency || media.highContrast,
+        );
         return SidecarStartupGate(
           titleBar: titleBar,
           child: MediaQuery(

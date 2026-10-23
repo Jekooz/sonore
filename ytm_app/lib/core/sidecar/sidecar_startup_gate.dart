@@ -148,14 +148,10 @@ class _SidecarStarting extends StatelessWidget {
           children: <Widget>[
             Text(appName, style: Tokens.pageTitle),
             const SizedBox(height: Tokens.s24),
-            const SizedBox(
-              width: Tokens.s24,
-              height: Tokens.s24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Tokens.textSecondary,
-              ),
-            ),
+            // The designed loader rather than a bare spinner: one shimmering
+            // pill the rest of the app's loading states use. A starting
+            // service stays quiet, so it does not use the ambient layers.
+            const Skeleton(width: Tokens.s24, height: Tokens.s12),
             const SizedBox(height: Tokens.s16),
             Text(
               'Starting the music service…',

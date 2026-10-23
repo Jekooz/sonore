@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
+import '../../ui/context_menu.dart';
 
 /// The custom Windows title bar.
 ///
@@ -9,6 +10,11 @@ import '../../theme/tokens.dart';
 /// widget can be rendered and golden-tested without a platform channel. The app
 /// wires the callbacks to `window_manager` in `main.dart`; tests pass
 /// callbacks that record the call.
+///
+/// The maximize button also carries the app's own snap menu (right-click /
+/// long-press): the OS Snap-layouts flyout cannot appear over a custom title
+/// bar, so the halves it would offer are offered here instead, delegated to
+/// [onSnapLeft]/[onSnapRight].
 class WindowTitleBar extends StatelessWidget {
   const WindowTitleBar({
     super.key,
@@ -17,6 +23,8 @@ class WindowTitleBar extends StatelessWidget {
     this.onMinimize,
     this.onMaximizeToggle,
     this.onClose,
+    this.onSnapLeft,
+    this.onSnapRight,
     this.isMaximized = false,
   });
 
@@ -25,6 +33,8 @@ class WindowTitleBar extends StatelessWidget {
   final VoidCallback? onMinimize;
   final VoidCallback? onMaximizeToggle;
   final VoidCallback? onClose;
+  final VoidCallback? onSnapLeft;
+  final VoidCallback? onSnapRight;
   final bool isMaximized;
 
   @override
@@ -47,11 +57,19 @@ class WindowTitleBar extends StatelessWidget {
             semanticLabel: 'Minimize',
             onPressed: onMinimize,
           ),
-          _CaptionButton(
-            icon: isMaximized ? AppIcons.restore : AppIcons.maximize,
-            semanticLabel: isMaximized ? 'Restore' : 'Maximize',
-            onPressed: onMaximizeToggle,
-          ),
+          if (onSnapLeft != null && onSnapRight != null)
+            _CaptionButton(
+              icon: isMaximized ? AppIcons.restore : AppIcons.maximize,
+              semanticLabel: isMaximized ? 'Restore' : 'Maximize',
+              onPressed: onMaximizeToggle,
+              onSecondaryTap: () => _openSnapMenu(context),
+            )
+          else
+            _CaptionButton(
+              icon: isMaximized ? AppIcons.restore : AppIcons.maximize,
+              semanticLabel: isMaximized ? 'Restore' : 'Maximize',
+              onPressed: onMaximizeToggle,
+            ),
           _CaptionButton(
             icon: AppIcons.close,
             semanticLabel: 'Close',
@@ -61,6 +79,28 @@ class WindowTitleBar extends StatelessWidget {
       ),
     );
   }
+
+  /// The snap menu in the glass context menu itself, so keyboard navigation
+  /// and Escape-to-close come for free.
+  void _openSnapMenu(BuildContext context) {
+    showContextMenuAt(context, <ContextMenuEntry>[
+      ContextMenuEntry(
+        icon: AppIcons.caretLeft,
+        label: 'Snap left',
+        onSelected: () => onSnapLeft!(),
+      ),
+      ContextMenuEntry(
+        icon: AppIcons.caretRight,
+        label: 'Snap right',
+        onSelected: () => onSnapRight!(),
+      ),
+      ContextMenuEntry(
+        icon: isMaximized ? AppIcons.restore : AppIcons.maximize,
+        label: isMaximized ? 'Restore' : 'Maximize',
+        onSelected: onMaximizeToggle!,
+      ),
+    ]);
+  }
 }
 
 class _CaptionButton extends StatelessWidget {
@@ -68,11 +108,13 @@ class _CaptionButton extends StatelessWidget {
     required this.icon,
     required this.semanticLabel,
     this.onPressed,
+    this.onSecondaryTap,
   });
 
   final IconData icon;
   final String semanticLabel;
   final VoidCallback? onPressed;
+  final VoidCallback? onSecondaryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +124,8 @@ class _CaptionButton extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
+        onSecondaryTap: onSecondaryTap,
+        onLongPress: onSecondaryTap,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
           child: Icon(icon, size: Tokens.iconSize, color: Tokens.textSecondary),

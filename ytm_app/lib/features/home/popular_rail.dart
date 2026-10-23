@@ -20,6 +20,13 @@ class PopularRail extends StatelessWidget {
 
   final List<MediaItem> tracks;
 
+  /// Durations read only when the service returned them for *every* row — a
+  /// duration column where only row one is filled reads like a rendering bug,
+  /// so it is all rows or none.
+  bool get _showAllDurations =>
+      tracks.isNotEmpty &&
+      tracks.every((MediaItem item) => item.track?.duration != null);
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -43,6 +50,7 @@ class PopularRail extends StatelessWidget {
                   position: index + 1,
                   item: tracks[index],
                   siblings: tracks,
+                  showDuration: _showAllDurations,
                 ),
               ),
             ),
@@ -53,17 +61,20 @@ class PopularRail extends StatelessWidget {
   }
 }
 
-/// One numbered row: rank, art, title, artist, duration.
+/// One numbered row: rank, art, title, artist, and — when every row in the
+/// rail has a real duration — a right-aligned duration column.
 class _PopularRow extends ConsumerWidget {
   const _PopularRow({
     required this.position,
     required this.item,
     required this.siblings,
+    required this.showDuration,
   });
 
   final int position;
   final MediaItem item;
   final List<MediaItem> siblings;
+  final bool showDuration;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -116,8 +127,15 @@ class _PopularRow extends ConsumerWidget {
                     ],
                   ),
                 ),
-                if (track?.duration != null)
-                  Text(formatDuration(track!.duration), style: Tokens.caption),
+                if (showDuration)
+                  SizedBox(
+                    width: Tokens.s32 + Tokens.s12,
+                    child: Text(
+                      formatDuration(track!.duration),
+                      style: Tokens.caption,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
               ],
             ),
           ),

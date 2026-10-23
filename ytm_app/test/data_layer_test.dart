@@ -70,8 +70,10 @@ void main() {
       expect(rows, isNotEmpty);
       expect(rows.first.title, isNotEmpty);
       expect(rows.first.items, isNotEmpty);
-      // The recording holds three rails, each with cards.
-      expect(rows, hasLength(3));
+      // The recording holds three rails, each with cards, and the blended
+      // recommendation row is added in front of them.
+      expect(rows, hasLength(4));
+      expect(rows.first.title, 'Recommended for you');
       for (final HomeRow row in rows) {
         expect(row.items, isNotEmpty, reason: row.title);
       }
@@ -142,6 +144,9 @@ void main() {
       final YtmRepository repo = repositoryOver(
         recordedSidecar(responses: <String, http.Response>{
           '/home': jsonOk('[]'),
+          // Nothing to blend, so nothing is added either.
+          '/recommendations/home': jsonOk('{"title":"Recommended for you",'
+              '"items":[],"count":0}'),
         }),
       );
 
@@ -480,6 +485,33 @@ void main() {
       );
 
       final Uri uri = log.last.url;
+      // The blended route answers first.
+      expect(uri.path, '/recommendations/next');
+      expect(uri.queryParameters['seed'], 'abc');
+      expect(uri.queryParameters['limit'], '5');
+      expect(uri.queryParameters['exclude'], 'b,c');
+    });
+
+    test('the older route is the fallback, and it is asked the same way',
+        () async {
+      final List<http.Request> log = <http.Request>[];
+      final YtmRepository repo = repositoryOver(
+        MockClient((http.Request request) async {
+          log.add(request);
+          if (request.url.path == '/recommendations/next') {
+            return http.Response('{"detail":"boom"}', 500);
+          }
+          return recordedResponse(request);
+        }),
+      );
+
+      await repo.recommendations(
+        _probeTrack,
+        limit: 5,
+        exclude: const <String>['b', 'c'],
+      );
+
+      final Uri uri = log.last.url;
       expect(uri.path, '/recommendations');
       expect(uri.queryParameters['seed'], 'abc');
       expect(uri.queryParameters['limit'], '5');
@@ -497,6 +529,8 @@ void main() {
         () async {
       final YtmRepository repo = repositoryOver(
         recordedSidecar(responses: <String, http.Response>{
+          '/recommendations/next':
+              http.Response('{"detail":"Not signed in."}', 401),
           '/recommendations':
               http.Response('{"detail":"Not signed in."}', 401),
         }),
@@ -511,6 +545,10 @@ void main() {
     test('an upstream failure keeps the sidecar\'s own words', () async {
       final YtmRepository repo = repositoryOver(
         recordedSidecar(responses: <String, http.Response>{
+          '/recommendations/next': http.Response(
+            '{"detail":"YouTube Music request failed: 500"}',
+            502,
+          ),
           '/recommendations': http.Response(
             '{"detail":"YouTube Music request failed: 500"}',
             502,

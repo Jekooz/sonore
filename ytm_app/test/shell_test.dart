@@ -13,6 +13,7 @@ import 'package:ytm_app/routing/destinations.dart';
 import 'package:ytm_app/theme/icons.dart';
 import 'package:ytm_app/theme/tokens.dart';
 import 'package:ytm_app/ui/glass_surface.dart';
+import 'package:ytm_app/ui/seek_bar.dart';
 
 import 'support/harness.dart';
 
@@ -74,6 +75,61 @@ void main() {
     expect(find.byType(BackdropFilter), findsWidgets);
   });
 
+  testWidgets('the narrow phone bar: short labels, pill off the rim, '
+      'and a 48dp settings target', (WidgetTester tester) async {
+    await pumpAtSize(tester, appScope(), size: const Size(320, 690));
+
+    // "Now Playing" does not fit four destinations plus the settings slot
+    // at this width: the bar shows the short form, on one line.
+    expect(find.text('Playing'), findsOneWidget);
+    expect(find.text('Now Playing'), findsNothing);
+
+    final Rect bar = tester.getRect(
+      find.descendant(
+        of: find.byType(NavBottomBar),
+        matching: find.byType(GlassSurface),
+      ),
+    );
+    // The bar's row keeps an inset from the glass rim, so the selected
+    // (leftmost) pill starts and the rightmost pill ends clear of the edge.
+    Rect itemAncestor(String label) {
+      return tester.getRect(
+        find
+            .ancestor(
+              of: find.descendant(
+                of: find.byType(NavBottomBar),
+                matching: find.text(label),
+              ),
+              matching: find.byType(InkWell),
+            )
+            .last,
+      );
+    }
+
+    // Home is selected on load: its pill is the one nearest the left rim.
+    expect(
+      itemAncestor('Home').left,
+      greaterThanOrEqualTo(bar.left + Tokens.s8 - 1),
+    );
+    // "Playing" is the rightmost destination, next to the overflow slot.
+    expect(itemAncestor('Playing').right, lessThanOrEqualTo(bar.right));
+
+    // The overflow slot ("...") is a real target: 48dp in both axes.
+    final Rect dots = tester.getRect(
+      find
+          .ancestor(
+            of: find.descendant(
+              of: find.byType(NavBottomBar),
+              matching: find.byIcon(AppIcons.dotsThree),
+            ),
+            matching: find.byType(InkWell),
+          )
+          .last,
+    );
+    expect(dots.width, greaterThanOrEqualTo(Tokens.minTouchTarget - 1));
+    expect(dots.height, greaterThanOrEqualTo(Tokens.minTouchTarget - 1));
+  });
+
   testWidgets('selecting a destination changes the screen', (
     WidgetTester tester,
   ) async {
@@ -105,14 +161,14 @@ void main() {
   ) async {
     await pumpAtSize(tester, appScope(), size: kDesktop);
 
-    // A tab is active when it wears its filled glyph, painted with the accent;
+    // A tab is active when it wears its filled glyph, painted full-bright;
     // every other tab stays outlined and secondary.
     void expectOnlyActive(IconData filled) {
       expect(tabIcon(filled), findsOneWidget, reason: '${filled.codePoint}');
       expect(
         tester.widget<Icon>(tabIcon(filled)).color,
-        Tokens.accent,
-        reason: 'the active tab uses the accent',
+        Tokens.text,
+        reason: 'the active tab is full-bright white',
       );
       for (final AppDestination destination in AppDestination.values) {
         if (destination.activeIcon == filled) continue;
@@ -153,12 +209,14 @@ void main() {
     expect(bar.settingsActive, isFalse);
     expect(tabIcon(AppIcons.musicNotesFill), findsOneWidget);
 
-    // The Equalizer sits on top of Now Playing: Settings is the active action
-    // there, and Now Playing must not stay lit.
-    await tester.ensureVisible(find.text('EQ'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('EQ'));
-    await tester.pumpAndSettle();
+    // The Equalizer is now a Settings-side page (the link lives there). On
+    // top of Now Playing it must still light the Settings action, and Now
+    // Playing must not stay lit.
+    await pumpAtSize(
+      tester,
+      appScope(initialLocation: '/now-playing/equalizer', queue: testQueue()),
+      size: kDesktop,
+    );
 
     expect(find.byType(EqualizerScreen), findsOneWidget);
     bar = tester.widget<NavTabBar>(find.byType(NavTabBar));
@@ -175,7 +233,7 @@ void main() {
             ),
           )
           .color,
-      Tokens.accent,
+      Tokens.text,
     );
 
     // Settings itself, opened from a different destination, behaves the same.
@@ -264,7 +322,7 @@ void main() {
   });
 
   testWidgets(
-    'desktop docks the Now Playing bar flush with the window bottom',
+    'desktop floats the Now Playing bar as a pill above the bottom edge',
     (WidgetTester tester) async {
       await pumpAtSize(tester, appScope(queue: testQueue()), size: kDesktop);
 
@@ -272,24 +330,57 @@ void main() {
       final Rect bar = tester.getRect(find.byType(NowPlayingBar));
       final Rect window = tester.getRect(find.byType(Scaffold).first);
 
-      // Full window width and flush with the bottom edge: a docked bar, not a
-      // centered pill with a gap under it.
-      expect(bar.left, closeTo(window.left, 1));
-      expect(bar.width, closeTo(window.width, 1));
-      expect(bar.bottom, closeTo(window.bottom, 1));
+      // Floating chrome, not a docked bar: held clear of the window bottom
+      // and inset from the page gutters, but still full-height content.
+      expect(bar.bottom, closeTo(window.bottom - Tokens.s16, 1));
+      expect(bar.left, greaterThan(window.left));
+      expect(bar.right, lessThan(window.right));
+      expect(bar.height, Tokens.nowPlayingBarHeight);
 
-      // The surface is explicitly docked, so it cannot paint the floating
-      // shadow or specular streak.
+      // The surface is explicitly floating, the same recipe as the nav pill.
       final GlassSurface surface = tester.widget<GlassSurface>(
         find.descendant(
           of: find.byType(NowPlayingBar),
           matching: find.byType(GlassSurface),
         ),
       );
-      expect(surface.isFloating, isFalse);
-      expect(surface.shape, Tokens.shapeAnchoredBar);
+      expect(surface.isFloating, isTrue);
+      expect(surface.shape, Tokens.shapePill);
     },
   );
+
+  testWidgets('the desktop content clears the floating bar', (
+    WidgetTester tester,
+  ) async {
+    await pumpAtSize(tester, appScope(queue: testQueue()), size: kDesktop);
+
+    // The bar reserves its slot in the page inset: nothing can hide behind it
+    // by accident, so content can never collide with the chrome.
+    final Rect bar = tester.getRect(find.byType(NowPlayingBar));
+    expect(bar.top, greaterThan(0));
+
+    // The mini player carries its own thin scrubber now.
+    expect(find.byType(SeekBar), findsOneWidget);
+  });
+
+  testWidgets('the phone mini player floats above the nav pill', (
+    WidgetTester tester,
+  ) async {
+    await pumpAtSize(tester, appScope(queue: testQueue()), size: kPhone);
+
+    final Rect bar = tester.getRect(find.byType(NowPlayingBar));
+    final Rect pill = tester.getRect(
+      find.descendant(
+        of: find.byType(NavBottomBar),
+        matching: find.byType(GlassSurface),
+      ),
+    );
+
+    // Two floating layers, never stacked on each other: the mini player sits
+    // entirely above navigation, with a visible gap between them.
+    expect(bar.bottom, lessThanOrEqualTo(pill.top));
+    expect(pill.top - bar.bottom, greaterThanOrEqualTo(Tokens.s8 - 1));
+  });
 
   testWidgets('phone docks the bar above the floating navigation menu', (
     WidgetTester tester,

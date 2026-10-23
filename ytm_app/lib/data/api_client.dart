@@ -197,8 +197,13 @@ class YtmApiClient {
       candidates.add('http://127.0.0.1:$published');
     }
 
-    if (Platform.isAndroid) candidates.add('http://10.0.2.2:8000');
+    // The service only accepts a loopback host name, so the device's own
+    // loopback is the address that actually works: on a phone the service
+    // runs there, and in an emulator `adb reverse` maps it to the host. The
+    // emulator's host alias is tried last, because a request that arrives
+    // with that host name is refused by the service.
     candidates.add('http://127.0.0.1:8000');
+    if (Platform.isAndroid) candidates.add('http://10.0.2.2:8000');
     return candidates;
   }
 
@@ -458,6 +463,89 @@ class YtmApiClient {
     final Map<String, dynamic> body = _asMap(await _getJson(uri.toString()));
     final dynamic tracks = body['tracks'];
     return tracks is List ? tracks : const <dynamic>[];
+  }
+
+  /// GET /recommendations/home — the blended "Recommended for you" row.
+  ///
+  /// The service ranks YouTube Music's own row first and refines it with what
+  /// this device has learned. The items come back in the same shape as the
+  /// service's own rows, so the Home screen renders them like any other rail.
+  Future<Map<String, dynamic>> recommendationHomeRow({int limit = 20}) async {
+    final Uri uri = Uri(
+      path: '/recommendations/home',
+      queryParameters: <String, String>{'limit': '$limit'},
+    );
+    final Map<String, dynamic> body = _asMap(await _getJson(uri.toString()));
+    return body;
+  }
+
+  /// GET /recommendations/next?seed=&limit=&exclude= — the blended candidates
+  /// Autoplay adds when the queue runs low.
+  ///
+  /// [exclude] is the current queue (bounded by the sidecar), so the service
+  /// never hands back something that is already playing.
+  Future<List<dynamic>> recommendationsNext(
+    String seed, {
+    int limit = 12,
+    List<String> exclude = const <String>[],
+  }) async {
+    final Uri uri = Uri(
+      path: '/recommendations/next',
+      queryParameters: <String, String>{
+        'seed': seed,
+        'limit': '$limit',
+        if (exclude.isNotEmpty) 'exclude': exclude.join(','),
+      },
+    );
+    final Map<String, dynamic> body = _asMap(await _getJson(uri.toString()));
+    final dynamic tracks = body['tracks'];
+    return tracks is List ? tracks : const <dynamic>[];
+  }
+
+  /// POST /events/play|skip|like — one thing the listener did.
+  ///
+  /// Fire and forget by design: the local taste layer is a ranking signal, so
+  /// a service that cannot be reached must never interrupt playback or turn a
+  /// finished song into an error the listener has to dismiss.
+  Future<void> reportTasteEvent(
+    String kind,
+    Map<String, dynamic> event,
+  ) async {
+    try {
+      await _postJson('/events/$kind', event);
+    } on YtmException {
+      // A ranking signal only; nothing on screen depends on it succeeding.
+    }
+  }
+
+  /// GET /recommendations/settings — what the recommender is allowed to do.
+  Future<Map<String, dynamic>> recommenderSettings() async {
+    final Map<String, dynamic> body =
+        _asMap(await _getJson('/recommendations/settings'));
+    return body;
+  }
+
+  /// POST /recommendations/settings — store the recommender's settings.
+  ///
+  /// The credentials go to the service, which keeps them encrypted on this
+  /// machine; the app does not store them itself.
+  Future<void> saveRecommenderSettings({
+    required bool localLearning,
+    String listenbrainzToken = '',
+    String lastfmApiKey = '',
+    String listenbrainzUser = '',
+  }) async {
+    await _postJson('/recommendations/settings', <String, dynamic>{
+      'localLearning': localLearning,
+      'listenbrainzToken': listenbrainzToken,
+      'lastfmApiKey': lastfmApiKey,
+      'listenbrainzUser': listenbrainzUser,
+    });
+  }
+
+  /// POST /recommendations/clear — forget the local listening data.
+  Future<void> clearListeningData() async {
+    await _postJson('/recommendations/clear', <String, dynamic>{});
   }
 
   /// GET /listening/history?limit= — the tracks this app played, newest first.

@@ -103,6 +103,73 @@ Future<http.Response> recordedResponse(
     return jsonOk('{"entries":[],"count":0}');
   }
   if (path.startsWith('/ratings')) return jsonOk('{"ok":true}');
+
+  // The layered recommender. The blended rows come back in the same shape as
+  // the service's own rows, so the app renders them like any other rail.
+  if (path == '/recommendations/home') {
+    return jsonOk(jsonEncode(<String, dynamic>{
+      'title': 'Recommended for you',
+      'items': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'videoId': 'blended000001',
+          'title': 'Blended Pick',
+          'artists': <Map<String, String>>[
+            <String, String>{'name': 'Blended Artist', 'id': 'UCblended001'},
+          ],
+          'thumbnails': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'url': 'https://example.invalid/art/blended-120.jpg',
+              'width': 120,
+              'height': 120,
+            },
+          ],
+          'duration': '3:07',
+          'durationSeconds': 187,
+          'source': 'yt',
+        },
+      ],
+      'count': 1,
+    }));
+  }
+  if (path == '/recommendations/next') {
+    return jsonOk(jsonEncode(<String, dynamic>{
+      'seed': 'seed000000001',
+      'tracks': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'videoId': 'blended000002',
+          'title': 'Blended Next',
+          'artists': <Map<String, String>>[
+            <String, String>{'name': 'Blended Artist', 'id': 'UCblended001'},
+          ],
+          'thumbnails': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'url': 'https://example.invalid/art/blended-120.jpg',
+              'width': 120,
+              'height': 120,
+            },
+          ],
+          'duration': '3:07',
+          'durationSeconds': 187,
+          'source': 'yt',
+        },
+      ],
+      'count': 1,
+    }));
+  }
+  if (path == '/recommendations/settings') {
+    if (request.method == 'POST') return jsonOk('{"saved":true}');
+    return jsonOk(jsonEncode(<String, dynamic>{
+      'localLearning': true,
+      'listenbrainzToken': '',
+      'lastfmApiKey': '',
+      'listenbrainzUser': 'jekooz',
+      'externalConfigured': false,
+      'counts': <String, int>{'plays': 0, 'skips': 0, 'likes': 0},
+    }));
+  }
+  if (path == '/recommendations/clear') return jsonOk('{"cleared":true}');
+  if (path.startsWith('/events/')) return jsonOk('{"recorded":true}');
+
   return http.Response('{"detail":"not found"}', 404);
 }
 

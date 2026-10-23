@@ -7,6 +7,7 @@ import '../../data/ytm_repository.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
 import '../../ui/art_tile.dart';
+import '../../ui/glass_surface.dart';
 import '../../ui/media_rows.dart';
 import '../../ui/pill_button.dart';
 import '../now_playing/artwork.dart';
@@ -14,9 +15,9 @@ import '../now_playing/artwork.dart';
 /// The Home hero: the featured release, big.
 ///
 /// Approved layout: large art, title, artist, and Play + Follow. Play opens the
-/// release page, where the release's own Play queues and starts the album. It is
-/// a flat [Tokens.surface] panel, not glass — glass is reserved for floating
-/// chrome — but it is the one place artwork color is allowed in, as a soft tint
+/// release page, where the release's own Play queues and starts the album. The
+/// hero is regular-tier glass — the same ambient field the chrome sits over —
+/// and it is the one place artwork color is allowed in on top, as a soft tint
 /// derived from the feature's own cover.
 class HomeHeroBanner extends ConsumerWidget {
   const HomeHeroBanner({super.key, required this.item});
@@ -27,103 +28,101 @@ class HomeHeroBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double artSize =
-        isDesktop ? Tokens.heroArtDesktop : Tokens.collectionArtSize;
+    final double artSize = isDesktop
+        ? Tokens.heroArtDesktop
+        : Tokens.collectionArtSize;
     final CollectionRef? target = item.collection;
-    final OutlinedBorder shape = Tokens.shapeFor(Tokens.rLarge);
 
+    // Regular glass now: the hero blurs the same ambient field as the rest of
+    // the chrome instead of sitting as a flat opaque slab, and keeps the
+    // art-derived tint as the one place artwork color comes from.
     return Padding(
       padding: const EdgeInsets.only(bottom: Tokens.s24),
-      child: ClipPath(
-        clipper: ShapeBorderClipper(
-          shape: shape,
-          textDirection: Directionality.maybeOf(context),
-        ),
-        child: DecoratedBox(
-          decoration: ShapeDecoration(color: Tokens.surface, shape: shape),
-          child: Stack(
-            children: <Widget>[
-              Positioned.fill(child: _HeroTint(url: item.artworkUrl)),
-              Padding(
-                padding: EdgeInsets.all(isDesktop ? Tokens.s24 : Tokens.s16),
-                child: LayoutBuilder(
-                  builder: (BuildContext context, BoxConstraints constraints) {
-                    final Widget art = ArtTile(
-                      size: artSize,
-                      radius: Tokens.rCard,
-                      image: ref.watch(artworkResolverProvider)(item.artworkUrl),
-                    );
-                    final Widget text = Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
+      child: GlassSurface(
+        tier: GlassTier.regular,
+        radius: Tokens.rLarge,
+        child: Stack(
+          children: <Widget>[
+            Positioned.fill(child: _HeroTint(url: item.artworkUrl)),
+            Padding(
+              padding: EdgeInsets.all(isDesktop ? Tokens.s24 : Tokens.s16),
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  final Widget art = ArtTile(
+                    size: artSize,
+                    radius: Tokens.rCard,
+                    image: ref.watch(artworkResolverProvider)(item.artworkUrl),
+                  );
+                  final Widget text = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        item.title,
+                        style: Tokens.nowPlayingTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (item.subtitle.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: Tokens.s4),
                         Text(
-                          item.title,
-                          style: Tokens.nowPlayingTitle,
-                          maxLines: 2,
+                          item.subtitle,
+                          style: Tokens.subtitle,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (item.subtitle.isNotEmpty) ...<Widget>[
-                          const SizedBox(height: Tokens.s4),
-                          Text(
-                            item.subtitle,
-                            style: Tokens.subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                        const SizedBox(height: Tokens.s16),
-                        Wrap(
-                          spacing: Tokens.s8,
-                          runSpacing: Tokens.s8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: <Widget>[
-                            PillButton(
-                              icon: AppIcons.playFill,
-                              label: 'Play',
-                              isActive: true,
-                              // Play opens the release; its page owns the
-                              // queueing, so this never starts a second,
-                              // parallel playback path.
-                              onPressed: target == null
-                                  ? null
-                                  : () => openCollection(context, target),
-                            ),
-                            if (item.artistId != null)
-                              _FollowButton(artistId: item.artistId!),
-                          ],
-                        ),
                       ],
-                    );
-
-                    // A narrow phone cannot fit the artwork and the actions
-                    // side by side: the text column would be squeezed until
-                    // the pills overflow. Below the threshold the hero
-                    // stacks instead, which is the same content in a shape
-                    // that fits.
-                    if (constraints.maxWidth < Tokens.heroStackBelowWidth) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: Tokens.s16),
+                      Wrap(
+                        spacing: Tokens.s8,
+                        runSpacing: Tokens.s8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: <Widget>[
-                          art,
-                          const SizedBox(height: Tokens.s16),
-                          text,
+                          PillButton(
+                            icon: AppIcons.playFill,
+                            label: 'Play',
+                            isActive: true,
+                            // Play opens the release; its page owns the
+                            // queueing, so this never starts a second,
+                            // parallel playback path.
+                            onPressed: target == null
+                                ? null
+                                : () => openCollection(context, target),
+                          ),
+                          if (item.artistId != null)
+                            _FollowButton(artistId: item.artistId!),
                         ],
-                      );
-                    }
+                      ),
+                    ],
+                  );
 
-                    return Row(
+                  // A narrow phone cannot fit the artwork and the actions
+                  // side by side: the text column would be squeezed until
+                  // the pills overflow. Below the threshold the hero
+                  // stacks instead, which is the same content in a shape
+                  // that fits.
+                  if (constraints.maxWidth < Tokens.heroStackBelowWidth) {
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         art,
-                        const SizedBox(width: Tokens.s16),
-                        Expanded(child: text),
+                        const SizedBox(height: Tokens.s16),
+                        text,
                       ],
                     );
-                  },
-                ),
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      art,
+                      const SizedBox(width: Tokens.s16),
+                      Expanded(child: text),
+                    ],
+                  );
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -216,8 +215,9 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
   Widget build(BuildContext context) {
     final Set<String> subscribed =
         ref.watch(subscribedArtistsProvider).value ?? const <String>{};
-    final bool fromSidecar =
-        subscribed.contains(artistChannelKey(widget.artistId));
+    final bool fromSidecar = subscribed.contains(
+      artistChannelKey(widget.artistId),
+    );
     final bool following = _optimistic ?? fromSidecar;
 
     return PillButton(
@@ -264,8 +264,9 @@ class _HeroTintState extends ConsumerState<_HeroTint> {
       if (mounted) setState(() => _colors = const <Color>[]);
       return;
     }
-    final List<Color> colors =
-        await ref.read(ambientPaletteLoaderProvider)(url);
+    final List<Color> colors = await ref.read(ambientPaletteLoaderProvider)(
+      url,
+    );
     if (!mounted || widget.url != url) return;
     setState(() => _colors = colors);
   }
@@ -275,17 +276,33 @@ class _HeroTintState extends ConsumerState<_HeroTint> {
     if (_colors.isEmpty) return const SizedBox.shrink();
 
     return IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[
-              _colors.first.withValues(alpha: Tokens.heroTintOpacity),
-              Tokens.transparent,
-            ],
+      child: Stack(
+        children: <Widget>[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[
+                  _colors.first.withValues(alpha: Tokens.heroTintOpacity),
+                  Tokens.transparent,
+                ],
+              ),
+            ),
           ),
-        ),
+          // The adaptive part of the hero's contrast guarantee: a black wash
+          // whose strength follows the tint's brightness, sitting under the
+          // hero type and, harmlessly, under the opaque artwork tile too.
+          ColoredBox(
+            color: Tokens.scrim.withValues(
+              alpha:
+                  ((Tokens.lumaOf(_colors.first) - Tokens.heroScrimLumaGate) /
+                          (1 - Tokens.heroScrimLumaGate))
+                      .clamp(0.0, 1.0) *
+                  Tokens.heroScrimMaxAlpha,
+            ),
+          ),
+        ],
       ),
     );
   }

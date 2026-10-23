@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_acrylic/flutter_acrylic.dart' as acrylic;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -9,6 +10,8 @@ import 'audio/listening_event.dart';
 import 'audio/playback_engine.dart';
 import 'audio/playback_service.dart';
 import 'audio/track.dart';
+import 'features/shell/window_material.dart';
+import 'features/shell/window_snap.dart';
 import 'core/app_identity.dart';
 import 'core/app_settings.dart';
 import 'core/settings_persistence.dart';
@@ -39,6 +42,16 @@ Future<void> main() async {
       await windowManager.show();
       await windowManager.focus();
     });
+    // Native window material under the in-app ambient backdrop: Mica on
+    // Windows 11, nothing (the app's own backdrop fills the window) where the
+    // OS cannot provide it. The plugin answers with an error on Windows 10
+    // builds that lack the effect; the backdrop is the design either way.
+    try {
+      await acrylic.Window.initialize();
+    } catch (_) {
+      // No native material available: keep the plain window surface, which
+      // restore paths already render correctly on.
+    }
     titleBar = const WindowsTitleBar();
   }
 
@@ -48,6 +61,11 @@ Future<void> main() async {
   // rather than refusing to start.
   final SettingsStore settingsStore = await _openSettingsStore();
   final AppSettings initialSettings = await _loadSettings(settingsStore);
+  // The window material follows Reduce transparency from the first frame.
+  await WindowMaterial.apply(
+    solid: initialSettings.reduceTransparency,
+    force: true,
+  );
 
   runApp(
     ProviderScope(
@@ -57,24 +75,49 @@ Future<void> main() async {
       // without storing, logging or exposing it.
       overrides: [
         streamUrlResolverProvider.overrideWith(
-          (Ref ref) => (Track track) =>
-              ref.read(ytmRepositoryProvider).streamUrl(track),
+          (Ref ref) =>
+              (Track track) => ref.read(ytmRepositoryProvider).streamUrl(track),
         ),
         // Autoplay, the next-track prefetch and listening events all read real
         // endpoints, so the audio layer reaches them through these seams rather
         // than importing the API client.
         autoplayResolverProvider.overrideWith(
-          (Ref ref) => (Track seed, List<String> exclude) => ref
-              .read(ytmRepositoryProvider)
-              .recommendations(seed, exclude: exclude),
+          (Ref ref) =>
+              (Track seed, List<String> exclude) => ref
+                  .read(ytmRepositoryProvider)
+                  .recommendations(seed, exclude: exclude),
         ),
         trackPrefetcherProvider.overrideWith(
           (Ref ref) =>
               (Track track) => ref.read(ytmRepositoryProvider).prefetch(track),
         ),
         listeningReporterProvider.overrideWith(
-          (Ref ref) => (ListeningEvent event) =>
-              ref.read(ytmRepositoryProvider).reportListeningEvent(event),
+          (Ref ref) =>
+              (ListeningEvent event) =>
+                  ref.read(ytmRepositoryProvider).reportListeningEvent(event),
+        ),
+        // The local taste layer: one play, skip or like, reported as it
+        // happens. Fire and forget — a failure there must never interrupt
+        // playback.
+        tasteReporterProvider.overrideWith(
+          (Ref ref) =>
+              (
+                String kind,
+                Track track, {
+                double listenedSeconds = 0,
+                double durationSeconds = 0,
+                bool completed = false,
+                double playedFraction = 0,
+              }) => ref
+                  .read(ytmRepositoryProvider)
+                  .reportTasteEvent(
+                    kind,
+                    track,
+                    listenedSeconds: listenedSeconds,
+                    durationSeconds: durationSeconds,
+                    completed: completed,
+                    playedFraction: playedFraction,
+                  ),
         ),
         // The sidecar owns its own lifecycle only on Windows, where the app
         // ships next to the repo. Elsewhere the default no-op launcher is kept,
@@ -144,6 +187,8 @@ class _WindowsTitleBarState extends State<WindowsTitleBar> {
       onMinimize: windowManager.minimize,
       onMaximizeToggle: _toggleMaximize,
       onClose: windowManager.close,
+      onSnapLeft: WindowSnap.snapLeft,
+      onSnapRight: WindowSnap.snapRight,
     );
   }
 }

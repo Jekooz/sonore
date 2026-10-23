@@ -19,9 +19,11 @@ import 'package:ytm_app/core/sidecar/sidecar_providers.dart';
 import 'package:ytm_app/data/ytm_repository.dart';
 import 'package:ytm_app/features/now_playing/artwork.dart';
 import 'package:ytm_app/routing/app_router.dart';
+import 'package:ytm_app/ui/ambient/ambient_backdrop.dart';
 
 import 'fake_engine.dart';
 import 'recorded_sidecar.dart';
+import 'sample_artwork.dart';
 
 /// The font families the app declares in pubspec.yaml. Widget tests do not load
 /// them automatically, so goldens would otherwise render text and icon glyphs in
@@ -148,9 +150,12 @@ Widget appScope({
 
   return ProviderScope(
     overrides: [
-      artworkResolverProvider.overrideWithValue((String? url) => null),
+      // Fixture artwork: every URL resolves to one of the six generated
+      // gradient variants, so tiles, the Now Playing cover and the ambient
+      // backdrop all refract real art. No test ever touches the network.
+      artworkResolverProvider.overrideWithValue(sampleArtworkResolver),
       ambientPaletteLoaderProvider.overrideWithValue(
-        (String url) async => kTestAmbientColors,
+        (String url) async => sampleArtworkColors(url),
       ),
       // The shell watches the playback service, so every pumped app would
       // otherwise construct a real media_kit player and load libmpv.
@@ -209,6 +214,8 @@ Widget appScope({
 ///
 /// Uses the platform text-scale value so the app's own clamping is exercised,
 /// and settles so asynchronous palette loads finish before a golden is captured.
+/// Ambient motion is frozen for the pumped window: goldens and audit shots must
+/// not depend on where a drift animation happens to be.
 Future<void> pumpAtSize(
   WidgetTester tester,
   Widget app, {
@@ -216,6 +223,11 @@ Future<void> pumpAtSize(
   double textScale = 1,
   bool settle = true,
 }) async {
+  ambientMotionEnabled = false;
+  // The generated artwork decodes on the real event loop; running it here in
+  // the warm-up keeps image timing out of every golden.
+  await tester.runAsync(warmSampleArtwork);
+  addTearDown(() => ambientMotionEnabled = true);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   tester.platformDispatcher.textScaleFactorTestValue = textScale;

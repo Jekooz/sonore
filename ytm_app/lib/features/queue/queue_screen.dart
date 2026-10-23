@@ -9,6 +9,8 @@ import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
 import '../../ui/context_menu.dart';
+import '../../ui/content_column.dart';
+import '../../ui/confirm_dialog.dart';
 import '../../ui/format.dart';
 import '../../ui/media_actions.dart';
 import '../../ui/pill_button.dart';
@@ -16,6 +18,7 @@ import '../../ui/screen_header.dart';
 import '../../ui/screen_states.dart';
 import '../../ui/track_row.dart';
 import '../now_playing/artwork.dart';
+import '../shell/app_shell.dart';
 
 /// The dedicated Queue screen (design.md section F).
 ///
@@ -37,25 +40,29 @@ class QueueScreen extends ConsumerWidget {
     final PlaybackController controller = ref.read(playbackProvider.notifier);
 
     return Scaffold(
-      backgroundColor: Tokens.bg,
       body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            ScreenHeader(
-              title: 'Queue',
-              onBack: () => context.go(AppDestination.nowPlaying.path),
-              backLabel: 'Back to Now Playing',
-            ),
-            if (!state.hasTrack)
-              const Expanded(
-                child: StateMessage(
-                  message: 'Nothing is queued.',
-                  footnote: 'Play a song and the queue shows up here.',
+        // The shared content column, like every other browsing page.
+        child: ContentColumn(
+          child: Column(
+            children: <Widget>[
+              ScreenHeader(
+                title: 'Queue',
+                onBack: () => context.go(AppDestination.nowPlaying.path),
+                backLabel: 'Back to Now Playing',
+              ),
+              if (!state.hasTrack)
+                const Expanded(
+                  child: StateMessage(
+                    message: 'Nothing is queued.',
+                    footnote: 'Play a song and the queue shows up here.',
+                  ),
+                )
+              else
+                Expanded(
+                  child: _QueueBody(state: state, controller: controller),
                 ),
-              )
-            else
-              Expanded(child: _QueueBody(state: state, controller: controller)),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -73,26 +80,40 @@ class _QueueBody extends ConsumerWidget {
     final ArtworkResolver artwork = ref.watch(artworkResolverProvider);
     final Track current = state.current!;
     final List<Track> upNext = state.upNext;
+    final double margin = Tokens.pageMargin(MediaQuery.sizeOf(context).width);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         // §F: "Autoplay has a visible on/off state." This is the same persisted
         // mode the transport's autoplay behaviour reads.
-        SwitchListTile(
-          value: state.autoplay,
-          activeThumbColor: Tokens.accent,
-          title: const Text('Autoplay', style: Tokens.rowTitle),
-          subtitle: const Text(
-            'Keeps playing real recommendations when the queue runs out.',
-            style: Tokens.caption,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: margin),
+          child: SwitchTheme(
+            data: Tokens.switchRim,
+            child: SwitchListTile(
+              value: state.autoplay,
+              activeTrackColor: Tokens.text,
+              activeThumbColor: Tokens.bg,
+              inactiveThumbColor: Tokens.textMuted,
+              inactiveTrackColor: Tokens.controlTrackRest,
+              trackOutlineColor: const WidgetStatePropertyAll<Color>(
+                Tokens.border,
+              ),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Autoplay', style: Tokens.rowTitle),
+              subtitle: const Text(
+                'Keeps playing real recommendations when the queue runs out.',
+                style: Tokens.caption,
+              ),
+              onChanged: controller.setAutoplay,
+            ),
           ),
-          onChanged: controller.setAutoplay,
         ),
         if (state.shuffle)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: Tokens.pageMarginPhone),
-            child: Text(
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: margin),
+            child: const Text(
               'Shuffle is on. The service exposes no separate collection order, '
               'so the order below is the play order.',
               style: Tokens.caption,
@@ -100,7 +121,7 @@ class _QueueBody extends ConsumerWidget {
           ),
         const _SectionLabel('Now playing'),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Tokens.s8),
+          padding: EdgeInsets.symmetric(horizontal: margin),
           child: TrackRow(
             title: current.title,
             subtitle: current.subtitle,
@@ -113,9 +134,7 @@ class _QueueBody extends ConsumerWidget {
           ),
         ),
         _SectionLabel(
-          upNext.isEmpty
-              ? 'Nothing is up next'
-              : 'Next up · ${upNext.length}',
+          upNext.isEmpty ? 'Nothing is up next' : 'Next up · ${upNext.length}',
         ),
         Expanded(
           child: upNext.isEmpty
@@ -124,7 +143,9 @@ class _QueueBody extends ConsumerWidget {
                   footnote: 'Autoplay adds more when this track ends.',
                 )
               : ReorderableListView.builder(
-                  padding: const EdgeInsets.only(bottom: Tokens.s16),
+                  padding: EdgeInsets.only(
+                    bottom: Tokens.s16 + ShellClearance.of(context),
+                  ),
                   // The handles below are deliberate: the spec asks for visible
                   // drag handles, not for the whole row to be a drag target.
                   buildDefaultDragHandles: false,
@@ -138,23 +159,26 @@ class _QueueBody extends ConsumerWidget {
                   ),
                   itemBuilder: (BuildContext context, int index) {
                     final Track track = upNext[index];
-                    return _QueueRow(
-                      // A queue may hold the same track twice, so the id alone
-                      // is not a unique key.
+                    return Padding(
+                      // A queue may hold the same track twice, so the id
+                      // alone is not a unique key.
                       key: ValueKey<String>('${track.id}@$index'),
-                      track: track,
-                      position: index,
-                      lastPosition: upNext.length - 1,
-                      queueIndex: state.index + 1 + index,
-                      siblings: state.queue,
-                      artwork: artwork,
-                      controller: controller,
+                      padding: EdgeInsets.symmetric(horizontal: margin),
+                      child: _QueueRow(
+                        track: track,
+                        position: index,
+                        lastPosition: upNext.length - 1,
+                        queueIndex: state.index + 1 + index,
+                        siblings: state.queue,
+                        artwork: artwork,
+                        controller: controller,
+                      ),
                     );
                   },
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Tokens.pageMarginPhone),
+          padding: EdgeInsets.symmetric(horizontal: margin),
           child: Center(
             child: PillButton(
               icon: AppIcons.close,
@@ -163,7 +187,10 @@ class _QueueBody extends ConsumerWidget {
             ),
           ),
         ),
-        const SizedBox(height: Tokens.s16),
+        // The footer action must stay clear of the floating Now Playing bar,
+        // which now hangs over the page's bottom edge instead of taking a
+        // column from it.
+        SizedBox(height: Tokens.s16 + ShellClearance.of(context)),
       ],
     );
   }
@@ -171,30 +198,13 @@ class _QueueBody extends ConsumerWidget {
   /// Clearing the queue is consequential (it stops playback and drops the
   /// list), so it asks first — the spec's rule for destructive actions.
   Future<void> _confirmClear(BuildContext context) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        backgroundColor: Tokens.surfaceRaised,
-        title: const Text('Clear the queue?', style: Tokens.rowTitle),
-        content: const Text(
+    final bool? confirmed = await confirmDialog(
+      context,
+      title: 'Clear the queue?',
+      body:
           'Playback stops and the queue is emptied. Your music, likes and '
           'sign-in are not affected.',
-          style: Tokens.subtitle,
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: Tokens.subtitle),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(
-              'Clear',
-              style: Tokens.subtitle.copyWith(color: Tokens.accent),
-            ),
-          ),
-        ],
-      ),
+      confirmLabel: 'Clear',
     );
     if (confirmed ?? false) controller.clear();
   }
@@ -202,7 +212,6 @@ class _QueueBody extends ConsumerWidget {
 
 class _QueueRow extends ConsumerWidget {
   const _QueueRow({
-    super.key,
     required this.track,
     required this.position,
     required this.lastPosition,
@@ -308,8 +317,8 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: Tokens.pageMarginPhone,
+      padding: EdgeInsets.only(
+        left: Tokens.pageMargin(MediaQuery.sizeOf(context).width),
         top: Tokens.s16,
         bottom: Tokens.s8,
       ),

@@ -147,6 +147,90 @@ class HomeRow {
   final List<MediaItem> items;
 }
 
+/// What the recommender is allowed to do, and what it has stored.
+///
+/// The service keeps the credentials (encrypted, on this machine); this is the
+/// app's view of them, so the Settings screen can show and edit them.
+@immutable
+class RecommenderSettings {
+  const RecommenderSettings({
+    this.localLearning = true,
+    this.listenbrainzToken = '',
+    this.lastfmApiKey = '',
+    this.listenbrainzUser = 'jekooz',
+    this.externalConfigured = false,
+    this.plays = 0,
+    this.skips = 0,
+    this.likes = 0,
+  });
+
+  /// Whether the local taste layer is used, and whether new events are
+  /// recorded.
+  final bool localLearning;
+
+  /// The user's ListenBrainz token, or empty when the service is not set up.
+  final String listenbrainzToken;
+
+  /// The user's Last.fm API key, or empty.
+  final String lastfmApiKey;
+
+  /// The account the ListenBrainz signal is read from.
+  final String listenbrainzUser;
+
+  /// True when at least one outside service is configured.
+  final bool externalConfigured;
+
+  /// How much the local layer has learned, for the Settings page.
+  final int plays;
+  final int skips;
+  final int likes;
+
+  /// True when at least one outside service is configured.
+  bool get hasExternal =>
+      listenbrainzToken.isNotEmpty || lastfmApiKey.isNotEmpty;
+
+  /// Everything the local layer has recorded, for the Settings page.
+  int get localEventCount => plays + skips + likes;
+
+  factory RecommenderSettings.fromJson(Map<String, dynamic> json) {
+    final Map<String, dynamic> counts =
+        (json['counts'] as Map<String, dynamic>?) ??
+            const <String, dynamic>{};
+    return RecommenderSettings(
+      localLearning: json['localLearning'] as bool? ?? true,
+      listenbrainzToken: json['listenbrainzToken'] as String? ?? '',
+      lastfmApiKey: json['lastfmApiKey'] as String? ?? '',
+      listenbrainzUser: json['listenbrainzUser'] as String? ?? 'jekooz',
+      externalConfigured: json['externalConfigured'] as bool? ?? false,
+      plays: counts['plays'] as int? ?? 0,
+      skips: counts['skips'] as int? ?? 0,
+      likes: counts['likes'] as int? ?? 0,
+    );
+  }
+
+  RecommenderSettings copyWith({
+    bool? localLearning,
+    String? listenbrainzToken,
+    String? lastfmApiKey,
+    String? listenbrainzUser,
+  }) {
+    final String token = listenbrainzToken ?? this.listenbrainzToken;
+    final String key = lastfmApiKey ?? this.lastfmApiKey;
+    return RecommenderSettings(
+      localLearning: localLearning ?? this.localLearning,
+      listenbrainzToken: token,
+      lastfmApiKey: key,
+      listenbrainzUser: listenbrainzUser ?? this.listenbrainzUser,
+      externalConfigured: listenbrainzToken != null || lastfmApiKey != null
+          ? token.isNotEmpty || key.isNotEmpty
+          : externalConfigured,
+      plays: plays,
+      skips: skips,
+      likes: likes,
+    );
+  }
+}
+
 /// Search results grouped as the spec requires: Songs, Albums, Artists and
 /// Playlists.
 @immutable

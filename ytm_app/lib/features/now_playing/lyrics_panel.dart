@@ -1,28 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../audio/playback_controller.dart';
 import '../../audio/playback_state.dart';
 import '../../audio/track.dart';
 import '../../core/app_settings.dart';
 import '../../data/models.dart';
-import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
 import '../../ui/data_states.dart';
-import '../../ui/screen_header.dart';
 import '../../ui/screen_states.dart';
-import 'lyrics_controller.dart';
-
-/// Lyrics for the current track.
+import '../lyrics/lyrics_controller.dart';
+/// Lyrics, as a panel.
 ///
-/// Everything here comes from the sidecar's `/lyrics/{videoId}`. When the
-/// provider supplied timestamps the screen follows playback and taps seek;
-/// when it did not, the same screen renders static lyrics — it never invents a
-/// timing to make the following behaviour look supported.
-class LyricsScreen extends ConsumerWidget {
-  const LyricsScreen({super.key});
+/// Same data and same following behaviour as the design specifies: synced
+/// lines seek and follow playback, untimed lines are static, and "no lyrics"
+/// is a state, never an error shown as one.
+class LyricsPanel extends ConsumerWidget {
+  const LyricsPanel({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,14 +25,10 @@ class LyricsScreen extends ConsumerWidget {
       playbackProvider.select((PlaybackState state) => state.current),
     );
 
-    return Scaffold(
-      backgroundColor: Tokens.bg,
-      body: SafeArea(
-        child: track == null
-            ? const _NoTrack()
-            : ConnectionGate(child: _LyricsBody(track: track)),
-      ),
-    );
+    if (track == null) {
+      return const _NoTrack();
+    }
+    return ConnectionGate(child: _LyricsBody(track: track));
   }
 }
 
@@ -46,22 +37,22 @@ class _NoTrack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        ScreenHeader(
-          title: 'Lyrics',
-          onBack: () => context.go(AppDestination.nowPlaying.path),
-        ),
-        Expanded(
-          child: StateMessage(
-            message: 'Nothing is playing.',
-            footnote: 'Lyrics follow the current track, so start one first.',
-            actionLabel: 'Browse library',
-            actionIcon: AppIcons.listBullets,
-            onAction: () => context.go(AppDestination.library.path),
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text('Nothing is playing.', style: Tokens.rowTitle),
+          SizedBox(height: Tokens.s4),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: Tokens.s16),
+            child: Text(
+              'Lyrics follow the current track, so start one first.',
+              style: Tokens.subtitle,
+              textAlign: TextAlign.center,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -76,25 +67,22 @@ class _LyricsBody extends ConsumerWidget {
     final AsyncValue<LyricsResult?> lyrics = ref.watch(lyricsProvider);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        ScreenHeader(
-          title: track.title,
-          onBack: () => context.go(AppDestination.nowPlaying.path),
-          trailing: lyrics.value == null
-              ? null
-              : Semantics(
-                  button: true,
-                  label: 'Back to Now Playing',
-                  child: IconButton(
-                    icon: const Icon(
-                      AppIcons.musicNotes,
-                      size: Tokens.iconSize,
-                      color: Tokens.text,
-                    ),
-                    tooltip: 'Now Playing',
-                    onPressed: () => context.go(AppDestination.nowPlaying.path),
-                  ),
-                ),
+        // The panel carries the title, not a page chrome.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Tokens.s16,
+            Tokens.s16,
+            Tokens.s16,
+            Tokens.s8,
+          ),
+          child: Text(
+            track.title,
+            style: Tokens.sectionHeader,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         Expanded(
           child: DataStateView<LyricsResult?>(
@@ -123,7 +111,7 @@ class _LyricsSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(
-        horizontal: Tokens.pageMarginPhone,
+        horizontal: Tokens.s16,
         vertical: Tokens.s16,
       ),
       itemCount: 12,
@@ -131,7 +119,7 @@ class _LyricsSkeleton extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: Tokens.s16),
         child: Skeleton(
           // Varying widths read as lines of different length, not as a grid.
-          width: 120.0 + (index % 4) * 60,
+          width: Tokens.skeletonLineBase + (index % 4) * Tokens.skeletonLineStep,
           height: Tokens.s16,
         ),
       ),
@@ -233,60 +221,67 @@ class _LyricsListState extends ConsumerState<_LyricsList> {
         }
         return false;
       },
-      child: Column(
-        children: <Widget>[
-          Expanded(
-            child: ListView.builder(
-              controller: _scroll,
-              padding: const EdgeInsets.symmetric(
-                horizontal: Tokens.pageMarginPhone,
-                vertical: Tokens.s24,
-              ),
-              itemCount: lines.length,
-              itemBuilder: (BuildContext context, int i) => _LyricLineTile(
-                key: _keyFor(i),
-                line: lines[i],
-                current: i == index,
-                // A timed line is a seek target; a static one is text, and
-                // offering to seek to a time that does not exist would lie.
-                onSeek: lines[i].start == null
-                    ? null
-                    : () => ref
-                          .read(playbackProvider.notifier)
-                          .seek(lines[i].start!),
-              ),
-            ),
-          ),
-          if (result.source != null)
-            Padding(
-              padding: const EdgeInsets.only(
-                left: Tokens.pageMarginPhone,
-                right: Tokens.pageMarginPhone,
-                bottom: Tokens.s16,
-              ),
-              child: Text(
-                result.source!,
-                style: Tokens.caption,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          if (result.synced && !canFollow)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Tokens.s16),
-              child: TextButton.icon(
-                icon: const Icon(
-                  AppIcons.arrowClockwise,
-                  size: Tokens.iconSize,
-                  color: Tokens.text,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: ListView.builder(
+                controller: _scroll,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Tokens.s16,
+                  vertical: Tokens.s24,
                 ),
-                label: const Text(
-                  'Back to current line',
-                  style: Tokens.rowTitle,
+                itemCount: lines.length,
+                itemBuilder: (BuildContext context, int i) => _LyricLineTile(
+                  key: _keyFor(i),
+                  line: lines[i],
+                  current: i == index,
+                  // A timed line is a seek target; a static one is text, and
+                  // offering to seek to a time that does not exist would lie.
+                  onSeek: lines[i].start == null
+                      ? null
+                      : () => ref
+                            .read(playbackProvider.notifier)
+                            .seek(lines[i].start!),
                 ),
-                onPressed: () => setState(() => _following = true),
               ),
             ),
-        ],
+            if (result.synced && !canFollow)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Tokens.s16),
+                child: TextButton.icon(
+                  icon: const Icon(
+                    AppIcons.arrowClockwise,
+                    size: Tokens.iconSize,
+                    color: Tokens.textSecondary,
+                  ),
+                  label: Text(
+                    'Back to current line',
+                    style: Tokens.subtitle.copyWith(color: Tokens.text),
+                  ),
+                  onPressed: () => setState(() => _following = true),
+                ),
+              ),
+            if (result.source != null)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    Tokens.s16,
+                    0,
+                    Tokens.s16,
+                    Tokens.s12,
+                  ),
+                  child: Text(
+                    result.source!,
+                    style: Tokens.caption,
+                    textAlign: TextAlign.start,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

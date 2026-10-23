@@ -147,6 +147,14 @@ class YtmRepository {
   }
 
   /// GET /home — real personalized rows, with empty rails dropped.
+  /// GET /home — the service's own rows, with the recommendation row
+  /// replaced by the blended one.
+  ///
+  /// The service's feed is the base. The "Recommended for you" row is then
+  /// filled from the layered recommender, which ranks YouTube Music's own
+  /// picks first and refines them with what this device has learned. When
+  /// that route is unavailable the feed is left exactly as it was: the Home
+  /// screen must never lose a rail because a ranking service is down.
   Future<List<HomeRow>> home() async {
     final List<dynamic> rows = await _api.home();
     final List<HomeRow> result = <HomeRow>[];
@@ -157,8 +165,63 @@ class YtmRepository {
       if (title.isEmpty || items.isEmpty) continue;
       result.add(HomeRow(title: title, items: items));
     }
-    return result;
+    return _withBlendedRecommendation(result);
   }
+
+  /// The recommendation row, blended.
+  ///
+  /// The row the service returned is replaced by the blended one when the
+  /// service has that row; when it does not, the blended row is added at the
+  /// top of the feed, because a recommendation the user never sees is not a
+  /// recommendation. When the route does not answer, the feed is left alone.
+  Future<List<HomeRow>> _withBlendedRecommendation(List<HomeRow> rows) async {
+    final int index = rows.indexWhere(
+      (HomeRow row) => _isRecommendationRow(row.title),
+    );
+    if (index >= 0) {
+      List<MediaItem> blended;
+      try {
+        blended = _items((await _api.recommendationHomeRow())['items']);
+      } on YtmException {
+        // The service's own row is still a good recommendation: keep it.
+        return rows;
+      }
+      if (blended.isEmpty) return rows;
+
+      final List<HomeRow> result = List<HomeRow>.of(rows);
+      result[index] = HomeRow(title: rows[index].title, items: blended);
+      return result;
+    }
+
+    List<MediaItem> blended;
+    String title = _recommendationRowTitle;
+    try {
+      final Map<String, dynamic> payload =
+          await _api.recommendationHomeRow();
+      blended = _items(payload['items']);
+      final String served = (payload['title'] as String? ?? '').trim();
+      if (served.isNotEmpty) title = served;
+    } on YtmException {
+      return rows;
+    }
+    if (blended.isEmpty) return rows;
+
+    return <HomeRow>[
+      HomeRow(title: title, items: blended),
+      ...rows,
+    ];
+  }
+
+  /// The title of the row the service names for its own recommendations.
+  static const String _recommendationRowTitle = 'Recommended for you';
+
+  /// Whether a feed row is the provider's own recommendation row.
+  ///
+  /// The match is exact on purpose: the feed also carries rows like "Albums
+  /// for you" and "Featured playlists for you", and those are not the row the
+  /// blended recommendations belong in.
+  bool _isRecommendationRow(String title) =>
+      title.trim().toLowerCase() == _recommendationRowTitle.toLowerCase();
 
   /// GET /library/{segment}
   ///
@@ -283,25 +346,88 @@ class YtmRepository {
 
   Future<void> prefetch(Track track) => _api.prefetch(track.id);
 
-  /// GET /recommendations — real ranked candidates for Autoplay, with the
-  /// current queue excluded.
+  /// The candidates Autoplay adds when the queue runs low.
   ///
-  /// Rows that are not playable are dropped rather than queued: the ranking
-  /// service is allowed to hand back a playlist or an artist card, and a queue
-  /// cannot play one.
+  /// The layered recommender answers first: YouTube Music's radio for the
+  /// seed, refined by the local taste layer and the optional outside signals.
+  /// When that route is unavailable the older ranking service answers
+  /// instead, so autoplay keeps working either way.
+  ///
+  /// Rows that are not playable are dropped rather than queued: a ranking
+  /// service is allowed to hand back a playlist or an artist card, and a
+  /// queue cannot play one.
   Future<List<Track>> recommendations(
     Track seed, {
     int limit = 12,
     List<String> exclude = const <String>[],
   }) async {
-    final List<MediaItem> items = _items(
-      await _api.recommendations(seed.id, limit: limit, exclude: exclude),
-    );
+    List<dynamic> raw;
+    try {
+      raw = await _api.recommendationsNext(
+        seed.id,
+        limit: limit,
+        exclude: exclude,
+      );
+    } on YtmSignedOutException {
+      // The session is gone. Falling back would hide that behind the older
+      // route, and the caller must be told so the sign-in prompt can appear.
+      rethrow;
+    } on YtmException {
+      raw = await _api.recommendations(
+        seed.id,
+        limit: limit,
+        exclude: exclude,
+      );
+    }
+    final List<MediaItem> items = _items(raw);
     return items
         .map((MediaItem item) => item.track)
         .whereType<Track>()
         .toList(growable: false);
   }
+
+  /// One thing the listener did, for the local taste layer.
+  ///
+  /// [kind] is one of play, skip or like. Fire and forget: the layer is a
+  /// ranking signal, and a service that cannot be reached must not interrupt
+  /// playback.
+  Future<void> reportTasteEvent(
+    String kind,
+    Track track, {
+    double listenedSeconds = 0,
+    double durationSeconds = 0,
+    bool completed = false,
+    double playedFraction = 0,
+  }) {
+    return _api.reportTasteEvent(kind, <String, dynamic>{
+      'videoId': track.id,
+      'title': track.title,
+      'artist': track.artist,
+      'listenedSeconds': listenedSeconds,
+      'durationSeconds': durationSeconds,
+      'completed': completed,
+      'playedFraction': playedFraction,
+    });
+  }
+
+  /// What the recommender is allowed to do, and what it has stored.
+  Future<RecommenderSettings> recommenderSettings() async {
+    final Map<String, dynamic> body = await _api.recommenderSettings();
+    return RecommenderSettings.fromJson(body);
+  }
+
+  /// Store the recommender's settings.
+  Future<void> saveRecommenderSettings(RecommenderSettings settings) {
+    return _api.saveRecommenderSettings(
+      localLearning: settings.localLearning,
+      listenbrainzToken: settings.listenbrainzToken,
+      lastfmApiKey: settings.lastfmApiKey,
+      listenbrainzUser: settings.listenbrainzUser,
+    );
+  }
+
+  /// Forget the local listening data.
+  Future<void> clearListeningData() => _api.clearListeningData();
 
   /// POST /listening/events — what was played and how it ended.
   Future<void> reportListeningEvent(ListeningEvent event) =>
@@ -318,8 +444,17 @@ class YtmRepository {
     return result.isEmpty ? null : result;
   }
 
-  Future<void> setLike(String videoId, bool liked) =>
-      _api.rate(videoId, liked ? 'LIKE' : 'INDIFFERENT');
+  /// The provider's own rating, and the local layer's memory of it.
+  ///
+  /// A like is the strongest positive signal the recommender has, so it is
+  /// reported to the taste layer as well. The report is fire and forget: the
+  /// rating is already saved by the time it is sent, and a failure there must
+  /// not turn a saved like into an error.
+  Future<void> setLike(Track track, {required bool liked}) async {
+    await _api.rate(track.id, liked ? 'LIKE' : 'INDIFFERENT');
+    if (!liked) return;
+    await reportTasteEvent('like', track);
+  }
 
   /// POST /auth/browser/start — begins a sign-in. The sidecar owns the whole
   /// flow: it signs in from an already signed-in profile with no window at all,

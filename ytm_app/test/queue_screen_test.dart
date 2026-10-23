@@ -67,7 +67,15 @@ void main() {
     await pumpQueue(tester);
 
     expect(find.byType(QueueScreen), findsOneWidget);
-    expect(find.text('Falling For You'), findsOneWidget);
+    // The mini player persists on the queue screen now, so the playing title
+    // also appears in the bar; scope this expectation to the screen itself.
+    expect(
+      find.descendant(
+        of: find.byType(QueueScreen),
+        matching: find.text('Falling For You'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Now playing'), findsOneWidget);
     expect(find.text('Next up · 2'), findsOneWidget);
     expect(find.text('Midnight Drive'), findsOneWidget);
@@ -231,7 +239,7 @@ void main() {
     expect(find.textContaining('Shuffle is on'), findsOneWidget);
   });
 
-  testWidgets('the compact Now Playing queue action opens this screen',
+  testWidgets('the queue panel links on to the full queue screen',
       (WidgetTester tester) async {
     await pumpAtSize(
       tester,
@@ -241,7 +249,12 @@ void main() {
 
     expect(find.byType(QueuePanel), findsNothing);
 
-    await tester.tap(find.text('Queue'));
+    // Open the on-demand panel, then travel on to the editing screen.
+    await tester.tap(find.bySemanticsLabel('Queue'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QueuePanel), findsOneWidget);
+
+    await tester.tap(find.text('Open full queue'));
     await tester.pumpAndSettle();
 
     expect(find.byType(QueueScreen), findsOneWidget);

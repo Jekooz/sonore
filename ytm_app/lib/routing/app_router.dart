@@ -6,13 +6,13 @@ import '../features/collection/collection_screen.dart';
 import '../features/equalizer/equalizer_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/library/library_screen.dart';
-import '../features/lyrics/lyrics_screen.dart';
 import '../features/now_playing/now_playing_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/queue/queue_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/app_shell.dart';
 import '../theme/tokens.dart';
+import '../ui/ambient/ambient_backdrop.dart';
 import '../ui/screen_states.dart';
 import '../ui/specimen.dart';
 import 'destinations.dart';
@@ -51,8 +51,13 @@ GoRouter createAppRouter({
       GoRoute(
         path: devCataloguePath,
         builder: (_, _) => const Scaffold(
-          backgroundColor: Tokens.bg,
-          body: SafeArea(child: SpecimenBoard()),
+          backgroundColor: Tokens.transparent,
+          body: Stack(
+            children: <Widget>[
+              Positioned.fill(child: AmbientBackdrop()),
+              SafeArea(child: SpecimenBoard()),
+            ],
+          ),
         ),
       ),
     ],
@@ -97,17 +102,14 @@ StatefulShellBranch _branch(
             path: 'settings',
             builder: (_, _) => const SettingsScreen(),
           ),
-          // Now Playing's three detail screens. Design.md sections F, G and H
-          // place the Queue, Lyrics and the Equalizer off Now Playing, not in
-          // the nav bar.
+          // Now Playing's two detail screens. The Queue and Lyrics panels
+          // belong to the Now Playing page itself; the Equalizer stays a
+          // route so Settings can link to it while Now Playing is the
+          // back-stack context.
           if (destination == AppDestination.nowPlaying) ...<RouteBase>[
             GoRoute(
               path: 'queue',
               builder: (_, _) => const QueueScreen(),
-            ),
-            GoRoute(
-              path: 'lyrics',
-              builder: (_, _) => const LyricsScreen(),
             ),
             GoRoute(
               path: 'equalizer',
@@ -153,6 +155,17 @@ bool onSettingsRoute(BuildContext context) {
   return location.endsWith('/settings') || location.endsWith('/equalizer');
 }
 
+/// Whether the page on screen is the Now Playing page itself — the only page
+/// the Now Playing bar steps aside for.
+///
+/// It checks the route, not the shell branch: the Queue and Equalizer live on
+/// the Now Playing branch but are not the player, and the mini player must
+/// persist there like it does on every other page.
+bool onNowPlayingPageRoute(BuildContext context) {
+  final String location = GoRouterState.of(context).matchedLocation;
+  return location == AppDestination.nowPlaying.path;
+}
+
 /// A collection path whose kind or id is not recognised.
 ///
 /// Reachable only by following a malformed link; it says so plainly instead of
@@ -163,7 +176,7 @@ class _UnknownCollection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Tokens.bg,
+      backgroundColor: Tokens.transparent,
       body: SafeArea(
         child: StateMessage(
           message: 'That page does not exist.',

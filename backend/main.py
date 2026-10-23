@@ -22,6 +22,12 @@ Endpoints:
   GET  /radio?videoId=...       real YT Music radio candidates for a seed song
   GET  /recommendations?...     ranked autoplay candidates (radio + related,
                                 re-ranked with the local listening history)
+  GET  /recommendations/home    the blended "Recommended for you" row
+  GET  /recommendations/next    the blended candidates autoplay adds
+  GET  /recommendations/settings   what the recommender is allowed to do
+  POST /recommendations/settings   store the recommender's settings
+  POST /recommendations/clear      forget the local listening data
+  POST /events/play|skip|like   one thing the listener did, for local learning
   POST /listening/events        one aggregated playback event per track
   POST /ratings                 like / dislike / remove rating (rate_song)
   GET  /lyrics/{video_id}       real lyrics, timestamped when YouTube supplies them
@@ -43,7 +49,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel, Field
@@ -70,6 +76,8 @@ from services.ytmusic_client import (
     sanitize_account,
     ytmusic_service,
 )
+
+import recommender
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
@@ -966,6 +974,33 @@ class RatingIn(BaseModel):
     rating: Literal["LIKE", "DISLIKE", "INDIFFERENT"]
 
 
+class TasteEventIn(BaseModel):
+    """
+    One thing the listener did, for the local taste layer.
+
+    The app sends one of these when a track ends, is skipped or is liked. It
+    carries music metadata and playback numbers only — never a cookie, a
+    session or a signed URL.
+    """
+
+    videoId: str = Field(pattern=_VIDEO_ID_RE.pattern)
+    title: str | None = Field(default=None, max_length=300)
+    artist: str | None = Field(default=None, max_length=300)
+    listenedSeconds: float = Field(default=0, ge=0, le=86400)
+    durationSeconds: float = Field(default=0, ge=0, le=86400)
+    completed: bool = False
+    playedFraction: float = Field(default=0, ge=0, le=1)
+
+
+class RecommenderSettingsIn(BaseModel):
+    """The recommender's own settings, as the Settings screen sends them."""
+
+    localLearning: bool = True
+    listenbrainzToken: str | None = Field(default=None, max_length=400)
+    lastfmApiKey: str | None = Field(default=None, max_length=400)
+    listenbrainzUser: str | None = Field(default=None, max_length=80)
+
+
 class SubscriptionIn(BaseModel):
     """Follow or unfollow one artist channel."""
 
@@ -991,6 +1026,22 @@ def _parse_exclude(exclude: str | None) -> set[str]:
     for vid in ids:
         _validate_video_id(vid)
     return set(ids)
+
+
+def _require_locked(request: Request) -> None:
+    """
+    The per-install token and the Origin check, as a dependency.
+
+    A dependency is used rather than a check inside the handler because
+    FastAPI validates the request body *after* it solves the dependencies: a
+    route that takes a body would otherwise answer 422 for a missing body
+    before the gate ever ran, and a caller without the token would learn
+    about the body instead of about the token.
+    """
+    locked = _locked(request)
+    if locked is not None:
+        status, detail = locked
+        raise HTTPException(status_code=status, detail=detail)
 
 
 def _ranked_candidates(seed: str, limit: int, exclude: set[str]) -> dict:
@@ -1080,6 +1131,202 @@ def recommendations(
     payload = _ranked_candidates(seed, limit, exclude=blocked)
     payload["source"] = "recommendations"
     return JSONResponse(content=payload)
+
+
+# ---------------- the layered recommender ----------------
+#
+# Everything below is the new engine: YouTube Music first, the local taste
+# layer and the optional outside signals refining it. The old /recommendations
+# route above stays exactly as it was — it is the fallback the app uses when
+# the new one is not available.
+
+
+@app.get("/recommendations/home", dependencies=[Depends(_require_locked)])
+def recommendations_home(
+    request: Request,
+    limit: int = Query(20, ge=1, le=MAX_CANDIDATES),
+):
+    """
+    The blended "Recommended for you" row for the Home screen.
+
+    The provider's own row is the backbone; the local taste layer and the
+    optional outside signals refine it. A layer that cannot answer is simply
+    not in the result.
+    """
+    try:
+        items = recommender.recommend_home(
+            ytmusic_service.call,
+            recommender.taste_store,
+            recommender.settings_store.load(),
+            limit=limit,
+        )
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception:
+        logger.exception("blended home recommendations failed")
+        raise HTTPException(
+            status_code=502,
+            detail="YouTube Music request failed. Try again shortly.",
+        )
+    return JSONResponse(
+        content={
+            "title": "Recommended for you",
+            "items": items,
+            "count": len(items),
+        }
+    )
+
+
+@app.get("/recommendations/next", dependencies=[Depends(_require_locked)])
+def recommendations_next(
+    request: Request,
+    seed: str = Query(..., description="Current video id"),
+    limit: int = Query(12, ge=1, le=MAX_CANDIDATES),
+    exclude: str | None = Query(
+        default=None,
+        description="Comma-separated videoIds already in the queue (bounded)",
+    ),
+):
+    """
+    The blended candidates Autoplay adds when the queue runs low.
+
+    The radio for the seed is the backbone; the other two layers refine it.
+    The seed and the current queue never come back.
+    """
+    _validate_video_id(seed)
+    blocked = _parse_exclude(exclude)
+    try:
+        tracks = recommender.recommend_next(
+            ytmusic_service.call,
+            recommender.taste_store,
+            recommender.settings_store.load(),
+            seed,
+            limit=limit,
+            exclude=blocked,
+        )
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception:
+        logger.exception("blended next recommendations failed")
+        raise HTTPException(
+            status_code=502,
+            detail="YouTube Music request failed. Try again shortly.",
+        )
+    return JSONResponse(
+        content={"seed": seed, "tracks": tracks, "count": len(tracks)}
+    )
+
+
+@app.post("/events/play", dependencies=[Depends(_require_locked)])
+def event_play(request: Request, event: TasteEventIn):
+    """
+    A track was played.
+
+    Recorded in the local taste layer so the recommender learns from it. The
+    app treats this as fire-and-forget: a failure here must never interrupt
+    playback, so the response is a plain acknowledgement.
+    """
+    _record_taste_event(event, "play")
+    return JSONResponse(content={"recorded": True})
+
+
+@app.post("/events/skip", dependencies=[Depends(_require_locked)])
+def event_skip(request: Request, event: TasteEventIn):
+    """A track was skipped. An early skip is a negative signal."""
+    _record_taste_event(event, "skip")
+    return JSONResponse(content={"recorded": True})
+
+
+@app.post("/events/like", dependencies=[Depends(_require_locked)])
+def event_like(request: Request, event: TasteEventIn):
+    """A track was liked. The strongest positive signal there is."""
+    _record_taste_event(event, "like")
+    return JSONResponse(content={"recorded": True})
+
+
+def _record_taste_event(event: TasteEventIn, kind: str) -> None:
+    """
+    Write one taste event into the local layer.
+
+    Best effort by design: the store is a ranking signal, and a store that
+    refuses a write must not turn a finished song into an error the listener
+    has to dismiss.
+    """
+    if not recommender.settings_store.load().local_learning:
+        return
+    title = event.title or ""
+    artist = event.artist or ""
+    try:
+        if kind == "play":
+            recommender.taste_store.record_play(
+                event.videoId, title, artist, completed=event.completed
+            )
+        elif kind == "skip":
+            fraction = event.playedFraction
+            if fraction <= 0.0 and event.durationSeconds > 0:
+                fraction = event.listenedSeconds / event.durationSeconds
+            recommender.taste_store.record_skip(
+                event.videoId, title, artist, played_fraction=fraction
+            )
+        else:
+            recommender.taste_store.record_like(event.videoId, title, artist)
+    except Exception:
+        logger.exception("could not record taste event")
+
+
+@app.get("/recommendations/settings", dependencies=[Depends(_require_locked)])
+def recommender_settings(request: Request):
+    """
+    The recommender's settings: whether local learning is on, and whether the
+    outside services are configured.
+
+    The credentials themselves come back to the app that asked for them (the
+    Settings screen needs to show what is set); they are never written to a
+    log and never leave this machine.
+    """
+    settings = recommender.settings_store.load()
+    return JSONResponse(
+        content={
+            "localLearning": settings.local_learning,
+            "listenbrainzToken": settings.listenbrainz_token,
+            "lastfmApiKey": settings.lastfm_api_key,
+            "listenbrainzUser": settings.listenbrainz_user,
+            "externalConfigured": settings.has_external,
+            "counts": recommender.taste_store.counts(),
+        }
+    )
+
+
+@app.post("/recommendations/settings", dependencies=[Depends(_require_locked)])
+def save_recommender_settings(request: Request, payload: RecommenderSettingsIn):
+    """Store the recommender's settings."""
+    current = recommender.settings_store.load()
+    settings = recommender.RecommenderSettings(
+        local_learning=bool(payload.localLearning),
+        listenbrainz_token=(payload.listenbrainzToken or "").strip(),
+        lastfm_api_key=(payload.lastfmApiKey or "").strip(),
+        listenbrainz_user=(payload.listenbrainzUser or "").strip()
+        or current.listenbrainz_user,
+    )
+    recommender.settings_store.save(settings)
+    return JSONResponse(content={"saved": True})
+
+
+@app.post("/recommendations/clear", dependencies=[Depends(_require_locked)])
+def clear_listening_data(request: Request):
+    """
+    Forget everything the app learned locally.
+
+    The taste layer (plays, skips, likes) and the app's own listening history
+    both go, because both are this device's record of what was played. The
+    account's own YouTube Music history and library are untouched.
+    """
+    recommender.taste_store.clear()
+    try:
+        listening_store.clear()
+    except Exception:
+        logger.exception("could not clear the listening history")
+    return JSONResponse(content={"cleared": True})
 
 
 @app.post("/listening/events")

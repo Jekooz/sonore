@@ -204,7 +204,7 @@ Future<void> _setLike(
 }) async {
   final YtmRepository repository = ref.read(ytmRepositoryProvider);
   try {
-    await repository.setLike(track.id, liked);
+    await repository.setLike(track, liked: liked);
   } on YtmException catch (error) {
     if (context.mounted) showAppMessage(context, error.message);
     return;

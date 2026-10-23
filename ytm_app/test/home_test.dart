@@ -110,6 +110,10 @@ void main() {
         '{"title":"A mix","playlistId":"PL1234567890",'
         '"thumbnails":[{"url":"https://example.invalid/c.jpg","width":500}]}]}]',
       ),
+      // Nothing to blend, so the feed stays exactly as the test set it up.
+      '/recommendations/home': jsonOk(
+        '{"title":"Recommended for you","items":[],"count":0}',
+      ),
     });
 
     await pumpAtSize(
@@ -317,6 +321,10 @@ void main() {
     final YtmRepository repository =
         testRepository(responses: <String, http.Response>{
       '/home': jsonOk(homeWithLongTitles()),
+      // Nothing to blend, so the cards under test are the feed's own.
+      '/recommendations/home': jsonOk(
+        '{"title":"Recommended for you","items":[],"count":0}',
+      ),
     });
 
     await pumpAtSize(
@@ -396,6 +404,25 @@ String homeWithLongTitles() => jsonEncode(<Map<String, dynamic>>[
               },
             ],
           },
+          // Filler so the shelf clears the minimum-rail threshold and still
+          // renders: this test is about card typography, not about shelves
+          // that are too thin to show.
+          for (final String id in <String>['song0000004', 'song0000005'])
+            <String, dynamic>{
+              'videoId': id,
+              'title': 'Filler $id',
+              'artists': <Map<String, String>>[
+                <String, String>{'name': 'Filler Artist'},
+              ],
+              'duration': '3:00',
+              'duration_seconds': 180,
+              'thumbnails': <Map<String, Object>>[
+                <String, Object>{
+                  'url': 'https://example.invalid/$id.jpg',
+                  'width': 500,
+                },
+              ],
+            },
         ],
       },
     ]);

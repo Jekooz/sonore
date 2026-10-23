@@ -43,6 +43,19 @@ void main() {
     );
   });
 
+  testWidgets('library with the mini player — phone 390x844',
+      (WidgetTester tester) async {
+    await pumpAtSize(
+      tester,
+      appScope(initialLocation: '/library', queue: testQueue()),
+      size: kPhone,
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/shell_library_mini_phone_390x844.png'),
+    );
+  });
+
   testWidgets('now playing empty inside the shell — phone 390x844',
       (WidgetTester tester) async {
     await pumpAtSize(

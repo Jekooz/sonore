@@ -5,6 +5,15 @@ import '../audio/equalizer.dart';
 import '../audio/playback_state.dart';
 import '../theme/tokens.dart';
 
+/// The visual quality the user allows the glass recipe to use.
+///
+/// Auto follows the app's own frame measurements: sustained jank drops the
+/// tier to Low until it is changed. High pins the full glass recipe onto the
+/// strongest setting; Low trades it down on purpose (thinner blur, a frozen
+/// backdrop, solid surfaces), which is what low-end Android devices should
+/// start on when Auto is not enough for them.
+enum VisualQuality { auto, high, low }
+
 /// Appearance and behaviour preferences that actually change the app.
 ///
 /// Only settings with a real implementation live here. There is still no
@@ -28,6 +37,8 @@ class AppSettings {
     this.repeatMode = RepeatMode.off,
     this.shuffle = false,
     this.autoplay = true,
+    this.visualQuality = VisualQuality.auto,
+    this.showPerformanceOverlay = false,
   });
 
   /// Forces glass chrome onto its opaque fallback (spec: Reduce Transparency).
@@ -59,6 +70,18 @@ class AppSettings {
   /// (spec section F: "Autoplay has a visible on/off state").
   final bool autoplay;
 
+  /// The visual quality tier (Auto / High / Low: Settings > Appearance).
+  ///
+  /// Where [VisualQuality.auto] resolves to, the [visualQualityProvider] in
+  /// `core/visual_quality.dart` decides — High until a measured jank window
+  /// says otherwise.
+  final VisualQuality visualQuality;
+
+  /// The frame-stats overlay for performance runs. Offered only by debug and
+  /// profile builds (the engine supplies no frame timeline in release), so a
+  /// Settings row would only ever lie in a release build.
+  final bool showPerformanceOverlay;
+
   AppSettings copyWith({
     bool? reduceTransparency,
     bool? reduceMotion,
@@ -68,6 +91,8 @@ class AppSettings {
     RepeatMode? repeatMode,
     bool? shuffle,
     bool? autoplay,
+    VisualQuality? visualQuality,
+    bool? showPerformanceOverlay,
   }) {
     return AppSettings(
       reduceTransparency: reduceTransparency ?? this.reduceTransparency,
@@ -78,6 +103,9 @@ class AppSettings {
       repeatMode: repeatMode ?? this.repeatMode,
       shuffle: shuffle ?? this.shuffle,
       autoplay: autoplay ?? this.autoplay,
+      visualQuality: visualQuality ?? this.visualQuality,
+      showPerformanceOverlay:
+          showPerformanceOverlay ?? this.showPerformanceOverlay,
     );
   }
 
@@ -107,7 +135,19 @@ class AppSettings {
       repeatMode: _repeatFrom(json['repeatMode']),
       shuffle: _boolFrom(json['shuffle']) ?? false,
       autoplay: _boolFrom(json['autoplay']) ?? true,
+      visualQuality: visualQualityFrom(json['visualQuality']),
+      showPerformanceOverlay:
+          _boolFrom(json['showPerformanceOverlay']) ?? false,
     );
+  }
+
+  /// Stored by name, so a hand-edited value that names no tier falls back to
+  /// Auto instead of failing to start.
+  static VisualQuality visualQualityFrom(Object? value) {
+    for (final VisualQuality quality in VisualQuality.values) {
+      if (quality.name == value) return quality;
+    }
+    return VisualQuality.auto;
   }
 
   /// Repeat mode is stored by name, so a hand-edited or older file that says
@@ -123,7 +163,8 @@ class AppSettings {
   /// is present but the wrong type is a bad value, not a reason to crash.
   static bool? _boolFrom(Object? value) => value is bool ? value : null;
 
-  static double? _numFrom(Object? value) => value is num ? value.toDouble() : null;
+  static double? _numFrom(Object? value) =>
+      value is num ? value.toDouble() : null;
 
   static String? _stringFrom(Object? value) =>
       value is String && value.isNotEmpty ? value : null;
@@ -153,17 +194,19 @@ class AppSettings {
   }
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'reduceTransparency': reduceTransparency,
-        'reduceMotion': reduceMotion,
-        'textScale': textScale,
-        'lyricsAutoFollow': lyricsAutoFollow,
-        'equalizerEnabled': equalizer.enabled,
-        'equalizerGains': equalizer.gains,
-        'equalizerPreset': equalizer.presetName,
-        'repeatMode': repeatMode.name,
-        'shuffle': shuffle,
-        'autoplay': autoplay,
-      };
+    'reduceTransparency': reduceTransparency,
+    'reduceMotion': reduceMotion,
+    'textScale': textScale,
+    'lyricsAutoFollow': lyricsAutoFollow,
+    'equalizerEnabled': equalizer.enabled,
+    'equalizerGains': equalizer.gains,
+    'equalizerPreset': equalizer.presetName,
+    'repeatMode': repeatMode.name,
+    'shuffle': shuffle,
+    'autoplay': autoplay,
+    'visualQuality': visualQuality.name,
+    'showPerformanceOverlay': showPerformanceOverlay,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -175,19 +218,23 @@ class AppSettings {
       other.equalizer == equalizer &&
       other.repeatMode == repeatMode &&
       other.shuffle == shuffle &&
-      other.autoplay == autoplay;
+      other.autoplay == autoplay &&
+      other.visualQuality == visualQuality &&
+      other.showPerformanceOverlay == showPerformanceOverlay;
 
   @override
   int get hashCode => Object.hash(
-        reduceTransparency,
-        reduceMotion,
-        textScale,
-        lyricsAutoFollow,
-        equalizer,
-        repeatMode,
-        shuffle,
-        autoplay,
-      );
+    reduceTransparency,
+    reduceMotion,
+    textScale,
+    lyricsAutoFollow,
+    equalizer,
+    repeatMode,
+    shuffle,
+    autoplay,
+    visualQuality,
+    showPerformanceOverlay,
+  );
 }
 
 /// Where settings are read from and written to.
@@ -205,7 +252,7 @@ abstract class SettingsStore {
 /// Keeps settings in memory only. The default the app and every test start on.
 class InMemorySettingsStore implements SettingsStore {
   InMemorySettingsStore([AppSettings? initial])
-      : _value = initial ?? const AppSettings();
+    : _value = initial ?? const AppSettings();
 
   AppSettings _value;
 
@@ -227,8 +274,9 @@ class InMemorySettingsStore implements SettingsStore {
 /// Where the app starts from. `main.dart` loads the stored settings and
 /// overrides this before the first frame, so nothing waits on disk while
 /// building; the default keeps tests free of persistence.
-final Provider<AppSettings> initialAppSettingsProvider =
-    Provider<AppSettings>((_) => const AppSettings());
+final Provider<AppSettings> initialAppSettingsProvider = Provider<AppSettings>(
+  (_) => const AppSettings(),
+);
 
 /// The live settings. Every setter writes through to the [SettingsStore] and
 /// reports the outcome on [settingsSaveStatusProvider], so a Settings row can
@@ -250,14 +298,17 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       // for this session and the Settings screen says it did not persist.
       ref
           .read(settingsSaveStatusProvider.notifier)
-          .report('Preferences could not be saved. They apply for this session.');
+          .report(
+            'Preferences could not be saved. They apply for this session.',
+          );
     }
   }
 
   void setReduceTransparency(bool value) =>
       _commit(state.copyWith(reduceTransparency: value));
 
-  void setReduceMotion(bool value) => _commit(state.copyWith(reduceMotion: value));
+  void setReduceMotion(bool value) =>
+      _commit(state.copyWith(reduceMotion: value));
 
   void setTextScale(double value) => _commit(state.copyWith(textScale: value));
 
@@ -267,12 +318,32 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   void setEqualizer(EqualizerConfig value) =>
       _commit(state.copyWith(equalizer: value));
 
+  void setVisualQuality(VisualQuality value) =>
+      _commit(state.copyWith(visualQuality: value));
+
+  /// Debug/profile only: the frame-stats overlay for performance runs.
+  ///
+  /// A release build can never commit this: neither its event loop nor its
+  /// engine publishes a frame timeline, so the row does not exist on the
+  /// page and this gate refuses the write outright. The gate is a compile-
+  /// time constant, so the branch is dropped from release binaries rather
+  /// than merely hidden behind it.
+  void setShowPerformanceOverlay(bool value) {
+    assert(!kReleaseMode, 'Show frame stats is debug-only.');
+    if (kReleaseMode) return;
+    _commit(state.copyWith(showPerformanceOverlay: value));
+  }
+
   /// Writes the player modes the transport controls own. The controls talk to
   /// [PlaybackController], which is the single writer for these three, so this
   /// exists for the reset path and for seeding, not as a second source of truth.
   void setPlayerModes({RepeatMode? repeat, bool? shuffle, bool? autoplay}) =>
       _commit(
-        state.copyWith(repeatMode: repeat, shuffle: shuffle, autoplay: autoplay),
+        state.copyWith(
+          repeatMode: repeat,
+          shuffle: shuffle,
+          autoplay: autoplay,
+        ),
       );
 
   /// Back to defaults, including the equalizer and the player modes. Music,
@@ -299,15 +370,16 @@ class SettingsSaveStatusNotifier extends Notifier<SettingsSaveStatus> {
 }
 
 final NotifierProvider<SettingsSaveStatusNotifier, SettingsSaveStatus>
-    settingsSaveStatusProvider =
+settingsSaveStatusProvider =
     NotifierProvider<SettingsSaveStatusNotifier, SettingsSaveStatus>(
-  SettingsSaveStatusNotifier.new,
-);
+      SettingsSaveStatusNotifier.new,
+    );
 
 /// The persistence backend. Defaults to memory; `main.dart` overrides it with
 /// the shared_preferences store on platforms that have one.
-final Provider<SettingsStore> settingsStoreProvider =
-    Provider<SettingsStore>((_) => InMemorySettingsStore());
+final Provider<SettingsStore> settingsStoreProvider = Provider<SettingsStore>(
+  (_) => InMemorySettingsStore(),
+);
 
 final NotifierProvider<AppSettingsNotifier, AppSettings> appSettingsProvider =
     NotifierProvider<AppSettingsNotifier, AppSettings>(AppSettingsNotifier.new);

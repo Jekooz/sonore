@@ -200,7 +200,9 @@ class MediaCard extends ConsumerWidget {
                         item.subtitle.isEmpty
                             ? item.kind.badge ?? ''
                             : item.subtitle,
-                        style: Tokens.caption,
+                        // Content, not microcopy: artists and playlists the
+                        // card names, so they carry subtitle contrast.
+                        style: Tokens.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),

@@ -66,6 +66,19 @@ class AppTheme {
           TargetPlatform.fuchsia: AppPageTransitions(),
         },
       ),
+      // Tooltips are solid surfaces in token colors, never Material's
+      // default gray: they satisfy the reduce-transparency rule (everything
+      // floating is opaque and concentric) even before any tier change.
+      tooltipTheme: TooltipThemeData(
+        decoration: ShapeDecoration(
+          color: Tokens.glassFallback,
+          shape: Tokens.shapeFor(Tokens.rSmall).copyWith(
+            side: BorderSide(color: Tokens.border, width: Tokens.borderWidth),
+          ),
+        ),
+        textStyle: Tokens.caption.copyWith(color: Tokens.text),
+        waitDuration: const Duration(milliseconds: 500),
+      ),
     );
   }
 }

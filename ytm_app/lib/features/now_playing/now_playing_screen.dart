@@ -228,110 +228,225 @@ class _PlayerColumnState extends ConsumerState<_PlayerColumn> {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: Tokens.contentMaxWidth),
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints c) {
+              // Short, wide windows — landscape phones and small desktop
+              // panes — cannot afford the full art-over-controls stack, so
+              // they split into two columns: art left, controls right. The
+              // condition reads the window, not this column, so it matches
+              // the widths the layout is audited at.
+              final Size window = MediaQuery.sizeOf(context);
+              final bool landscape =
+                  window.height > 0 &&
+                  window.width / window.height > 1.3 &&
+                  window.height <= 700;
+              if (landscape) {
+                return _buildLandscape(
+                  c,
+                  artwork: artwork,
+                  controller: controller,
+                  state: state,
+                  track: track,
+                );
+              }
+              return _buildPortrait(
+                artwork: artwork,
+                controller: controller,
+                state: state,
+                track: track,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The classic single column: artwork on top, controls under it — the only
+  /// layout a phone portrait or a tall desktop window needs.
+  Widget _buildPortrait({
+    required ArtworkResolver artwork,
+    required PlaybackController controller,
+    required PlaybackState state,
+    required Track track,
+  }) {
+    return Column(
+      children: <Widget>[
+        // Artwork: elastic, capped, centered. Size = the smaller of the
+        // leftover width and the leftover height, so it can never push
+        // the control block out of the viewport.
+        Flexible(
+          child: Center(
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints c) {
+                final double side = math
+                    .min(
+                      math.min(
+                        c.maxWidth - Tokens.s48,
+                        c.maxHeight - Tokens.s32,
+                      ),
+                      Tokens.artworkMaxDesktop,
+                    )
+                    .clamp(Tokens.s16, Tokens.artworkMaxDesktop);
+                final double rendered = side.isFinite ? side : Tokens.s16;
+                _reportArtSide(rendered);
+                return ArtTile(
+                  size: rendered,
+                  radius: Tokens.rLarge,
+                  image: artwork(track.artworkUrl),
+                );
+              },
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Tokens.s24,
+            Tokens.s16,
+            Tokens.s24,
+            0,
+          ),
           child: Column(
             children: <Widget>[
-              // Artwork: elastic, capped, centered. Size = the smaller of the
-              // leftover width and the leftover height, so it can never push
-              // the control block out of the viewport.
-              Flexible(
-                child: Center(
-                  child: LayoutBuilder(
-                    builder: (BuildContext context, BoxConstraints c) {
-                      final double side = math
-                          .min(
-                            math.min(
-                              c.maxWidth - Tokens.s48,
-                              c.maxHeight - Tokens.s32,
-                            ),
-                            Tokens.artworkMaxDesktop,
-                          )
-                          .clamp(Tokens.s16, Tokens.artworkMaxDesktop);
-                      final double rendered = side.isFinite ? side : Tokens.s16;
-                      _reportArtSide(rendered);
-                      return ArtTile(
-                        size: rendered,
-                        radius: Tokens.rLarge,
-                        image: artwork(track.artworkUrl),
-                      );
-                    },
-                  ),
-                ),
+              Text(
+                track.title,
+                style: Tokens.nowPlayingTitle,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Tokens.s24,
-                  Tokens.s16,
-                  Tokens.s24,
-                  0,
-                ),
-                child: Column(
-                  children: <Widget>[
-                    Text(
-                      track.title,
-                      style: Tokens.nowPlayingTitle,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: Tokens.s4),
-                    Text(
-                      track.subtitle,
-                      style: Tokens.subtitle,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              // Seek, transport and secondary actions share one centered column
-              // as wide as the artwork honestly is — never the loose transport
-              // cap when the art rendered smaller.
-              ValueListenableBuilder<double>(
-                valueListenable: _artSide,
-                builder:
-                    (BuildContext context, double side, Widget? controls) =>
-                        // The art is the cap on wide windows, but never below
-                        // the transport pill's own width — on the narrowest
-                        // phones the art can render smaller than the pill can
-                        // compress to.
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: math.max(
-                              math.min(Tokens.transportMaxWidth, side),
-                              // The player column's own padding rides on
-                              // top of the pill's, so the floor has to
-                              // cover both before the Row can hold its
-                              // five 48px controls.
-                              TransportPill.minWidth + Tokens.s16 * 2,
-                            ),
-                          ),
-                          child: controls,
-                        ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Tokens.s16),
-                  child: Column(
-                    children: <Widget>[
-                      const SizedBox(height: Tokens.s16),
-                      _SeekRow(state: state),
-                      const SizedBox(height: Tokens.s16),
-                      const TransportPill(),
-                      const SizedBox(height: Tokens.s12),
-                      _SecondaryActions(
-                        track: track,
-                        panel: widget.panel,
-                        onPanel: widget.onPanel,
-                        onToggleLike: controller.toggleLike,
-                      ),
-                      const SizedBox(height: Tokens.s24),
-                    ],
-                  ),
-                ),
+              const SizedBox(height: Tokens.s4),
+              Text(
+                track.subtitle,
+                style: Tokens.subtitle,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
-      ),
+        // Seek, transport and secondary actions share one centered column
+        // as wide as the artwork honestly is — never the loose transport
+        // cap when the art rendered smaller.
+        ValueListenableBuilder<double>(
+          valueListenable: _artSide,
+          builder: (BuildContext context, double side, Widget? controls) =>
+              // The art is the cap on wide windows, but never below
+              // the transport pill's own width — on the narrowest
+              // phones the art can render smaller than the pill can
+              // compress to.
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: math.max(
+                    math.min(Tokens.transportMaxWidth, side),
+                    // The player column's own padding rides on
+                    // top of the pill's, so the floor has to
+                    // cover both before the Row can hold its
+                    // five 48px controls.
+                    TransportPill.minWidth + Tokens.s16 * 2,
+                  ),
+                ),
+                child: controls,
+              ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Tokens.s16),
+            child: Column(
+              children: <Widget>[
+                const SizedBox(height: Tokens.s16),
+                _SeekRow(state: state),
+                const SizedBox(height: Tokens.s16),
+                const TransportPill(),
+                const SizedBox(height: Tokens.s12),
+                _SecondaryActions(
+                  track: track,
+                  panel: widget.panel,
+                  onPanel: widget.onPanel,
+                  onToggleLike: controller.toggleLike,
+                ),
+                const SizedBox(height: Tokens.s24),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The two-column layout: artwork left, sized as large as the height
+  /// allows (keeping a 32px breathing band above the floating chrome); the
+  /// control column right, vertically centered, its width simply whatever
+  /// the column has — the scrubber spans it in full, which is exactly the
+  /// width the seek bar should read at. The art's width budget also owes
+  /// the controls their own floor, so the transport pill can never be
+  /// squeezed below what it honestly needs.
+  Widget _buildLandscape(
+    BoxConstraints c, {
+    required ArtworkResolver artwork,
+    required PlaybackController controller,
+    required PlaybackState state,
+    required Track track,
+  }) {
+    final double side = math
+        .min(
+          math.min(
+            c.maxHeight - Tokens.s32,
+            c.maxWidth - TransportPill.minWidth - Tokens.s24 * 3,
+          ),
+          Tokens.artworkMaxDesktop,
+        )
+        .clamp(Tokens.s16, Tokens.artworkMaxDesktop);
+    final double rendered = side.isFinite ? side : Tokens.s16;
+    _reportArtSide(rendered);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        SizedBox(
+          width: rendered,
+          child: ArtTile(
+            size: rendered,
+            radius: Tokens.rLarge,
+            image: artwork(track.artworkUrl),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Tokens.s24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  track.title,
+                  style: Tokens.nowPlayingTitle,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: Tokens.s4),
+                Text(
+                  track.subtitle,
+                  style: Tokens.subtitle,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: Tokens.s16),
+                _SeekRow(state: state),
+                const SizedBox(height: Tokens.s16),
+                const TransportPill(),
+                const SizedBox(height: Tokens.s12),
+                _SecondaryActions(
+                  track: track,
+                  panel: widget.panel,
+                  onPanel: widget.onPanel,
+                  onToggleLike: controller.toggleLike,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

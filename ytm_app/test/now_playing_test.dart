@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ytm_app/features/library/library_screen.dart';
 import 'package:ytm_app/features/now_playing/queue_panel.dart';
+import 'package:ytm_app/features/now_playing/transport_pill.dart';
 import 'package:ytm_app/features/shell/nav_bottom_bar.dart';
 import 'package:ytm_app/theme/icons.dart';
 import 'package:ytm_app/theme/tokens.dart';
+import 'package:ytm_app/ui/art_tile.dart';
 import 'package:ytm_app/ui/seek_bar.dart';
 
 import 'support/harness.dart';
@@ -25,7 +27,8 @@ double paintedFill(WidgetTester tester) {
         ),
       )
       .where(
-        (DecoratedBox box) => (box.decoration as ShapeDecoration).color == Tokens.text,
+        (DecoratedBox box) =>
+            (box.decoration as ShapeDecoration).color == Tokens.text,
       )
       .map((DecoratedBox box) => tester.getRect(find.byWidget(box)))
       .single;
@@ -35,8 +38,9 @@ double paintedFill(WidgetTester tester) {
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('empty state is one sentence plus one real action',
-      (WidgetTester tester) async {
+  testWidgets('empty state is one sentence plus one real action', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing'),
@@ -52,8 +56,9 @@ void main() {
     expect(find.byType(LibraryScreen), findsOneWidget);
   });
 
-  testWidgets('shows the current track and its artist',
-      (WidgetTester tester) async {
+  testWidgets('shows the current track and its artist', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -64,23 +69,69 @@ void main() {
     expect(find.text('Nova · Nightfall'), findsOneWidget);
   });
 
-  testWidgets('the artwork absorbs the viewport and never scrolls',
-      (WidgetTester tester) async {
-    await pumpAtSize(
-      tester,
-      appScope(initialLocation: '/now-playing', queue: testQueue()),
-      size: kPhone,
-    );
+  testWidgets('the artwork absorbs the viewport and never scrolls', (
+    WidgetTester tester,
+  ) async {
+    // Every audited window, including the landscape-size one: the page is a
+    // fitted composition — artwork and controls share the viewport, so there
+    // is never a scrollable and never an overflow, whatever the shape.
+    const List<(String, Size)> sizes = <(String, Size)>[
+      ('desktop wide', Size(1920, 1080)),
+      ('desktop', kDesktop),
+      ('narrow', Size(800, 600)),
+      ('phone', kPhone),
+      ('narrow phone', Size(320, 690)),
+    ];
+    for (final (String name, Size size) in sizes) {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/now-playing', queue: testQueue()),
+        size: size,
+      );
 
-    // The artwork is the biggest element and stays proportional to the
-    // window: no scrollable anywhere on this page.
-    expect(find.byType(ListView), findsNothing);
-    expect(find.byType(SingleChildScrollView), findsNothing);
-    expect(find.byType(RefreshIndicator), findsNothing);
+      expect(tester.takeException(), isNull, reason: name);
+      // The artwork is the biggest element and stays proportional to the
+      // window: no scrollable anywhere on this page.
+      expect(find.byType(ListView), findsNothing, reason: name);
+      expect(find.byType(SingleChildScrollView), findsNothing, reason: name);
+      expect(find.byType(RefreshIndicator), findsNothing, reason: name);
+    }
   });
 
-  testWidgets('play/pause drives the real playback state',
-      (WidgetTester tester) async {
+  testWidgets(
+    'a short wide window lays out in two columns — art left, controls right '
+    '— even at 1.3 text scale',
+    (WidgetTester tester) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/now-playing', queue: testQueue()),
+        size: const Size(800, 600),
+        textScale: kAccessibleTextScale,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ListView), findsNothing);
+
+      // Two columns: the artwork sits entirely to the left of the
+      // scrubber's column, and the scrubber is as wide as that column —
+      // controls are vertically centered beside the art instead of stacked
+      // over it.
+      final Rect art = tester.getRect(find.byType(ArtTile).first);
+      final Rect seek = tester.getRect(find.byType(SeekBar));
+      expect(art.right, lessThanOrEqualTo(seek.left));
+      expect(art.height, lessThanOrEqualTo(600 - 36 - Tokens.s32));
+
+      // The transport pill keeps its own width floor in the right column.
+      expect(
+        tester.getRect(find.byType(TransportPill)).width,
+        greaterThanOrEqualTo(TransportPill.minWidth - 1),
+      );
+    },
+  );
+
+  testWidgets('play/pause drives the real playback state', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -110,8 +161,9 @@ void main() {
     expect(find.text('Aurora Lane · Static'), findsOneWidget);
   });
 
-  testWidgets('previous on a barely-started track steps back',
-      (WidgetTester tester) async {
+  testWidgets('previous on a barely-started track steps back', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(
@@ -129,8 +181,9 @@ void main() {
     expect(find.text('Falling For You'), findsOneWidget);
   });
 
-  testWidgets('the like action toggles and shows the filled icon',
-      (WidgetTester tester) async {
+  testWidgets('the like action toggles and shows the filled icon', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -143,8 +196,9 @@ void main() {
     expect(find.byIcon(AppIcons.heartFill), findsOneWidget);
   });
 
-  testWidgets('seeking through the bar commits to the controller',
-      (WidgetTester tester) async {
+  testWidgets('seeking through the bar commits to the controller', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -202,8 +256,9 @@ void main() {
     expect(paintedFill(tester), 0);
   });
 
-  testWidgets('no panel is open by default, on any size',
-      (WidgetTester tester) async {
+  testWidgets('no panel is open by default, on any size', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -219,8 +274,9 @@ void main() {
     expect(find.byType(QueuePanel), findsNothing);
   });
 
-  testWidgets('the Queue icon toggles the desktop side panel',
-      (WidgetTester tester) async {
+  testWidgets('the Queue icon toggles the desktop side panel', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -242,8 +298,9 @@ void main() {
     expect(find.byType(QueuePanel), findsNothing);
   });
 
-  testWidgets('the Lyrics and Queue icons never stack two panels',
-      (WidgetTester tester) async {
+  testWidgets('the Lyrics and Queue icons never stack two panels', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -266,8 +323,7 @@ void main() {
     expect(find.byType(QueuePanel), findsNothing);
   });
 
-  testWidgets('tap outside closes the open panel',
-      (WidgetTester tester) async {
+  testWidgets('tap outside closes the open panel', (WidgetTester tester) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -285,8 +341,7 @@ void main() {
     expect(find.byType(QueuePanel), findsNothing);
   });
 
-  testWidgets('Esc closes the open panel',
-      (WidgetTester tester) async {
+  testWidgets('Esc closes the open panel', (WidgetTester tester) async {
     await pumpAtSize(
       tester,
       appScope(initialLocation: '/now-playing', queue: testQueue()),
@@ -329,8 +384,9 @@ void main() {
     expect(find.byType(QueuePanel), findsNothing);
   });
 
-  testWidgets('an engine error shows one sentence and Retry, with no red',
-      (WidgetTester tester) async {
+  testWidgets('an engine error shows one sentence and Retry, with no red', (
+    WidgetTester tester,
+  ) async {
     await pumpAtSize(
       tester,
       appScope(

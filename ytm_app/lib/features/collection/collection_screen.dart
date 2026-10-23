@@ -12,6 +12,7 @@ import '../../theme/tokens.dart';
 import '../../ui/art_tile.dart';
 import '../now_playing/artwork.dart';
 import '../../ui/context_menu.dart';
+import '../../ui/content_column.dart';
 import '../../ui/data_states.dart';
 import '../../ui/media_actions.dart';
 import '../../ui/media_rows.dart';
@@ -37,14 +38,8 @@ class CollectionScreen extends ConsumerWidget {
       children: <Widget>[
         // Back returns to the list this page was opened from.
         const Padding(
-          padding: EdgeInsets.only(
-            left: Tokens.s8,
-            top: Tokens.s8,
-          ),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _BackButton(),
-          ),
+          padding: EdgeInsets.only(left: Tokens.s8, top: Tokens.s8),
+          child: Align(alignment: Alignment.centerLeft, child: _BackButton()),
         ),
         Expanded(
           child: ConnectionGate(
@@ -91,8 +86,9 @@ class _CollectionView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin =
-        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+    final double margin = isDesktop
+        ? Tokens.pageMarginDesktop
+        : Tokens.pageMarginPhone;
     // Computed once: items the service returned without a playable target are
     // not rows at all, so they never become a dead row.
     final List<MediaItem> rows = collection.tracks
@@ -102,25 +98,29 @@ class _CollectionView extends ConsumerWidget {
       playbackProvider.select((PlaybackState state) => state.current?.id),
     );
 
-    return ListView.builder(
-      padding: EdgeInsets.fromLTRB(
-        margin,
-        Tokens.s16,
-        margin,
-        Tokens.s24 + ShellClearance.of(context),
+    // The shared browsing column, so an ultrawide window centers this page
+    // like Home and Search instead of stretching rows edge to edge.
+    return ContentColumn(
+      child: ListView.builder(
+        padding: EdgeInsets.fromLTRB(
+          margin,
+          Tokens.s16,
+          margin,
+          Tokens.s24 + ShellClearance.of(context),
+        ),
+        itemCount: rows.length + 1,
+        itemBuilder: (BuildContext context, int index) {
+          if (index == 0) {
+            return _CollectionHeader(collection: collection);
+          }
+          final MediaItem item = rows[index - 1];
+          return MediaRow(
+            item: item,
+            siblings: collection.tracks,
+            isPlaying: item.track!.id == currentTrackId,
+          );
+        },
       ),
-      itemCount: rows.length + 1,
-      itemBuilder: (BuildContext context, int index) {
-        if (index == 0) {
-          return _CollectionHeader(collection: collection);
-        }
-        final MediaItem item = rows[index - 1];
-        return MediaRow(
-          item: item,
-          siblings: collection.tracks,
-          isPlaying: item.track!.id == currentTrackId,
-        );
-      },
     );
   }
 }
@@ -154,8 +154,10 @@ class _CollectionHeader extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(collection.ref.kind.name.toUpperCase(),
-                    style: Tokens.caption),
+                Text(
+                  collection.ref.kind.name.toUpperCase(),
+                  style: Tokens.caption,
+                ),
                 const SizedBox(height: Tokens.s4),
                 Text(
                   collection.title,
@@ -173,44 +175,57 @@ class _CollectionHeader extends ConsumerWidget {
                   ),
                 ],
                 const SizedBox(height: Tokens.s16),
-                Wrap(
-                  spacing: Tokens.s8,
-                  runSpacing: Tokens.s8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: <Widget>[
-                    PillButton(
-                      icon: AppIcons.playFill,
-                      label: 'Play',
-                      isActive: true,
-                      // An empty collection offers no Play rather than a button
-                      // that does nothing.
-                      onPressed:
-                          canPlay ? () => controller.setQueue(playable) : null,
-                    ),
-                    PillButton(
-                      icon: AppIcons.plus,
-                      label: 'Add to queue',
-                      onPressed:
-                          canPlay ? () => controller.addToQueue(playable) : null,
-                    ),
-                    ContextMenuButton(
-                      entries: mediaContextMenu(
-                        context: context,
-                        ref: ref,
-                        item: MediaItem(
-                          kind: switch (collection.ref.kind) {
-                            CollectionKind.album => MediaKind.album,
-                            CollectionKind.playlist => MediaKind.playlist,
-                            CollectionKind.artist => MediaKind.artist,
-                          },
-                          title: collection.title,
-                          collection: collection.ref,
+                LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints constraints) {
+                    // Narrow column (phone): "Play" keeps its label as the
+                    // primary action, the queue and overflow actions fall back
+                    // to icon-only so title and actions stay on one row
+                    // instead of letting the lone "…" wrap onto a centered
+                    // second line (the round-2 leftover).
+                    final bool compact = constraints.maxWidth < 320;
+                    return Wrap(
+                      spacing: Tokens.s8,
+                      runSpacing: Tokens.s8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: <Widget>[
+                        PillButton(
+                          icon: AppIcons.playFill,
+                          label: 'Play',
+                          isActive: true,
+                          // An empty collection offers no Play rather than a
+                          // button that does nothing.
+                          onPressed: canPlay
+                              ? () => controller.setQueue(playable)
+                              : null,
                         ),
-                        siblings: const <Track>[],
-                      ),
-                      semanticLabel: 'Actions for ${collection.title}',
-                    ),
-                  ],
+                        PillButton(
+                          icon: AppIcons.plus,
+                          label: compact ? null : 'Add to queue',
+                          tooltip: 'Add to queue',
+                          onPressed: canPlay
+                              ? () => controller.addToQueue(playable)
+                              : null,
+                        ),
+                        ContextMenuButton(
+                          entries: mediaContextMenu(
+                            context: context,
+                            ref: ref,
+                            item: MediaItem(
+                              kind: switch (collection.ref.kind) {
+                                CollectionKind.album => MediaKind.album,
+                                CollectionKind.playlist => MediaKind.playlist,
+                                CollectionKind.artist => MediaKind.artist,
+                              },
+                              title: collection.title,
+                              collection: collection.ref,
+                            ),
+                            siblings: const <Track>[],
+                          ),
+                          semanticLabel: 'Actions for ${collection.title}',
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -228,8 +243,8 @@ class _CollectionLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double margin = MediaQuery.sizeOf(context).width >=
-            Tokens.breakpointDesktop
+    final double margin =
+        MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop
         ? Tokens.pageMarginDesktop
         : Tokens.pageMarginPhone;
 

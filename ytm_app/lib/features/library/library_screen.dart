@@ -8,6 +8,7 @@ import '../../data/ytm_repository.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
 import '../../ui/context_menu.dart';
+import '../../ui/content_column.dart';
 import '../../ui/data_states.dart';
 import '../../ui/media_rows.dart';
 import '../../ui/pressable.dart';
@@ -29,10 +30,10 @@ enum LibrarySort {
 }
 
 final NotifierProvider<LibrarySegmentController, LibrarySegment>
-    librarySegmentProvider =
+librarySegmentProvider =
     NotifierProvider<LibrarySegmentController, LibrarySegment>(
-  LibrarySegmentController.new,
-);
+      LibrarySegmentController.new,
+    );
 
 class LibrarySegmentController extends Notifier<LibrarySegment> {
   @override
@@ -43,8 +44,8 @@ class LibrarySegmentController extends Notifier<LibrarySegment> {
 
 final NotifierProvider<LibrarySortController, LibrarySort> librarySortProvider =
     NotifierProvider<LibrarySortController, LibrarySort>(
-  LibrarySortController.new,
-);
+      LibrarySortController.new,
+    );
 
 class LibrarySortController extends Notifier<LibrarySort> {
   @override
@@ -64,61 +65,65 @@ class LibraryScreen extends ConsumerWidget {
     final LibrarySort sort = ref.watch(librarySortProvider);
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin =
-        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+    final double margin = isDesktop
+        ? Tokens.pageMarginDesktop
+        : Tokens.pageMarginPhone;
 
     return ConnectionGate(
       loading: const ListSkeleton(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              margin,
-              Tokens.s24,
-              margin,
-              Tokens.s12,
-            ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Library',
-                    style:
-                        isDesktop ? Tokens.pageTitleDesktop : Tokens.pageTitle,
+      // The shared browsing column: Library centers like Search instead of
+      // hugging the page margin on a 1920 window (round-2 leftover).
+      child: ContentColumn(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                margin,
+                Tokens.s24,
+                margin,
+                Tokens.s12,
+              ),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      'Library',
+                      style: isDesktop
+                          ? Tokens.pageTitleDesktop
+                          : Tokens.pageTitle,
+                    ),
                   ),
-                ),
-                _SortControl(
-                  sort: sort,
-                  onSelected: (LibrarySort value) =>
-                      ref.read(librarySortProvider.notifier).select(value),
-                ),
-              ],
-            ),
-          ),
-          _SegmentChips(selected: segment),
-          Expanded(
-            child: DataStateView<List<MediaItem>>(
-              value: ref.watch(libraryProvider(segment)),
-              onRetry: () => ref.invalidate(libraryProvider),
-              isEmpty: (List<MediaItem> items) => items.isEmpty,
-              // History is the app's own record, not a service library, so it
-              // must not borrow the library's wording: nothing was "saved"
-              // there, and an empty list means nothing has been played yet.
-              emptyMessage: segment == LibrarySegment.history
-                  ? 'Nothing played yet.'
-                  : 'No ${segment.label.toLowerCase()} in your library.',
-              emptyFootnote: segment == LibrarySegment.history
-                  ? 'Tracks you play here appear in this list, newest first.'
-                  : 'Anything you save in YouTube Music shows up here.',
-              loading: const ListSkeleton(),
-              data: (List<MediaItem> items) => _LibraryList(
-                items: _sorted(items, sort),
-                segment: segment,
+                  _SortControl(
+                    sort: sort,
+                    onSelected: (LibrarySort value) =>
+                        ref.read(librarySortProvider.notifier).select(value),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            _SegmentChips(selected: segment),
+            Expanded(
+              child: DataStateView<List<MediaItem>>(
+                value: ref.watch(libraryProvider(segment)),
+                onRetry: () => ref.invalidate(libraryProvider),
+                isEmpty: (List<MediaItem> items) => items.isEmpty,
+                // History is the app's own record, not a service library, so it
+                // must not borrow the library's wording: nothing was "saved"
+                // there, and an empty list means nothing has been played yet.
+                emptyMessage: segment == LibrarySegment.history
+                    ? 'Nothing played yet.'
+                    : 'No ${segment.label.toLowerCase()} in your library.',
+                emptyFootnote: segment == LibrarySegment.history
+                    ? 'Tracks you play here appear in this list, newest first.'
+                    : 'Anything you save in YouTube Music shows up here.',
+                loading: const ListSkeleton(),
+                data: (List<MediaItem> items) =>
+                    _LibraryList(items: _sorted(items, sort), segment: segment),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -126,8 +131,10 @@ class LibraryScreen extends ConsumerWidget {
   static List<MediaItem> _sorted(List<MediaItem> items, LibrarySort sort) {
     if (sort == LibrarySort.serviceOrder) return items;
     final List<MediaItem> sorted = List<MediaItem>.of(items)
-      ..sort((MediaItem a, MediaItem b) =>
-          a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      ..sort(
+        (MediaItem a, MediaItem b) =>
+            a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+      );
     return sorted;
   }
 }
@@ -142,8 +149,9 @@ class _LibraryList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin =
-        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+    final double margin = isDesktop
+        ? Tokens.pageMarginDesktop
+        : Tokens.pageMarginPhone;
     // Watching just the current id keeps every row from rebuilding on each
     // position tick.
     final String? currentTrackId = ref.watch(
@@ -179,8 +187,9 @@ class _SegmentChips extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bool isDesktop =
         MediaQuery.sizeOf(context).width >= Tokens.breakpointDesktop;
-    final double margin =
-        isDesktop ? Tokens.pageMarginDesktop : Tokens.pageMarginPhone;
+    final double margin = isDesktop
+        ? Tokens.pageMarginDesktop
+        : Tokens.pageMarginPhone;
 
     return SizedBox(
       height: Tokens.minTouchTarget,
@@ -194,7 +203,8 @@ class _SegmentChips extends ConsumerWidget {
           return _Chip(
             label: segment.label,
             selected: segment == selected,
-            onTap: () => ref.read(librarySegmentProvider.notifier).select(segment),
+            onTap: () =>
+                ref.read(librarySegmentProvider.notifier).select(segment),
           );
         },
       ),
@@ -256,19 +266,16 @@ class _SortControl extends StatelessWidget {
     return Builder(
       builder: (BuildContext sortContext) => Pressable(
         semanticLabel: 'Sort library: ${sort.label}',
-        onTap: () => showContextMenuAt(
-          sortContext,
-          <ContextMenuEntry>[
-            for (final LibrarySort option in LibrarySort.values)
-              ContextMenuEntry(
-                icon: option == sort
-                    ? AppIcons.sortAscending
-                    : AppIcons.listBullets,
-                label: option == sort ? '${option.label} ✓' : option.label,
-                onSelected: () => onSelected(option),
-              ),
-          ],
-        ),
+        onTap: () => showContextMenuAt(sortContext, <ContextMenuEntry>[
+          for (final LibrarySort option in LibrarySort.values)
+            ContextMenuEntry(
+              icon: option == sort
+                  ? AppIcons.sortAscending
+                  : AppIcons.listBullets,
+              label: option == sort ? '${option.label} ✓' : option.label,
+              onSelected: () => onSelected(option),
+            ),
+        ]),
         child: Row(
           children: <Widget>[
             const Icon(
@@ -284,4 +291,3 @@ class _SortControl extends StatelessWidget {
     );
   }
 }
-

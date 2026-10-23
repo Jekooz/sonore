@@ -6,7 +6,7 @@ import 'pressable.dart';
 /// The pill-shaped action button from the spec's `lib/ui/` list.
 ///
 /// Monochrome take: the primary action (active) is a solid white pill with a
-/// dark glyph — the app's strongest control — while an inactive pill sits on
+/// dark glyph - the app's strongest control - while an inactive pill sits on
 /// the thick glass tier with a hairline rim and muted text, so it stays a
 /// readable control even when it is placed on a panel that is glass itself.
 /// The glyph is a single Phosphor icon at 24px and the hit area is never
@@ -18,6 +18,7 @@ class PillButton extends StatelessWidget {
     required this.onPressed,
     this.isActive = false,
     this.label,
+    this.tooltip,
   });
 
   /// Phosphor glyph. Pass the filled variant when [isActive] is true. Omit it
@@ -27,6 +28,11 @@ class PillButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool isActive;
   final String? label;
+
+  /// Hover hint and accessible name for icon-only actions: when [label] is
+  /// omitted (the compact form narrow headers use), [tooltip] names the
+  /// button both for the pointer and for screen readers.
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -38,10 +44,10 @@ class PillButton extends StatelessWidget {
     // Active: solid white, the app's strongest control. Inactive: glass tier
     // thick with a hairline rim, so it stays visible when it sits on a panel
     // that is itself glass.
-    return Pressable(
+    Widget pill = Pressable(
       onTap: onPressed,
       enabled: onPressed != null,
-      semanticLabel: label,
+      semanticLabel: label ?? tooltip,
       child: AnimatedContainer(
         duration: Tokens.dPress,
         curve: Tokens.curvePress,
@@ -69,12 +75,15 @@ class PillButton extends StatelessWidget {
                 size: Tokens.iconSize,
                 color: isActive ? Tokens.bg : Tokens.text,
               ),
-            if (icon != null && label != null)
-              const SizedBox(width: Tokens.s8),
+            if (icon != null && label != null) const SizedBox(width: Tokens.s8),
             if (label != null) Text(label!, style: labelStyle),
           ],
         ),
       ),
     );
+    if (tooltip != null) {
+      pill = Tooltip(message: tooltip!, child: pill);
+    }
+    return pill;
   }
 }

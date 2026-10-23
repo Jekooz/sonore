@@ -9,6 +9,7 @@ import '../../routing/destinations.dart';
 import '../../theme/icons.dart';
 import '../../theme/tokens.dart';
 import '../../ui/context_menu.dart';
+import '../../ui/content_column.dart';
 import '../../ui/confirm_dialog.dart';
 import '../../ui/format.dart';
 import '../../ui/media_actions.dart';
@@ -40,25 +41,28 @@ class QueueScreen extends ConsumerWidget {
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            ScreenHeader(
-              title: 'Queue',
-              onBack: () => context.go(AppDestination.nowPlaying.path),
-              backLabel: 'Back to Now Playing',
-            ),
-            if (!state.hasTrack)
-              const Expanded(
-                child: StateMessage(
-                  message: 'Nothing is queued.',
-                  footnote: 'Play a song and the queue shows up here.',
-                ),
-              )
-            else
-              Expanded(
-                child: _QueueBody(state: state, controller: controller),
+        // The shared content column, like every other browsing page.
+        child: ContentColumn(
+          child: Column(
+            children: <Widget>[
+              ScreenHeader(
+                title: 'Queue',
+                onBack: () => context.go(AppDestination.nowPlaying.path),
+                backLabel: 'Back to Now Playing',
               ),
-          ],
+              if (!state.hasTrack)
+                const Expanded(
+                  child: StateMessage(
+                    message: 'Nothing is queued.',
+                    footnote: 'Play a song and the queue shows up here.',
+                  ),
+                )
+              else
+                Expanded(
+                  child: _QueueBody(state: state, controller: controller),
+                ),
+            ],
+          ),
         ),
       ),
     );

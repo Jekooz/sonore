@@ -322,8 +322,17 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       _commit(state.copyWith(visualQuality: value));
 
   /// Debug/profile only: the frame-stats overlay for performance runs.
-  void setShowPerformanceOverlay(bool value) =>
-      _commit(state.copyWith(showPerformanceOverlay: value));
+  ///
+  /// A release build can never commit this: neither its event loop nor its
+  /// engine publishes a frame timeline, so the row does not exist on the
+  /// page and this gate refuses the write outright. The gate is a compile-
+  /// time constant, so the branch is dropped from release binaries rather
+  /// than merely hidden behind it.
+  void setShowPerformanceOverlay(bool value) {
+    assert(!kReleaseMode, 'Show frame stats is debug-only.');
+    if (kReleaseMode) return;
+    _commit(state.copyWith(showPerformanceOverlay: value));
+  }
 
   /// Writes the player modes the transport controls own. The controls talk to
   /// [PlaybackController], which is the single writer for these three, so this

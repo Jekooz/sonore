@@ -13,6 +13,7 @@ import 'package:ytm_app/features/collection/collection_screen.dart';
 import 'package:ytm_app/features/settings/settings_screen.dart';
 import 'package:ytm_app/features/shell/now_playing_bar.dart';
 import 'package:ytm_app/theme/icons.dart';
+import 'package:ytm_app/theme/tokens.dart';
 import 'package:ytm_app/ui/data_states.dart';
 import 'package:ytm_app/ui/glass_surface.dart';
 import 'package:ytm_app/ui/media_rows.dart';
@@ -90,12 +91,32 @@ Future<void> scrollSettingsTo(
   Finder finder, {
   double dy = -300,
 }) async {
-  final Finder list = find.descendant(
+  final Finder scrollable = find.descendant(
     of: find.byType(SettingsScreen),
     matching: find.byType(ListView),
   );
+  // A position-driven walk, not a gesture walk: a drag can stall on an
+  // interactive child (a text field scrolls itself, not the page), and the
+  // list's own maxScrollExtent only grows once its distant content is built.
+  // So: sweep down through the extent, then, if the target lives above the
+  // grown extent's tail, sweep back up.
+  final ScrollableState scroll = tester.state<ScrollableState>(
+    find.descendant(of: scrollable, matching: find.byType(Scrollable)).first,
+  );
+  scroll.position.jumpTo(0);
+  await tester.pumpAndSettle();
   for (int i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
-    await tester.drag(list, Offset(0, dy));
+    final double down = scroll.position.pixels + 400;
+    scroll.position.jumpTo(
+      down > scroll.position.maxScrollExtent
+          ? scroll.position.maxScrollExtent
+          : down,
+    );
+    await tester.pumpAndSettle();
+  }
+  for (int i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
+    final double up = scroll.position.pixels - 400;
+    scroll.position.jumpTo(up < 0 ? 0 : up);
     await tester.pumpAndSettle();
   }
   await tester.ensureVisible(finder);
@@ -817,7 +838,9 @@ void main() {
 
       // Visual quality and (debug-only) frame-stats rows sit above, so the
       // Playback rows can sit below the fold of an 800px window.
-      await tester.ensureVisible(find.widgetWithText(SwitchListTile, 'Shuffle'));
+      await tester.ensureVisible(
+        find.widgetWithText(SwitchListTile, 'Shuffle'),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(SwitchListTile, 'Shuffle'));
       await tester.pumpAndSettle();
@@ -835,6 +858,72 @@ void main() {
       final AppSettings stored = await store.load();
       expect(stored.shuffle, isTrue);
       expect(stored.autoplay, isFalse);
+    });
+
+    testWidgets('the visual quality options render as one segmented control', (
+      WidgetTester tester,
+    ) async {
+      await pumpAtSize(
+        tester,
+        appScope(initialLocation: '/library/settings'),
+        size: kDesktop,
+      );
+
+      await scrollSettingsTo(tester, find.text('Visual quality'));
+
+      // Every option is a visibly filled control at rest: a ~10% white fill
+      // with the hairline rim, not a hollow outline on the glass. The
+      // selection is clearly filled — solid white with inverted text.
+      ShapeDecoration decorationOf(String label) {
+        final AnimatedContainer container = tester.widget<AnimatedContainer>(
+          find
+              .ancestor(
+                of: find.descendant(
+                  of: find.byType(SettingsScreen),
+                  matching: find.text(label),
+                ),
+                matching: find.byType(AnimatedContainer),
+              )
+              .last,
+        );
+        return container.decoration! as ShapeDecoration;
+      }
+
+      expect(decorationOf('Low').color, Tokens.controlTrackRest);
+      expect(decorationOf('High').color, Tokens.controlTrackRest);
+      expect(decorationOf('Auto').color, Tokens.text);
+
+      // Selecting an option writes through: the fill follows the choice.
+      await tester.tap(find.text('High'));
+      await tester.pumpAndSettle();
+      expect(decorationOf('High').color, Tokens.text);
+      expect(decorationOf('Auto').color, Tokens.controlTrackRest);
+    });
+
+    testWidgets('the frame-stats row exists in debug builds and '
+        'writes through to the store', (WidgetTester tester) async {
+      final InMemorySettingsStore store = InMemorySettingsStore();
+      await pumpAtSize(
+        tester,
+        appScope(
+          initialLocation: '/library/settings',
+          extraOverrides: <Override>[
+            settingsStoreProvider.overrideWithValue(store),
+          ],
+        ),
+        size: kDesktop,
+      );
+
+      await scrollSettingsTo(tester, find.text('Show frame stats'));
+
+      // Widget tests are debug builds, so the row is present — and the
+      // controller refuses to commit it in a release binary (kReleaseMode is
+      // compile-time const; the gate is built into the write itself).
+      expect(find.text('Show frame stats'), findsOneWidget);
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Show frame stats'));
+      await tester.pumpAndSettle();
+      final AppSettings stored = await store.load();
+      expect(stored.showPerformanceOverlay, isTrue);
     });
 
     testWidgets('the account names the session, never a navigation label', (
@@ -924,23 +1013,31 @@ void main() {
           .getRect(find.text('Reduce transparency'))
           .left;
 
-      // The longest note wraps, so its box really is the content column: it
-      // starts where the row title starts, and the margins on both sides match.
+      // The privacy note starts where the row title starts, and its panel —
+      // which spans the column — leaves mirrored margins on both sides.
       await scrollSettingsTo(
         tester,
-        find.textContaining('Your YouTube Music session is kept'),
+        find.textContaining('Your session is kept'),
       );
       final Rect note = tester.getRect(
-        find.textContaining('Your YouTube Music session is kept'),
+        find.textContaining('Your session is kept'),
       );
       expect(
         note.left,
         closeTo(columnLeft, 0.5),
         reason: 'a note starts where a row title starts',
       );
+      final Rect panel = tester.getRect(
+        find
+            .ancestor(
+              of: find.textContaining('Your session is kept'),
+              matching: find.byType(GlassSurface),
+            )
+            .last,
+      );
       expect(
-        note.left - screen.left,
-        closeTo(screen.right - note.right, 0.5),
+        panel.left - screen.left,
+        closeTo(screen.right - panel.right, 0.5),
         reason: 'the right margin matches the left',
       );
 

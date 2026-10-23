@@ -85,9 +85,8 @@ class SettingsScreen extends ConsumerWidget {
                             _SwitchRow(
                               title: 'Reduce transparency',
                               subtitle:
-                                  'Uses solid tinted surfaces instead of glass. '
-                                  'Also engages automatically when the system reduces '
-                                  'transparency or uses high contrast.',
+                                  'Solid tinted surfaces instead of glass, or '
+                                  'when the system reduces it.',
                               value: settings.reduceTransparency,
                               onChanged: controller.setReduceTransparency,
                             ),
@@ -110,9 +109,8 @@ class SettingsScreen extends ConsumerWidget {
                             _ChoiceRow(
                               title: 'Visual quality',
                               subtitle:
-                                  'Auto thins the glass recipe when frames consistently '
-                                  'stutter and freezes the backdrop drift. Low trades '
-                                  'glass for solid surfaces on purpose.',
+                                  'Auto thins the glass when frames stutter; '
+                                  'Low uses solid surfaces.',
                               value: settings.visualQuality.name,
                               options: const <String>['auto', 'high', 'low'],
                               labels: const <String, String>{
@@ -135,8 +133,8 @@ class SettingsScreen extends ConsumerWidget {
                               _SwitchRow(
                                 title: 'Show frame stats',
                                 subtitle:
-                                    'Development aid for the performance checklist '
-                                    '(docs/PERF_CHECKLIST.md). Not offered in release builds.',
+                                    'Development aid for the performance '
+                                    'checklist (docs/PERF_CHECKLIST.md).',
                                 value: settings.showPerformanceOverlay,
                                 onChanged: controller.setShowPerformanceOverlay,
                               ),
@@ -160,16 +158,16 @@ class SettingsScreen extends ConsumerWidget {
                                         _SwitchRow(
                                           title: 'Autoplay',
                                           subtitle:
-                                              'Adds recommendations when the queue '
-                                              'runs out instead of stopping.',
+                                              'Adds recommendations when the '
+                                              'queue runs out.',
                                           value: playback.autoplay,
                                           onChanged: player.setAutoplay,
                                         ),
                                         _SwitchRow(
                                           title: 'Shuffle',
                                           subtitle:
-                                              'Shuffles the tracks that have not played '
-                                              'yet. Turning it off restores the original order.',
+                                              'Shuffles the unplayed tracks; '
+                                              'off restores the order.',
                                           value: playback.shuffle,
                                           onChanged: player.setShuffle,
                                         ),
@@ -235,10 +233,8 @@ class SettingsScreen extends ConsumerWidget {
                           title: 'Privacy',
                           children: <Widget>[
                             const _Note(
-                              'Your YouTube Music session is kept by the local service '
-                              'and stored encrypted on this device. The app never holds '
-                              'it, and no cookie, token or signed link is shown on this '
-                              'page or written to the logs.',
+                              'Your session is kept by the local service, '
+                              'encrypted on this device.',
                             ),
                           ],
                         ),
@@ -253,9 +249,8 @@ class SettingsScreen extends ConsumerWidget {
                             ),
                             const _Note(appDisclaimer),
                             const _Note(
-                              'Type is Inter. Icons are Phosphor. Both are MIT '
-                              'licensed; their licence files ship with the app in '
-                              'assets/fonts.',
+                              'Type is Inter, icons are Phosphor — both '
+                              'MIT-licensed (assets/fonts).',
                             ),
                           ],
                         ),
@@ -438,8 +433,10 @@ class _SwitchRow extends StatelessWidget {
 }
 
 /// A named choice on the panel: a title, an explanation, and the options as
-/// pills — the same monochrome selected-state the Library segment chips and
-/// equalizer preset chips use, so every choice control reads as one family.
+/// one segmented control — a resting option is a visible control (a ~10%
+/// white fill with the hairline rim), and the selection is the app's solid
+/// white with inverted text, the same engaged state the nav pill and the
+/// PillButton use, so every choice control reads as one family.
 class _ChoiceRow extends StatelessWidget {
   const _ChoiceRow({
     required this.title,
@@ -511,10 +508,14 @@ class _ChoiceChip extends StatelessWidget {
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: Tokens.s16),
         decoration: ShapeDecoration(
-          color: selected ? Tokens.borderStrong : Tokens.transparent,
+          // A segmented control's two honest states: the resting option is a
+          // visibly filled control (the ~10% white of the switch track, plus
+          // the hairline rim), never a hollow outline on empty glass; the
+          // selection is the solid white the app's most engaged controls use.
+          color: selected ? Tokens.text : Tokens.controlTrackRest,
           shape: Tokens.shapePill.copyWith(
             side: BorderSide(
-              color: selected ? Tokens.borderStrong : Tokens.border,
+              color: selected ? Tokens.text : Tokens.border,
               width: Tokens.borderWidth,
             ),
           ),
@@ -522,7 +523,7 @@ class _ChoiceChip extends StatelessWidget {
         child: Text(
           label,
           style: Tokens.subtitle.copyWith(
-            color: selected ? Tokens.text : Tokens.textSecondary,
+            color: selected ? Tokens.bg : Tokens.textSecondary,
           ),
         ),
       ),
@@ -728,9 +729,7 @@ class _RecommendationsState extends ConsumerState<_Recommendations> {
       children: <Widget>[
         _SwitchRow(
           title: 'Local learning',
-          subtitle:
-              'Learns from what you play, skip and like, and uses it to refine '
-              'the recommendations.',
+          subtitle: 'Learns from plays, skips and likes to refine picks.',
           value: _settings.localLearning,
           onChanged: (bool value) {
             setState(
@@ -753,9 +752,8 @@ class _RecommendationsState extends ConsumerState<_Recommendations> {
           hint: 'Your Last.fm API key',
         ),
         const _Note(
-          'Outside services are optional and are only used when they are set '
-          'here. They are stored by the local service, encrypted on this '
-          'machine, and are never sent anywhere else.',
+          'Optional; stored encrypted by the local service, never sent '
+          'anywhere else.',
         ),
         Align(
           alignment: Alignment.centerLeft,
@@ -932,9 +930,8 @@ class _Diagnostics extends ConsumerWidget {
         ),
         const SizedBox(height: Tokens.s8),
         const _Note(
-          'The service runs on this computer only. If it is not reachable, '
-          'restart the app and check again; use “Update playback engine” under '
-          'Playback if a track will not play.',
+          'The service runs on this computer only; restart the app if '
+          'unreachable.',
         ),
       ],
     );
@@ -996,9 +993,7 @@ class _AccountState extends ConsumerState<_Account> {
         children: <Widget>[
           _LinkRow(
             title: 'Sign in',
-            subtitle:
-                'Opens Google sign-in in your browser — it finishes on '
-                'its own.',
+            subtitle: 'Opens Google sign-in in your browser.',
             icon: AppIcons.user,
             onTap: () => context.go(AppDestination.home.path),
           ),
@@ -1007,8 +1002,8 @@ class _AccountState extends ConsumerState<_Account> {
                 ? 'Hide pasted headers'
                 : 'Paste request headers',
             subtitle:
-                'If the sign-in window cannot be used, paste the request '
-                'headers from a signed-in music.youtube.com tab instead.',
+                'For when the browser flow cannot run: paste from a '
+                'signed-in tab.',
             icon: AppIcons.linkSimple,
             onTap: () => setState(() {
               _showPasteField = !_showPasteField;
@@ -1193,10 +1188,7 @@ class _PlaybackEngineRowState extends ConsumerState<_PlaybackEngineRow> {
             padding: const EdgeInsets.only(top: Tokens.s8),
             child: Text(_result!, style: Tokens.subtitle),
           ),
-        const _Note(
-          'An update is checked once a day in the background. Use this button '
-          'if a track will not play, then try it again.',
-        ),
+        const _Note('An update is checked once a day in the background.'),
       ],
     );
   }

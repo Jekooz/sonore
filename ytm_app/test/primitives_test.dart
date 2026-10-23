@@ -34,15 +34,18 @@ Widget _host(Widget child, {bool highContrast = false}) {
 
 void main() {
   group('GlassSurface', () {
-    testWidgets('blurs behind the surface by default', (WidgetTester tester) async {
+    testWidgets('blurs behind the surface by default', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         _host(const GlassSurface(child: SizedBox(height: 64))),
       );
       expect(find.byType(BackdropFilter), findsOneWidget);
     });
 
-    testWidgets('falls back to an opaque surface under high contrast',
-        (WidgetTester tester) async {
+    testWidgets('falls back to an opaque surface under high contrast', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           const GlassSurface(child: SizedBox(height: 64)),
@@ -52,13 +55,12 @@ void main() {
       expect(find.byType(BackdropFilter), findsNothing);
     });
 
-    testWidgets('falls back when the setting turns transparency off',
-        (WidgetTester tester) async {
+    testWidgets('falls back when the setting turns transparency off', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            appSettingsProvider.overrideWith(_TransparencyOff.new),
-          ],
+          overrides: [appSettingsProvider.overrideWith(_TransparencyOff.new)],
           child: MaterialApp(
             theme: AppTheme.dark,
             home: const Scaffold(
@@ -76,18 +78,15 @@ void main() {
     testWidgets('reports taps', (WidgetTester tester) async {
       var taps = 0;
       await tester.pumpWidget(
-        _host(
-          PillButton(
-            icon: AppIcons.play,
-            onPressed: () => taps++,
-          ),
-        ),
+        _host(PillButton(icon: AppIcons.play, onPressed: () => taps++)),
       );
       await tester.tap(find.byType(PillButton));
       expect(taps, 1);
     });
 
-    testWidgets('active pill fills with the accent', (WidgetTester tester) async {
+    testWidgets('active pill fills with the accent', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         _host(
           PillButton(
@@ -97,8 +96,9 @@ void main() {
           ),
         ),
       );
-      final AnimatedContainer container =
-          tester.widget<AnimatedContainer>(find.byType(AnimatedContainer));
+      final AnimatedContainer container = tester.widget<AnimatedContainer>(
+        find.byType(AnimatedContainer),
+      );
       expect(
         (container.decoration! as ShapeDecoration).color,
         Tokens.text,
@@ -106,15 +106,15 @@ void main() {
       );
     });
 
-    testWidgets('inactive pill sits on the thick glass tier with a rim',
-        (WidgetTester tester) async {
+    testWidgets('inactive pill sits on the thick glass tier with a rim', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
-        _host(
-          PillButton(icon: AppIcons.heart, onPressed: () {}),
-        ),
+        _host(PillButton(icon: AppIcons.heart, onPressed: () {})),
       );
-      final AnimatedContainer container =
-          tester.widget<AnimatedContainer>(find.byType(AnimatedContainer));
+      final AnimatedContainer container = tester.widget<AnimatedContainer>(
+        find.byType(AnimatedContainer),
+      );
       final ShapeDecoration decoration =
           container.decoration! as ShapeDecoration;
       expect(
@@ -133,8 +133,9 @@ void main() {
   });
 
   group('ArtTile', () {
-    testWidgets('renders the surface placeholder when no source is given',
-        (WidgetTester tester) async {
+    testWidgets('renders the surface placeholder when no source is given', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(_host(const ArtTile(size: Tokens.artThumbSize)));
       expect(find.byIcon(AppIcons.image), findsOneWidget);
       expect(find.byType(CachedNetworkImage), findsNothing);
@@ -142,14 +143,21 @@ void main() {
   });
 
   group('TrackRow', () {
-    testWidgets('playing row uses the accent title', (WidgetTester tester) async {
+    testWidgets('playing row uses the accent title', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         _host(
-          const TrackRow(title: 'Row title', subtitle: 'Subtitle', isPlaying: true),
+          const TrackRow(
+            title: 'Row title',
+            subtitle: 'Subtitle',
+            isPlaying: true,
+          ),
         ),
       );
-      final TextStyle style =
-          tester.widget<Text>(find.text('Row title')).style!;
+      final TextStyle style = tester
+          .widget<Text>(find.text('Row title'))
+          .style!;
       expect(style.color, Tokens.text);
       expect(
         style.fontWeight,
@@ -182,11 +190,40 @@ void main() {
       await tester.tap(find.byType(TrackRow));
       expect(taps, 1);
     });
+
+    testWidgets('a row without a subtitle centers its title against the art', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(const TrackRow(title: 'Row title', subtitle: '')),
+      );
+
+      // The empty subtitle must not claim a line: with one line of text, the
+      // title centers in the row exactly like the artwork does. The proof is
+      // that both centers coincide.
+      final double rowCenter = tester.getRect(find.byType(TrackRow)).center.dy;
+      final double titleCenter = tester
+          .getRect(find.text('Row title'))
+          .center
+          .dy;
+      final double artCenter = tester
+          .getRect(
+            find.descendant(
+              of: find.byType(TrackRow),
+              matching: find.byType(ArtTile),
+            ),
+          )
+          .center
+          .dy;
+      expect(titleCenter, closeTo(rowCenter, 1));
+      expect(artCenter, closeTo(rowCenter, 1));
+    });
   });
 
   group('SeekBar', () {
-    testWidgets('tap seeks to the tapped fraction and commits once',
-        (WidgetTester tester) async {
+    testWidgets('tap seeks to the tapped fraction and commits once', (
+      WidgetTester tester,
+    ) async {
       final List<Duration> starts = <Duration>[];
       final List<Duration> ends = <Duration>[];
       await tester.pumpWidget(
@@ -209,8 +246,9 @@ void main() {
       expect(ends.single.inMilliseconds, closeTo(50000, 1200));
     });
 
-    testWidgets('drag previews and commits a single seek',
-        (WidgetTester tester) async {
+    testWidgets('drag previews and commits a single seek', (
+      WidgetTester tester,
+    ) async {
       final List<Duration> ends = <Duration>[];
       var moves = 0;
       await tester.pumpWidget(
@@ -236,8 +274,9 @@ void main() {
       expect(ends.single.inMilliseconds, closeTo(50000, 3000));
     });
 
-    testWidgets('is inert when the duration is unknown',
-        (WidgetTester tester) async {
+    testWidgets('is inert when the duration is unknown', (
+      WidgetTester tester,
+    ) async {
       final List<Duration> ends = <Duration>[];
       var moves = 0;
       await tester.pumpWidget(
@@ -278,8 +317,9 @@ void main() {
     });
   });
 
-  testWidgets('app clamps system text scaling to the chosen ceiling',
-      (WidgetTester tester) async {
+  testWidgets('app clamps system text scaling to the chosen ceiling', (
+    WidgetTester tester,
+  ) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
@@ -308,8 +348,9 @@ void main() {
     expect(MediaQuery.textScalerOf(context).scale(1), Tokens.textScaleCap);
   });
 
-  testWidgets('app boots at the standard text scale, not the ceiling',
-      (WidgetTester tester) async {
+  testWidgets('app boots at the standard text scale, not the ceiling', (
+    WidgetTester tester,
+  ) async {
     // A fresh install on a device that asks for 2x must open at the standard
     // scale: the ceiling is what the user may choose, not what they get.
     tester.platformDispatcher.textScaleFactorTestValue = 2;
